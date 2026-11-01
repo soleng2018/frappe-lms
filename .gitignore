@@ -1,0 +1,18 @@
+# Config and secrets (the single config file lives here, never committed)
+.env
+*.env
+!*.env.sample
+!.env.sample
+*.key
+*.pem
+*.pfx
+
+# Local tool files (skills-lock.json restores the skills)
+.claude/
+.agents/
+
+# Local caches
+docs/.agent-cache/
+__pycache__/
+.venv/
+.DS_Store

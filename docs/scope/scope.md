@@ -1,0 +1,179 @@
+# Scope: Nile Workshop LMS
+
+A Frappe LMS that certifies students for a hands on lab: they watch a video, follow a lab guide, pass a quiz for each at 80% or higher, and get a certificate. Managers (the `hol-admins` group) track progress and pull a monthly report. Everything is set up by script and runs as Docker containers behind the existing Traefik on this dev server.
+
+**Build approach:** Tracer Bullet (prove the whole pipe works with one real thin path, then thicken one strand at a time).
+**Workflow:** GA (after `/develop`: `/check verify`, then `/test`, then a fresh model `/check review`, then `/document`). The project default level of rigor. `/architect` is the recommended first stop for a feature with a real decision, but skippable when you already know the build. Any feature can carry its own tag (e.g. `· Beta`) to do more or less.
+
+_These are recommendations to keep your build orderly, not requirements. Skip anything that does not fit: if you already know how to build a feature, use `/develop` and skip `/architect`. You decide when a feature is `done`._
+
+## Source material
+
+Read these before designing any feature. They are the original brief, not summaries.
+- Requirements and instructions: [requirements.md](../../requirements.md). Its Instructions hold hard limits: this Frappe install is dev, only delete containers and Authentik items you created, and the groups `NileWorkshopNAdmin` (N is 1, 2, 3…) and `hol-admins` already exist.
+- Logos and design system: [brand/](../../brand/) (pulled from github.com/soleng2018/reservations). Used by Branding & theme (#10) and Outbound email (#15, for the email logo).
+- Sample compose file for Traefik labels: `/home/nova/lms/docker-compose.yaml` (it runs a different app).
+- Frappe LMS repo: https://github.com/frappe/lms
+- Frappe LMS docs: https://docs.frappe.io/learning/get-started/installation
+- Frappe framework API: https://docs.frappe.io/framework/user/en/introduction
+
+_The Frappe links have not been read by `/scope`; `/architect` should read the ones its feature needs._
+
+## At a glance
+
+| # | Feature | Phase | Status |
+|---|---------|-------|--------|
+| 1 | Stack & architecture | Foundation | in-progress |
+| 2 | Coding standards & tooling | Foundation | planned |
+| 3 | Single config & secrets file | Foundation | planned |
+| 4 | Data model (course, quiz, certificate, roles) | Foundation | planned |
+| 5 | LMS running behind Traefik | Slice 1 | planned |
+| 6 | IDP login (OIDC) | Slice 1 | planned |
+| 7 | Group to role mapping | Slice 1 | planned |
+| 8 | Content sync, one course | Slice 1 | planned |
+| 9 | Quiz pass rules & certificate | Slice 1 | planned |
+| 10 | Branding & theme | Slice 2 | planned |
+| 11 | Guide format & full authoring | Slice 2 | planned |
+| 12 | Manager progress view | Slice 3 | planned |
+| 13 | Monthly report | Slice 3 | planned |
+| 14 | Backup & restore | Slice 4 | planned |
+| 15 | Outbound email | Slice 4 | planned |
+| 16 | Health checks & error monitoring | Slice 4 | planned |
+
+## Foundations
+
+### 1. Stack & architecture
+Decide how Frappe LMS is run in containers, what language the setup script uses, and how it talks to the Frappe and IDP APIs. Then scaffold a runnable skeleton so every slice builds on real structure.
+**Done when:** the stack is recorded in a spec, and the scaffold builds and starts as a container on this server.
+spec [0001](../specs/0001-stack-and-architecture/index.md)
+- [x] Decide the stack (spec): `/architect stack & architecture`
+- [ ] Scaffold from the decision: `/develop stack & architecture`
+- [ ] Verify it: `/check verify stack & architecture`
+- [ ] Test it: `/test stack & architecture`
+- [ ] Review it (fresh model): `/check review stack & architecture`
+- [ ] Document it: `/document stack & architecture`
+
+### 2. Coding standards & tooling
+Capture conventions, then install lint, format, and checks from the real scaffolded project.
+**Done when:** root `AGENTS.md` reflects the real stack, and lint and format run clean.
+- [ ] Capture conventions and tooling choices: `/audit`
+- [ ] Install the tooling: `/develop tooling`
+- [ ] Check it runs clean: `/test`
+
+### 3. Single config & secrets file · needs a decision
+One file holds every parameter and secret: master API tokens, app URL, IDP details, backup settings. Nothing sensitive is hardcoded anywhere else.
+**Done when:** every script and container reads its settings from this one file, a sample file lists each key, and the real file is kept out of git.
+- [ ] Design it (spec): `/architect single config & secrets file`
+
+### 4. Data model (course, quiz, certificate, roles) · needs a decision
+Decide how courses, chapters, lessons, quizzes, attempts, and certificates map onto Frappe, and which Frappe roles the two IDP groups become.
+**Done when:** the mapping is written down and covers everything slices 1 to 3 need without a rework.
+- [ ] Design it (spec): `/architect data model`
+
+## Slice 1: the thin certify thread
+
+### 5. LMS running behind Traefik · needs a decision
+Frappe LMS starts as Docker containers from one compose file, with Traefik labels for the app URL, following the sample in `/home/nova/lms`.
+**Done when:** the LMS opens over HTTPS at its hostname, survives a restart, and logs rotate.
+- [ ] Design it (spec): `/architect LMS running behind Traefik`
+
+### 6. IDP login (OIDC) · needs a decision
+A script creates the OIDC application in Authentik through its API (only items it creates), and configures Frappe through its API to sign users in with it. Students and teachers log in only this way.
+**Done when:** running the script on a clean setup lets a student sign in through Authentik and land in the LMS, and running it twice changes nothing.
+- [ ] Design it (spec): `/architect IDP login`
+
+### 7. Group to role mapping · needs a decision
+Members of `NileWorkshopNAdmin` groups (N is 1, 2, 3…) become students, and `hol-admins` become admins. The groups already exist, so the LMS only reads them.
+**Done when:** a user in a NileWorkshop group gets the student role, a `hol-admins` user gets admin, and a user in neither is refused. Group changes apply at the next login.
+- [ ] Design it (spec): `/architect group to role mapping`
+
+### 8. Content sync, one course · needs a decision
+Push one course from git to Frappe through its API: a YouTube video lesson, a lab guide lesson, and a quiz for each. The thinnest real version of the authoring path.
+**Done when:** the sync script creates the course in Frappe from files in git, and running it again updates it without duplicates.
+- [ ] Design it (spec): `/architect content sync`
+
+### 9. Quiz pass rules & certificate · needs a decision
+A student passes each quiz at 80% or higher, with a limited number of retakes, and earns a certificate after passing both the video quiz and the lab quiz.
+**Done when:** a student who scores 80% or more on both quizzes gets a downloadable certificate, a lower score does not, and retakes stop at the limit. The retake limit is a number to settle in the spec.
+- [ ] Design it (spec): `/architect quiz pass rules & certificate`
+
+## Slice 2: look and authoring
+
+### 10. Branding & theme · Beta
+Apply the Nile brand colors and logos from the Nile design system in `brand/` to the LMS and to the certificate.
+**Brand rules to follow:**
+- Primary colors: Nile Blue `#0E4EAF`, Deep Nile Blue `#072F68`, Bright Nile Blue `#2070E1`.
+- Secondary colors, used intentionally: Solar Amber `#FF6600`, Nile Teal `#35D39A`, Nile Sky `#8BB4EE`, and Dawn Violet `#8758ED`.
+- Neutrals: Nile Ink `#001E2D` for text, Nile Slate `#4D626C`, White, and a light background `#F6F8FB`.
+- Buttons: the main call to action is Solar Crimson `#EC394C` or Solar Amber `#FF6600`, with white Inter Bold text. The brand gradient (Nile Blue to Solar Amber to Solar Crimson) is for sparing use only.
+- Backgrounds: solid Light `#F6F8FB` and `#FFFFFF`, or Dark `#072F68` and `#0E4EAF`.
+- Font: Inter only (Semibold for headlines, Regular and Bold for body). Do not substitute or mix other fonts.
+- Logo: use the supplied files unchanged. Do not alter, recolor, split, stretch, place inside containers, or put on busy backgrounds, and keep the clear space around it. Questions go to the brand team at brand@nilesecure.com.
+- Textures, patterns, and photography are optional extras, not needed for the LMS.
+- Design system to reuse: the Nile Hands On Labs design system from the reservations app (github.com/soleng2018/reservations, commit 401b199), which uses the same brand. A copy is in `brand/`: `design-reference.md` (tokens, type scale, radii, shadows, focus rules, component list) and `tokens.css` (the source of truth for values). Its main rules: pill buttons, 16px cards, Inter only, light theme only, Nile Blue for the main action, and text colors adjusted to pass WCAG AA (for example the learner button gradient is `#E91B31` to `#C95100`, and secondary text is `#5D7182`). Its components are React, so for Frappe only the tokens, type, shapes and logos carry over.
+- Logo files are in `brand/`: `nile-logo.png` (color), `nile-logo-white.png` (for dark backgrounds), `icon.png` (512 px shield), `apple-icon.png` (180 px), `nile-logo-email.png` (small, for email). They match the files in `/home/nova/lms/site/assets` exactly. Official SVG versions are still owed by the brand owner.
+**Done when:** the login page, the app, and the certificate use the brand colors, Inter font, and unaltered logos, set by script so they survive a rebuild, and text on every brand background is readable.
+- [ ] Design it (spec): `/architect branding & theme`
+
+### 11. Guide format & full authoring · needs a decision
+Settle the guide and quiz file format (markdown for text, structured files for quizzes and ordering) and extend the sync to many courses, images, and checks.
+**Done when:** a documented format lets an author add a new course by committing files, the sync reports errors in bad files before pushing, and several courses sync cleanly.
+- [ ] Design it (spec): `/architect guide format & full authoring`
+
+## Slice 3: managers
+
+### 12. Manager progress view · needs a decision
+Admins in `hol-admins` see each student's progress, quiz scores, and certificate status across all workshop groups.
+**Done when:** an admin can list students and see who is not started, in progress, or certified; a student cannot see this view.
+- [ ] Design it (spec): `/architect manager progress view`
+
+### 13. Monthly report · needs a decision
+An on demand report page with a CSV export that summarizes a chosen month: completions, scores, and who is behind.
+**Done when:** an admin picks a month and sees the summary, downloads it as CSV, and the numbers match the progress view.
+- [ ] Design it (spec): `/architect monthly report`
+
+## Slice 4: running it safely
+
+### 14. Backup & restore · needs a decision
+A scheduled job writes dated backup archives to a local folder on this server (database, uploaded files, and content). A remote host pulls them with scp. A restore command rebuilds the app from an archive.
+**Done when:** an archive appears on schedule in a folder the remote host can read over scp, old archives are pruned, and a restore onto a clean setup brings the courses and student progress back.
+- [ ] Design it (spec): `/architect backup & restore`
+
+### 15. Outbound email · Beta
+Frappe sends mail through an SMTP server set in the config file, for certificates and notices.
+**Done when:** a test message sends, and a student receives an email when a certificate is issued.
+- [ ] Design it (spec): `/architect outbound email`
+
+### 16. Health checks & error monitoring · Beta
+Container health checks and a simple way to see failures and restarts.
+**Done when:** each container reports healthy or unhealthy, and a failing service is visible without reading raw logs.
+- [ ] Design it (spec): `/architect health checks & error monitoring`
+
+## Deferred
+Out of scope for the current build pass, kept so the plan stays honest.
+- **Emailed monthly report**: send the report to managers on a schedule · needs a decision
+- **Accessibility pass**: WCAG AA check on the branded theme
+- **Privacy notice and data retention**: notice plus a retention rule for student data · needs a decision
+- **Production environment**: a second config, hostname, and secrets · needs a decision
+- **Per workshop managers**: managers who see only their own workshop group · needs a decision
+
+## Legend
+
+**The decision box.** Every feature carries exactly one, the sub-task whose label ends with `(spec)`. Its wording varies (`Design it (spec)` normally, `Decide the stack (spec)` on Stack & architecture), so skills locate it by that `(spec)` suffix, never by an exact label. Every other box is an execution box and `/architect` never ticks one.
+
+**Feature lifecycle**: the scope updates as a feature moves; each row is what it shows and who sets it:
+
+| State | Set by | The feature shows |
+|---|---|---|
+| `planned` · needs a decision | `/scope` | one box: `Design it (spec): /architect <feature>` |
+| `in-progress` (designed) | `/architect` at spec capture | `Design it` ticked; spec linked; `Build it: /develop <feature>` + 2 to 5 milestones; the tier's closing boxes (`Verify it` Alpha+, `Test it` Beta+, `Review it` + `Document it` GA) |
+| `in-progress` (building) | `/develop` | milestone sub boxes tick one by one; code pointer filled |
+| `in-progress` (verified) | `/check verify` | `Build it` + milestones ticked; `Verify it` ticked |
+| `done` | you, when you decide it is; `/sync` reconciles | boxes you ran ticked, skipped ones marked skipped |
+
+- **Next step** = the first unticked box (always a command or a tracked milestone).
+- **needs a decision** = run `/architect` first; otherwise straight to `/develop` (or `/audit` for standards & tooling). The tag drops once the spec is captured.
+- **Atomic build tasks live in the spec's `## Build plan`, not here**: the scope carries only the milestone rollup.
+- **Status** `planned` → `in-progress` → `done`, plus `existing` (pre workflow) and `dropped` (de-scoped, kept for history).
+- **Workflow tier tag** beside a heading (e.g. `· Beta`) sets that one feature's rigor below or above the project default (GA); no tag inherits it.
+- **Pointer line** (`spec <n> · code in <path>`): the spec link added by `/architect`, the code path by `/develop`.
