@@ -24,8 +24,8 @@ _The Frappe links have not been read by `/scope`; `/architect` should read the o
 | # | Feature | Phase | Status |
 |---|---------|-------|--------|
 | 1 | Stack & architecture | Foundation | in-progress |
-| 2 | Coding standards & tooling | Foundation | planned |
-| 3 | Single config & secrets file | Foundation | planned |
+| 2 | Coding standards & tooling | Foundation | in-progress |
+| 3 | Single config & secrets file | Foundation | in-progress |
 | 4 | Data model (course, quiz, certificate, roles) | Foundation | planned |
 | 5 | LMS running behind Traefik | Slice 1 | planned |
 | 6 | IDP login (OIDC) | Slice 1 | planned |
@@ -45,25 +45,37 @@ _The Frappe links have not been read by `/scope`; `/architect` should read the o
 ### 1. Stack & architecture
 Decide how Frappe LMS is run in containers, what language the setup script uses, and how it talks to the Frappe and IDP APIs. Then scaffold a runnable skeleton so every slice builds on real structure.
 **Done when:** the stack is recorded in a spec, and the scaffold builds and starts as a container on this server.
-spec [0001](../specs/0001-stack-and-architecture/index.md)
+spec [0001](../specs/0001-stack-and-architecture/index.md) · code in `deploy/`, `tools/`, `apps/nile_auth/`
 - [x] Decide the stack (spec): `/architect stack & architecture`
-- [ ] Scaffold from the decision: `/develop stack & architecture`
-- [ ] Verify it: `/check verify stack & architecture`
+- [x] Scaffold from the decision: `/develop stack & architecture`
+- [x] Verify it: `/check verify stack & architecture`
 - [ ] Test it: `/test stack & architecture`
-- [ ] Review it (fresh model): `/check review stack & architecture`
+- [x] Review it (fresh model): `/check review stack & architecture`
 - [ ] Document it: `/document stack & architecture`
 
 ### 2. Coding standards & tooling
 Capture conventions, then install lint, format, and checks from the real scaffolded project.
 **Done when:** root `AGENTS.md` reflects the real stack, and lint and format run clean.
+spec [0003](../specs/0003-coding-standards-and-tooling.md)
+- [x] Design it (spec): `/architect coding standards & tooling`
 - [ ] Capture conventions and tooling choices: `/audit`
 - [ ] Install the tooling: `/develop tooling`
 - [ ] Check it runs clean: `/test`
 
-### 3. Single config & secrets file · needs a decision
+### 3. Single config & secrets file
 One file holds every parameter and secret: master API tokens, app URL, IDP details, backup settings. Nothing sensitive is hardcoded anywhere else.
 **Done when:** every script and container reads its settings from this one file, a sample file lists each key, and the real file is kept out of git.
-- [ ] Design it (spec): `/architect single config & secrets file`
+spec [0002](../specs/0002-single-config-and-secrets-file.md)
+- [x] Design it (spec): `/architect single config & secrets file`
+- [ ] Build it: `/develop single config & secrets file`
+  - [ ] Config module: key list, strict parser, validators, masking (AC-5, AC-7)
+  - [ ] Thin thread: `init`, sample, Makefile wrapper, `db` and `frontend` wiring (AC-1, AC-3, AC-6)
+  - [ ] Full key inventory, `versions.env`, delivery to all services, `create-site` wiring and mismatch guards (AC-3, AC-6, AC-8, AC-9)
+  - [ ] `config check`, git and secret scan, drift and parity tests (AC-2, AC-4, AC-5)
+- [ ] Verify it: `/check verify single config & secrets file`
+- [ ] Test it: `/test single config & secrets file`
+- [ ] Review it (fresh model): `/check review single config & secrets file`
+- [ ] Document it: `/document single config & secrets file`
 
 ### 4. Data model (course, quiz, certificate, roles) · needs a decision
 Decide how courses, chapters, lessons, quizzes, attempts, and certificates map onto Frappe, and which Frappe roles the two IDP groups become.

@@ -1,0 +1,4 @@
+*
+!apps/nile_auth
+**/__pycache__
+**/*.egg-info
