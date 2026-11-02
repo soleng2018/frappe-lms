@@ -75,7 +75,7 @@ spec [0002](../specs/0002-single-config-and-secrets-file.md) · code in `tools/s
 - [x] Verify it: `/check verify single config & secrets file`
 - [x] Test it: `/test single config & secrets file`
 - [x] Review it (fresh model): `/check review single config & secrets file`
-- [ ] Document it: `/document single config & secrets file`
+- [x] Document it: `/document single config & secrets file`
 
 ### 4. Data model (course, quiz, certificate, roles) · needs a decision
 Decide how courses, chapters, lessons, quizzes, attempts, and certificates map onto Frappe, and which Frappe roles the two IDP groups become.
