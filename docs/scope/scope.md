@@ -25,7 +25,7 @@ _The Frappe links have not been read by `/scope`; `/architect` should read the o
 |---|---------|-------|--------|
 | 1 | Stack & architecture | Foundation | done |
 | 2 | Coding standards & tooling | Foundation | in-progress |
-| 3 | Single config & secrets file | Foundation | in-progress |
+| 3 | Single config & secrets file | Foundation | done |
 | 4 | Data model (course, quiz, certificate, roles) | Foundation | planned |
 | 5 | LMS running behind Traefik | Slice 1 | planned |
 | 6 | IDP login (OIDC) | Slice 1 | planned |
@@ -74,8 +74,8 @@ spec [0002](../specs/0002-single-config-and-secrets-file.md) · code in `tools/s
   - [x] `config check`, git and secret scan, drift and parity tests (AC-2, AC-4, AC-5)
 - [x] Verify it: `/check verify single config & secrets file`
 - [x] Test it: `/test single config & secrets file`
-- [ ] Review it (fresh model): `/check review single config & secrets file`
-- [ ] Document it: `/document single config & secrets file`
+- [x] Review it (fresh model): `/check review single config & secrets file`
+- [x] Document it: `/document single config & secrets file`
 
 ### 4. Data model (course, quiz, certificate, roles) · needs a decision
 Decide how courses, chapters, lessons, quizzes, attempts, and certificates map onto Frappe, and which Frappe roles the two IDP groups become.

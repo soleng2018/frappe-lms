@@ -8,7 +8,7 @@ You need all of these before you start.
 
 | Need | Why |
 |---|---|
-| Linux host with Docker Engine and the Compose plugin (`docker compose`), enabled at boot | Runs everything. Containers restart after a reboot only if Docker starts. |
+| Linux host with Docker Engine and the Compose plugin (`docker compose`, a recent v2 release: the Makefile uses `run --quiet-build`, tested with v2.39.4), enabled at boot | Runs everything. Containers restart after a reboot only if Docker starts. |
 | `make`, `git`, `curl`, `sha256sum` | The Makefile and the build scripts use them. |
 | An existing Traefik v3 container on an external Docker network (default name `traefik`) with a `websecure` entrypoint and a `letsencrypt` certificate resolver | Routes HTTPS to the LMS. This repo does not start Traefik. |
 | A public DNS name for the LMS (for example `guide.nile.global`) pointing at the host that runs Traefik | It becomes the Frappe site name and the Traefik host rule. It cannot change after the first start. |

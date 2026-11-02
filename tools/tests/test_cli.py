@@ -401,3 +401,32 @@ def test_main_still_runs_when_the_env_file_is_bad_so_the_error_can_be_shown(
     monkeypatch.chdir(tmp_path)
     assert cli.main(["config", "sample"]) == 0
     assert capsys.readouterr().out == config.render_sample()
+
+
+# --- a missing or unreadable .env is a message, not a traceback ---
+
+
+@pytest.mark.parametrize("argv", [["config", "show"], ["whoami"]])
+def test_commands_that_need_env_say_to_run_init_when_it_is_missing(
+    argv, tmp_path, monkeypatch, capsys
+):
+    monkeypatch.chdir(tmp_path)
+    assert cli.main(argv) == 1
+    assert (
+        ".env cannot be read (No such file or directory): run make init" in capsys.readouterr().err
+    )
+
+
+def test_config_check_on_an_unreadable_env_exits_one_with_a_message(root, monkeypatch, capsys):
+    (root / ".env").write_text("LMS_HOSTNAME=a.example.com\n")
+    (root / ".env").chmod(0)
+    monkeypatch.chdir(root)
+    try:
+        if (root / ".env").stat().st_uid == 0:
+            pytest.skip("root can read any file")
+        assert cli.main(["config", "check"]) == 1
+    finally:
+        (root / ".env").chmod(0o600)
+    err = capsys.readouterr().err
+    assert "ERROR .env cannot be read (Permission denied)" in err
+    assert "Traceback" not in err
