@@ -25,7 +25,7 @@ _The Frappe links have not been read by `/scope`; `/architect` should read the o
 |---|---------|-------|--------|
 | 1 | Stack & architecture | Foundation | done |
 | 2 | Coding standards & tooling | Foundation | in-progress |
-| 3 | Single config & secrets file | Foundation | in-progress |
+| 3 | Single config & secrets file | Foundation | done |
 | 4 | Data model (course, quiz, certificate, roles) | Foundation | planned |
 | 5 | LMS running behind Traefik | Slice 1 | planned |
 | 6 | IDP login (OIDC) | Slice 1 | planned |
