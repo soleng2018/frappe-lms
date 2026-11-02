@@ -1,3 +1,6 @@
+# Everything is excluded unless listed below. .env and its temp file are never in a build context.
+.env
+.env.tmp
 *
 !apps/nile_auth
 **/__pycache__

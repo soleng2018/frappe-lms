@@ -1,69 +1,50 @@
 """Unit tests for nile_tools.cli. No network, no real .env: everything runs in tmp_path."""
 
 import base64
+import logging
 import stat
 import sys
 
 import httpx
 import pytest
 
-from nile_tools import cli
+from nile_tools import cli, config
 
-SAMPLE = """# comment
-LMS_HOSTNAME=
-LMS_ADMIN_PASSWORD=
-LMS_ENCRYPTION_KEY=
-LMS_SERVICE_USER=nile-tools@example.com
-LMS_API_KEY=
-LMS_API_SECRET=
-DB_ROOT_PASSWORD=
-"""
+GENERATED = [k.name for k in config.KEYS if k.source == "generated"]
+REQUIRED_OPERATOR = ["LMS_HOSTNAME", "AUTHENTIK_HOSTNAME", "AUTHENTIK_API_TOKEN"]
+
+
+def values_of(path):
+    return dict(config.parse_env(path.read_text(), [k.name for k in config.env_keys()]).values)
+
+
+@pytest.fixture(autouse=True)
+def restore_global_hooks():
+    """main() installs a log record factory and an exception hook; undo them after each test."""
+    factory, hook = logging.getLogRecordFactory(), sys.excepthook
+    yield
+    logging.setLogRecordFactory(factory)
+    sys.excepthook = hook
 
 
 @pytest.fixture
 def root(tmp_path):
-    (tmp_path / ".env.sample").write_text(SAMPLE)
+    (tmp_path / ".env.sample").write_text(config.render_sample())
     return tmp_path
-
-
-def test_password_never_starts_with_a_symbol(monkeypatch):
-    draws = iter(["-bad", "_bad", "good-one"])
-    monkeypatch.setattr(cli.secrets, "token_urlsafe", lambda n: next(draws))
-    assert cli._password() == "good-one"
-
-
-def test_read_env_skips_comments_and_blank_lines(tmp_path):
-    p = tmp_path / ".env"
-    p.write_text("# note\n\nA=1\nB=\n")
-    assert cli.read_env(p) == {"A": "1", "B": ""}
-
-
-def test_read_env_keeps_equals_signs_in_value(tmp_path):
-    p = tmp_path / ".env"
-    p.write_text("KEY=abc==\n")
-    assert cli.read_env(p) == {"KEY": "abc=="}
-
-
-def test_read_env_process_env_overrides_only_known_keys(tmp_path, monkeypatch):
-    p = tmp_path / ".env"
-    p.write_text("A=1\n")
-    monkeypatch.setenv("A", "from-env")
-    monkeypatch.setenv("UNRELATED_NILE_TEST_KEY", "x")
-    assert cli.read_env(p) == {"A": "from-env"}
 
 
 def test_init_creates_env_with_generated_secrets(root, capsys):
     assert cli.init(root) == 0
-    values = cli.read_env(root / ".env")
-    for key in cli.GENERATED:
+    values = values_of(root / ".env")
+    for key in GENERATED:
         assert values[key], key
     assert values["LMS_SERVICE_USER"] == "nile-tools@example.com"
-    assert capsys.readouterr().out.startswith(f"Updated {root / '.env'}")
+    assert capsys.readouterr().out.startswith(f"Created {root / '.env'}")
 
 
 def test_init_encryption_key_is_32_bytes_base64(root):
     cli.init(root)
-    key = cli.read_env(root / ".env")["LMS_ENCRYPTION_KEY"]
+    key = values_of(root / ".env")["LMS_ENCRYPTION_KEY"]
     assert len(base64.urlsafe_b64decode(key)) == 32
 
 
@@ -89,14 +70,14 @@ def test_init_is_idempotent_and_keeps_existing_values(root, capsys):
 def test_init_never_overwrites_a_value_the_user_set(root):
     (root / ".env").write_text("DB_ROOT_PASSWORD=mine\nLMS_API_KEY=\n")
     cli.init(root)
-    values = cli.read_env(root / ".env")
+    values = values_of(root / ".env")
     assert values["DB_ROOT_PASSWORD"] == "mine"
     assert values["LMS_API_KEY"] != ""
 
 
 def test_init_does_not_generate_keys_outside_the_generated_set(root):
     cli.init(root)
-    assert cli.read_env(root / ".env")["LMS_HOSTNAME"] == ""
+    assert values_of(root / ".env")["LMS_HOSTNAME"] == ""
 
 
 def test_init_reports_hostname_still_blank(root, capsys):
@@ -105,7 +86,7 @@ def test_init_reports_hostname_still_blank(root, capsys):
 
 
 def test_init_does_not_nag_once_operator_keys_are_set(root, capsys):
-    keys = "".join(f"{k}=x\n" for k in cli.REQUIRED_OPERATOR_KEYS)
+    keys = "".join(f"{k}=x\n" for k in REQUIRED_OPERATOR)
     (root / ".env").write_text(keys)
     cli.init(root)
     assert "Still blank" not in capsys.readouterr().out
@@ -114,8 +95,8 @@ def test_init_does_not_nag_once_operator_keys_are_set(root, capsys):
 def test_init_never_prints_a_secret(root, capsys):
     cli.init(root)
     out = capsys.readouterr().out
-    for key in cli.GENERATED:
-        assert cli.read_env(root / ".env")[key] not in out
+    for key in GENERATED:
+        assert values_of(root / ".env")[key] not in out
 
 
 def test_init_without_sample_fails_when_no_env(tmp_path):
@@ -217,7 +198,7 @@ def test_whoami_reports_exception_type_on_network_error(env_root, monkeypatch, c
 
 def test_whoami_missing_hostname_key_raises(tmp_path):
     (tmp_path / ".env").write_text("LMS_API_KEY=a\nLMS_API_SECRET=b\n")
-    with pytest.raises(cli.ConfigError, match="LMS_HOSTNAME"):
+    with pytest.raises(config.ConfigError, match="LMS_HOSTNAME"):
         cli.whoami(tmp_path)
 
 
@@ -239,7 +220,7 @@ def test_main_rejects_unknown_command(monkeypatch):
 
 def test_whoami_blank_hostname_fails_fast_naming_the_key(tmp_path):
     (tmp_path / ".env").write_text("LMS_HOSTNAME=\nLMS_API_KEY=a\nLMS_API_SECRET=b\n")
-    with pytest.raises(cli.ConfigError, match="LMS_HOSTNAME"):
+    with pytest.raises(config.ConfigError, match="LMS_HOSTNAME"):
         cli.whoami(tmp_path)
 
 
@@ -254,7 +235,7 @@ def test_main_prints_config_error_and_exits_one(monkeypatch, tmp_path, capsys):
 def test_init_reports_every_blank_operator_key(root, capsys):
     cli.init(root)
     out = capsys.readouterr().out
-    for key in cli.REQUIRED_OPERATOR_KEYS:
+    for key in REQUIRED_OPERATOR:
         assert key in out
 
 

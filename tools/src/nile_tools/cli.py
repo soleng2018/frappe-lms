@@ -1,86 +1,68 @@
-"""Commands: init (create .env with generated secrets), whoami (prove the API path works)."""
+"""Commands: init, config (check, show, sample), whoami (prove the API path works)."""
 
 import argparse
-import base64
 import os
-import secrets
+import stat
 import sys
 import time
-from collections.abc import Callable, Mapping
+from collections.abc import Mapping, Sequence
 from pathlib import Path
-from types import MappingProxyType
 
 import httpx
 
-__all__ = ["GENERATED", "ConfigError", "init", "main", "read_env", "whoami"]
+from nile_tools import checks, config
+from nile_tools.config import ConfigError
 
-# Keys the operator must fill in by hand; init lists the blank ones.
-REQUIRED_OPERATOR_KEYS = ("LMS_HOSTNAME", "AUTHENTIK_HOSTNAME", "AUTHENTIK_API_TOKEN")
-
-
-class ConfigError(Exception):
-    """A required config key is missing or blank; the message names the key."""
-
-
-def _password() -> str:
-    while True:
-        value = secrets.token_urlsafe(24)
-        if value[0].isalnum():
-            return value
-
-
-GENERATED: Mapping[str, Callable[[], str]] = MappingProxyType(
-    {
-        "LMS_ADMIN_PASSWORD": _password,
-        "DB_ROOT_PASSWORD": _password,
-        "LMS_ENCRYPTION_KEY": lambda: base64.urlsafe_b64encode(os.urandom(32)).decode(),
-        "LMS_API_KEY": lambda: secrets.token_hex(16),
-        "LMS_API_SECRET": lambda: secrets.token_hex(16),
-    }
-)
-
-
-def read_env(path: Path) -> dict[str, str]:
-    """Read KEY=value lines from a dotenv file, process environment winning for known keys."""
-    values: dict[str, str] = {}
-    for line in path.read_text().splitlines():
-        if line and not line.startswith("#") and "=" in line:
-            key, _, value = line.partition("=")
-            values[key] = value
-    return {**values, **{k: v for k, v in os.environ.items() if k in values}}
-
-
-def _write_private(path: Path, text: str) -> None:
-    path.unlink(missing_ok=True)
-    fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
-    with os.fdopen(fd, "w") as f:
-        f.write(text)
-        f.flush()
-        os.fsync(f.fileno())
+__all__ = ["ConfigError", "config_check", "config_show", "init", "main", "whoami"]
 
 
 def init(root: Path) -> int:
     """Create .env from the sample, fill blank generated secrets, report blank operator keys."""
-    env, sample = root / ".env", root / ".env.sample"
-    if not env.exists():
-        _write_private(env, sample.read_text())
-    elif env.stat().st_mode & 0o077:
+    env = root / ".env"
+    existed = env.exists()
+    text = env.read_text() if existed else (root / ".env.sample").read_text()
+    parsed = config.parse_env(text, [k.name for k in config.env_keys()])
+    if parsed.errors:
+        raise ConfigError(
+            f"{env.name} has problems:\n" + "\n".join(f"  {e}" for e in parsed.errors)
+        )
+    new = config.fill_generated(config.add_missing(text, parsed.values))
+    if new != text or not existed:
+        config.write_private(env, new)
+    elif stat.S_IMODE(env.stat().st_mode) & 0o077:
         env.chmod(0o600)
-    lines, changed = [], False
-    for line in env.read_text().splitlines():
-        key, sep, value = line.partition("=")
-        if sep and key in GENERATED and not value:
-            line, changed = f"{key}={GENERATED[key]()}", True
-        lines.append(line)
-    if changed:
-        tmp = root / ".env.tmp"
-        _write_private(tmp, "\n".join(lines) + "\n")
-        tmp.replace(env)
-    values = read_env(env)
-    print(f"{'Updated' if changed else 'Kept'} {env}")
-    blank = [key for key in REQUIRED_OPERATOR_KEYS if not values.get(key)]
-    if blank:
-        print(f"Still blank, fill these in: {', '.join(blank)}")
+    state = "Created" if not existed else "Updated" if new != text else "Kept"
+    print(f"{state} {env}")
+    values = config.parse_env(new, [k.name for k in config.env_keys()]).values
+    blank = [k for k in config.env_keys() if k.source == "operator" and not values.get(k.name)]
+    required = [k.name for k in blank if k.required_for]
+    optional = [k.name for k in blank if not k.required_for]
+    if required:
+        print(f"Still blank, fill these in: {', '.join(required)}")
+    if optional:
+        print(f"Optional, left blank: {', '.join(optional)}")
+    return 0
+
+
+def config_check(root: Path, scope: str) -> int:
+    """Print every config problem at once and return 1 if there is any."""
+    result = checks.check(root, scope, os.environ, checks.run_git(root))
+    for problem in result.problems:
+        print(f"ERROR {problem}", file=sys.stderr)
+    for note in result.notes:
+        print(note)
+    if not result.problems:
+        print(f"Config is fine for: {scope}")
+    return 1 if result.problems else 0
+
+
+def config_show(root: Path) -> int:
+    """Print every key with secrets masked."""
+    values = dict(config.load_env(root).values)
+    versions = root / "deploy" / "versions.env"
+    if versions.exists():
+        values |= config.load_versions(root).values
+    print(config.render_show(values), end="")
     return 0
 
 
@@ -92,7 +74,7 @@ def _require(values: Mapping[str, str], key: str) -> str:
 
 def whoami(root: Path) -> int:
     """Call the LMS API as the service user, retrying for 5 minutes, and print its name."""
-    values = read_env(root / ".env")
+    values = config.load_env(root).values
     host, key, secret = (
         _require(values, k) for k in ("LMS_HOSTNAME", "LMS_API_KEY", "LMS_API_SECRET")
     )
@@ -115,13 +97,45 @@ def whoami(root: Path) -> int:
         time.sleep(5)
 
 
-def main() -> int:
-    """Run the named command; a ConfigError prints its message and exits 1."""
-    parser = argparse.ArgumentParser(prog="tools")
-    parser.add_argument("command", choices=["init", "whoami"])
-    args = parser.parse_args()
+def _secret_values(root: Path) -> list[str]:
+    """Return the secret values in .env, or none if the file cannot be read."""
     try:
-        return {"init": init, "whoami": whoami}[args.command](Path.cwd())
+        values = config.load_env(root).values
+    except (OSError, ConfigError):
+        return []
+    return [values[k.name] for k in config.KEYS if k.secret and values.get(k.name)]
+
+
+def _parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(prog="tools")
+    commands = parser.add_subparsers(dest="command", required=True)
+    commands.add_parser("init", help="create .env and generate missing secrets")
+    commands.add_parser("whoami", help="prove the API path works")
+    cfg = commands.add_parser("config", help="check, show or print the sample of the config file")
+    actions = cfg.add_subparsers(dest="action", required=True)
+    check = actions.add_parser("check", help="validate .env and the repo")
+    check.add_argument("--for", dest="scope", choices=sorted(config.SCOPES), default="up")
+    actions.add_parser("show", help="print every key, secrets masked")
+    actions.add_parser("sample", help="print the .env.sample generated from the key list")
+    return parser
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    """Run the named command; a ConfigError prints its message and exits 1."""
+    args = _parser().parse_args(argv)
+    root = Path.cwd()
+    config.install_masking(_secret_values(root))
+    try:
+        if args.command == "init":
+            return init(root)
+        if args.command == "whoami":
+            return whoami(root)
+        if args.action == "check":
+            return config_check(root, args.scope)
+        if args.action == "show":
+            return config_show(root)
+        print(config.render_sample(), end="")
+        return 0
     except ConfigError as e:
         print(e, file=sys.stderr)
         return 1

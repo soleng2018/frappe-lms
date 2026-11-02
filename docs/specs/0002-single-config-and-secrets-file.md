@@ -1,7 +1,7 @@
 # 0002. Keep every setting and secret in one `.env` file, with a key list in code
 
 **Date**: 2026-11-01
-**Status**: Proposed
+**Status**: In Progress
 
 ## Summary
 

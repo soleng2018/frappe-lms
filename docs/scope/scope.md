@@ -65,13 +65,13 @@ spec [0003](../specs/0003-coding-standards-and-tooling.md)
 ### 3. Single config & secrets file
 One file holds every parameter and secret: master API tokens, app URL, IDP details, backup settings. Nothing sensitive is hardcoded anywhere else.
 **Done when:** every script and container reads its settings from this one file, a sample file lists each key, and the real file is kept out of git.
-spec [0002](../specs/0002-single-config-and-secrets-file.md)
+spec [0002](../specs/0002-single-config-and-secrets-file.md) · code in `tools/src/nile_tools/`, `Makefile`, `.env.sample`
 - [x] Design it (spec): `/architect single config & secrets file`
-- [ ] Build it: `/develop single config & secrets file`
-  - [ ] Config module: key list, strict parser, validators, masking (AC-5, AC-7)
-  - [ ] Thin thread: `init`, sample, Makefile wrapper, `db` and `frontend` wiring (AC-1, AC-3, AC-6)
-  - [ ] Full key inventory, `versions.env`, delivery to all services, `create-site` wiring and mismatch guards (AC-3, AC-6, AC-8, AC-9)
-  - [ ] `config check`, git and secret scan, drift and parity tests (AC-2, AC-4, AC-5)
+- [x] Build it: `/develop single config & secrets file`
+  - [x] Config module: key list, strict parser, validators, masking (AC-5, AC-7)
+  - [x] Thin thread: `init`, sample, Makefile wrapper, `db` and `frontend` wiring (AC-1, AC-3, AC-6)
+  - [x] Full key inventory, `versions.env`, delivery to all services, `create-site` wiring and mismatch guards (AC-3, AC-6, AC-8, AC-9)
+  - [x] `config check`, git and secret scan, drift and parity tests (AC-2, AC-4, AC-5)
 - [ ] Verify it: `/check verify single config & secrets file`
 - [ ] Test it: `/test single config & secrets file`
 - [ ] Review it (fresh model): `/check review single config & secrets file`
