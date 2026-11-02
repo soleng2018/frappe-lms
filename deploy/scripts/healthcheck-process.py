@@ -1,4 +1,5 @@
 """Healthy when a process whose command line contains every argument given is running."""
+
 import glob
 import sys
 from pathlib import Path
@@ -10,7 +11,9 @@ def healthy(want, proc="/proc"):
             parts = Path(path).read_bytes().decode(errors="replace").split("\0")
         except OSError:
             continue
-        if "frappe.utils.bench_helper" in " ".join(parts) and all(w in parts for w in want):
+        if "frappe.utils.bench_helper" in " ".join(parts) and all(
+            w in parts for w in want
+        ):
             return True
     return False
 

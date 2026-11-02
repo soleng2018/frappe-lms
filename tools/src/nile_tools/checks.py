@@ -30,8 +30,8 @@ def run_git(root: Path) -> GitRunner:
 
     def run(args: list[str], stdin: str) -> tuple[int, str, str]:
         try:
-            done = subprocess.run(
-                ["git", *args],
+            done = subprocess.run(  # noqa: S603  # fixed git argument list, no shell
+                ["git", *args],  # noqa: S607  # git is found on PATH by design
                 check=False,
                 cwd=root,
                 input=stdin,

@@ -56,10 +56,10 @@ spec [0001](../specs/0001-stack-and-architecture/index.md) · code in `deploy/`,
 ### 2. Coding standards & tooling
 Capture conventions, then install lint, format, and checks from the real scaffolded project.
 **Done when:** root `AGENTS.md` reflects the real stack, and lint and format run clean.
-spec [0003](../specs/0003-coding-standards-and-tooling.md)
+spec [0003](../specs/0003-coding-standards-and-tooling.md) · code in `.pre-commit-config.yaml`, `Makefile`, `tools/pyproject.toml`, `apps/nile_auth/pyproject.toml`
 - [x] Design it (spec): `/architect coding standards & tooling`
-- [ ] Capture conventions and tooling choices: `/audit`
-- [ ] Install the tooling: `/develop tooling`
+- [x] Capture conventions and tooling choices: `/audit`
+- [x] Install the tooling: `/develop tooling`
 - [ ] Check it runs clean: `/test`
 
 ### 3. Single config & secrets file

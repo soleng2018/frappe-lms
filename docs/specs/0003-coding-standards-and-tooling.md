@@ -1,7 +1,7 @@
 # 0003. One set of coding standards, enforced by one lint command and a commit hook
 
 **Date**: 2026-11-01
-**Status**: Proposed
+**Status**: In Progress
 
 ## Summary
 
@@ -203,7 +203,7 @@ repos:
 
 ## Follow-up
 
-- [ ] Root `AGENTS.md` does not exist. `/audit` should create it with these commands (`make lint`, `make fmt`, `make test`, `make hooks`), the two Python styles, and the three installed skills from spec 0001. `/audit` and `/sync` own that file.
+- [x] Root `AGENTS.md` does not exist. `/audit` should create it with these commands (`make lint`, `make fmt`, `make test`, `make hooks`), the two Python styles, and the three installed skills from spec 0001. `/audit` and `/sync` own that file.
 - [ ] Decide later whether to add GitHub Actions running `make lint` (Option 2). Revisit when a second committer appears or a hook is skipped.
 - [ ] Scope #7 (`nile_auth`) defines how its tests run (`bench run-tests` in a container) and whether they join `make test`.
 - [ ] Verify at build time: the `version-16` app template's ruff settings, the Python version in the Frappe image, current `pre-commit` hook ids and revs, and that `docker compose config -q` passes with only `.env.sample` (spec 0002 requires the wrapper, not `:?` checks, so it should).

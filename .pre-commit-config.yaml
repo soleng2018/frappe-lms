@@ -1,0 +1,62 @@
+# One config for the commit hook and `make lint`. Ruff and mypy run through uv so their versions
+# come from tools/uv.lock. Bump a rev with: uv run --project tools pre-commit autoupdate
+exclude: ^(brand/|\.claude/|\.agents/|skills-lock\.json|requirements\.md$|.*uv\.lock$)
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: end-of-file-fixer
+        # Frappe generates these files
+        exclude: ^apps/nile_auth/.*\.json$
+      - id: trailing-whitespace
+        exclude: ^apps/nile_auth/.*\.json$
+      - id: check-merge-conflict
+      - id: check-added-large-files
+      - id: detect-private-key
+  - repo: https://github.com/shellcheck-py/shellcheck-py
+    rev: v0.11.0.1-1
+    hooks:
+      - id: shellcheck
+  - repo: https://github.com/scop/pre-commit-shfmt
+    rev: v3.14.1-1
+    hooks:
+      - id: shfmt
+        args: [-i, "2", -ci, -w]
+  - repo: https://github.com/hadolint/hadolint
+    rev: v2.15.1
+    hooks:
+      - id: hadolint-docker
+        files: (^|/)(Dockerfile|Containerfile)$
+        types: [file]
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.1
+    hooks:
+      - id: gitleaks
+  - repo: local
+    hooks:
+      - id: ruff-check
+        name: ruff check
+        entry: uv run --frozen --project tools ruff check --fix
+        language: system
+        types: [python]
+        require_serial: true
+      - id: ruff-format
+        name: ruff format
+        entry: uv run --frozen --project tools ruff format
+        language: system
+        types: [python]
+        require_serial: true
+      - id: mypy
+        name: mypy
+        entry: uv run --frozen --directory tools mypy
+        language: system
+        files: ^tools/
+        pass_filenames: false
+        require_serial: true
+      - id: compose-config
+        name: compose config
+        entry: make compose-config
+        language: system
+        files: ^(deploy/|\.env\.sample$)
+        pass_filenames: false
+        require_serial: true

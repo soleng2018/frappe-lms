@@ -11,8 +11,16 @@ pytestmark = pytest.mark.integration
 
 REPO = Path(__file__).resolve().parents[2]
 COMPOSE = [
-    "docker", "compose", "--project-directory", str(REPO), "-f", str(REPO / "deploy/compose.yaml"),
-    "--env-file", str(REPO / "deploy/versions.env"), "--env-file", str(REPO / ".env"),
+    "docker",
+    "compose",
+    "--project-directory",
+    str(REPO),
+    "-f",
+    str(REPO / "deploy/compose.yaml"),
+    "--env-file",
+    str(REPO / "deploy/versions.env"),
+    "--env-file",
+    str(REPO / ".env"),
 ]
 
 
@@ -62,14 +70,24 @@ def test_create_site_recovers_from_an_interrupted_first_run():
     env_args = ["-e", f"LMS_HOSTNAME={site}"]
     seed = f"mkdir -p sites/{site} && touch sites/.creating-{site}"
     try:
-        _compose("run", "--rm", "--no-deps", *env_args, "--entrypoint", "bash", "create-site", "-c", seed)
+        _compose(
+            "run", "--rm", "--no-deps", *env_args, "--entrypoint", "bash", "create-site", "-c", seed
+        )
         result = _compose("run", "--rm", "--no-deps", *env_args, "create-site")
         assert result.returncode == 0, result.stdout + result.stderr
         assert "Dropping the partial site" in result.stdout
         assert "Creating site" in result.stdout
         check = f"ls sites/.creating-{site} 2>&1; test -f sites/{site}/.created && echo finished"
         after = _compose(
-            "run", "--rm", "--no-deps", *env_args, "--entrypoint", "bash", "create-site", "-c", check
+            "run",
+            "--rm",
+            "--no-deps",
+            *env_args,
+            "--entrypoint",
+            "bash",
+            "create-site",
+            "-c",
+            check,
         )
         assert "No such file" in after.stdout
         assert "finished" in after.stdout

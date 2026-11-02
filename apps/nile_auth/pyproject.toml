@@ -7,3 +7,38 @@ name = "nile_auth"
 version = "0.1.0"
 description = "Group to role mapping and service user setup for the Nile LMS"
 requires-python = ">=3.12"
+
+# Frappe app style, copied from the `bench new-app` template for version-16.
+[tool.ruff]
+line-length = 110
+target-version = "py314"
+
+[tool.ruff.lint]
+select = ["F", "E", "W", "I", "UP", "B", "RUF"]
+ignore = [
+	"B017", # assertRaises(Exception) is common in Frappe tests
+	"B018", # useless expression, used in Frappe tests
+	"B023",
+	"B904",
+	"E101",
+	"E402",
+	"E501", # line length is handled by the formatter
+	"E741",
+	"F401",
+	"F403",
+	"F405",
+	"F722",
+	"W191", # tabs are the Frappe indent
+	"RUF001",
+	"RUF002",
+	"RUF003",
+	"RUF005",
+	"RUF012",
+	"RUF100",
+]
+typing-modules = ["frappe.types.DF"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "tab"
+docstring-code-format = true

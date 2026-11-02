@@ -1,0 +1,13 @@
+# deploy/Containerfile is adapted from the upstream frappe_docker file, and we keep its shape so
+# a version bump stays a small diff. These rules flag upstream style, not mistakes of ours.
+ignored:
+  - DL3022 # COPY --from names the build context `fd`, which is not a FROM alias
+  - DL3008 # apt packages are not version pinned; the base image digest is
+  - DL3016 # npm packages are not version pinned in upstream's yarn step
+  - DL3042 # pip cache use follows upstream's bench install
+  - DL4006 # pipes in RUN follow upstream
+  - DL3003 # upstream uses cd inside one RUN
+  - DL3015 # upstream installs recommended packages in one step
+  - DL3066 # the frappe user is named, as in upstream
+  - SC2086 # upstream word splitting in the bench install
+  - SC2038 # upstream find | xargs
