@@ -49,9 +49,9 @@ spec [0001](../specs/0001-stack-and-architecture/index.md) · code in `deploy/`,
 - [x] Decide the stack (spec): `/architect stack & architecture`
 - [x] Scaffold from the decision: `/develop stack & architecture`
 - [x] Verify it: `/check verify stack & architecture`
-- [ ] Test it: `/test stack & architecture`
+- [x] Test it: `/test stack & architecture`
 - [x] Review it (fresh model): `/check review stack & architecture`
-- [ ] Document it: `/document stack & architecture`
+- [x] Document it: `/document stack & architecture`
 
 ### 2. Coding standards & tooling
 Capture conventions, then install lint, format, and checks from the real scaffolded project.
