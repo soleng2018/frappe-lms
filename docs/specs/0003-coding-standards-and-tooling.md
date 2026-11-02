@@ -74,10 +74,11 @@ Hooks run through `pre-commit` so each tool is pinned and shared by clone. Ruff 
 |---|---|---|
 | `tools/` | Python package, `src` layout: `tools/src/<package>/`, `tools/tests/`, `tools/pyproject.toml`, `tools/uv.lock` | Spaces, 100 columns |
 | `apps/nile_auth/` | Custom Frappe app, with its own `[tool.ruff]` in its `pyproject.toml` | Frappe style: tabs, 110 columns |
+| `deploy/scripts/*.py`, `deploy/pyproject.toml` | Stdlib only container scripts (healthchecks) and their Ruff config | Spaces, 100 columns |
 | `deploy/`, `Makefile`, shell scripts | Compose, Dockerfiles, wrapper | See table below |
 | `brand/`, `.claude/`, `.agents/`, `skills-lock.json`, `uv.lock` | Third party or generated files | Excluded from every hook, never reformatted |
 
-No Python lives outside `tools/` and `apps/nile_auth/`, so every Python file gets one of the two configs. Dockerfiles in this repo are ours and are linted. If the layered frappe_docker Containerfile is ever copied in unchanged, keep it in its own folder and add that folder to the hook `exclude`.
+The only Python outside `tools/` and `apps/nile_auth/` is the small stdlib scripts the containers run, in `deploy/scripts/`. They get a third, minimal config in `deploy/pyproject.toml` (not a package), so every Python file still finds a project config. Without one, Ruff silently falls back to its 88 column default. A test in `tools/tests/test_standards.py` fails if any Python file has no `pyproject.toml` above it. Dockerfiles in this repo are ours and are linted. If the layered frappe_docker Containerfile is ever copied in unchanged, keep it in its own folder and add that folder to the hook `exclude`.
 
 **Rules by file type**:
 
@@ -85,6 +86,7 @@ No Python lives outside `tools/` and `apps/nile_auth/`, so every Python file get
 |---|---|---|
 | Python in `tools/` | `ruff check` and `ruff format` | Line length 100, spaces, double quotes, target Python 3.12. `select` = `E, W, F, I, B, UP, SIM, C4, S, RUF, ANN, D100, D101, D102, D103`. Tests ignore `S101`, `ANN`, and `D`. Docstring style Google, one summary line is enough. Calls that run `git` with a fixed argument list (spec 0002's scan) carry a line level `# noqa: S603, S607` with a reason. `ANN401` is ignored project wide so `Any` is allowed where a library demands it. |
 | Python in `tools/` | `mypy` | Standard mode, `python_version = "3.12"`, `check_untyped_defs`, `warn_unused_ignores`, `warn_redundant_casts`, checks `src` and `tests`. Ruff's `ANN` rules, not mypy, enforce that every signature has parameter and return hints. |
+| Python in `deploy/scripts/` | `ruff check` and `ruff format` | Line length 100, spaces, target Python 3.12. `select` = `E, W, F, I, B, UP, SIM, C4, RUF`. No mypy, no `ANN`, `D` or `S`: these are short stdlib scripts that run inside the Frappe image, not the typed `tools` package. |
 | Python in `apps/nile_auth/` | `ruff check` and `ruff format` | Copy the lint settings from the Frappe `version-16` app template (`bench new-app`): tabs, line length 110, target version from the Python in the Frappe image. Verify the template's current values at build time. No mypy, no `ANN`, no `D` here. |
 | Shell | `shellcheck` and `shfmt -i 2 -ci` | Logic beyond a few lines belongs in Python, not shell. |
 | Dockerfiles | `hadolint` | Default rules. Each ignore needs a comment saying why. |
@@ -95,7 +97,7 @@ No Python lives outside `tools/` and `apps/nile_auth/`, so every Python file get
 | Commit messages | Convention only | A plain imperative sentence, short first line, optional body. Not machine checked. |
 | Client side JavaScript | Avoid | If `nile_auth` ever needs it, follow Frappe's prettier and eslint setup and amend this spec. |
 
-An `.editorconfig` at the root states the same indentation for editors: tabs for `apps/nile_auth/**/*.py` and `Makefile`, 2 spaces for YAML and shell, 4 spaces for `tools/**/*.py`.
+An `.editorconfig` at the root states the same indentation for editors: tabs for `apps/nile_auth/**/*.py` and `Makefile`, 2 spaces for YAML and shell, 4 spaces for `tools/**/*.py` and `deploy/scripts/*.py`.
 
 **Tests**: `pytest` with `pytest-cov`. Coverage prints with `--cov --cov-report=term-missing` and never fails the run. Tests marked `integration` need a live Frappe or Authentik and are excluded from `make test` (`-m "not integration"`). Unit tests must not touch the network or a real `.env`.
 

@@ -60,7 +60,7 @@ spec [0003](../specs/0003-coding-standards-and-tooling.md) · code in `.pre-comm
 - [x] Design it (spec): `/architect coding standards & tooling`
 - [x] Capture conventions and tooling choices: `/audit`
 - [x] Install the tooling: `/develop tooling`
-- [ ] Check it runs clean: `/test`
+- [x] Check it runs clean: `/test`
 
 ### 3. Single config & secrets file
 One file holds every parameter and secret: master API tokens, app URL, IDP details, backup settings. Nothing sensitive is hardcoded anywhere else.
