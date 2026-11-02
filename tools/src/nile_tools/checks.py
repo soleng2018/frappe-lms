@@ -68,6 +68,8 @@ def _git_problems(secret_values: list[str], git: GitRunner) -> tuple[list[str], 
             ".env is tracked by git: run git rm --cached .env and treat its secrets as exposed"
         )
     patterns = sorted({v for v in secret_values if len(v) >= _MIN_SCANNED})
+    if not patterns:  # git grep exits 128 on an empty pattern list
+        return problems, []
     hits: set[str] = set()
     for extra in ([], ["--cached"]):
         # Patterns go in on stdin so no secret appears in a process list.
@@ -86,18 +88,27 @@ def check(root: Path, scope: str, environ: Mapping[str, str] | None, git: GitRun
     env_path = root / ".env"
     if not env_path.exists():
         return CheckResult((".env does not exist: run make init",), ())
-    parsed = config.parse_env(env_path.read_text(), [k.name for k in config.env_keys()])
+    try:
+        text = env_path.read_text()
+    except OSError as e:
+        # Still report mode and owner: an unreadable file is often a wrong owner.
+        problems += _file_problems(env_path)
+        problems.append(f".env cannot be read ({e.strerror})")
+        return CheckResult(tuple(problems), ())
+    parsed = config.parse_env(text, [k.name for k in config.env_keys()])
     problems += parsed.errors
     if parsed.errors:
         # Still name every missing or invalid key, so one syntax error does not hide the rest.
         problems += config.check_values(parsed, config.env_keys(), scope)
+        env = parsed
+        notes.append("secret scan covers only the values that parsed: fix the syntax errors above")
     else:
-        merged = config.load_env(root, environ)
-        problems += config.check_values(merged, config.env_keys(), scope)
-        secret_values = [merged.values.get(k.name, "") for k in config.KEYS if k.secret]
-        git_problems, git_notes = _git_problems([v for v in secret_values if v], git)
-        problems += git_problems
-        notes += git_notes
+        env = config.load_env(root, environ)
+        problems += config.check_values(env, config.env_keys(), scope)
+    secret_values = [env.values.get(k.name, "") for k in config.KEYS if k.secret]
+    git_problems, git_notes = _git_problems([v for v in secret_values if v], git)
+    problems += git_problems
+    notes += git_notes
     problems += _file_problems(env_path)
     try:
         versions = config.load_versions(root)

@@ -207,18 +207,41 @@ def test_a_bad_versions_file_syntax_is_reported(repo):
     assert any("versions.env has problems" in p for p in run(repo).problems)
 
 
-def test_a_syntax_error_skips_the_git_scan_but_still_checks_the_file_mode(repo):
+def test_a_syntax_error_still_checks_for_a_tracked_env_and_says_the_scan_is_partial(repo):
+    git(repo, "add", "-f", ".env")
     (repo / ".env").write_text("LMS_HOSTNAME='x'\n")
     (repo / ".env").chmod(0o644)
-    calls = []
-
-    def spy(args, stdin):
-        calls.append(args[0])
-        return 0, "", ""
-
-    result = checks.check(repo, "up", {}, spy)
-    assert calls == []
+    result = run(repo)
+    assert any(".env is tracked by git" in p for p in result.problems)
     assert any("mode is" in p for p in result.problems)
+    assert any("secret scan covers only the values that parsed" in n for n in result.notes)
+
+
+def test_a_syntax_error_still_scans_the_values_that_did_parse(repo):
+    leak = config.load_env(repo, {}).values["DB_ROOT_PASSWORD"]
+    (repo / "notes.txt").write_text(f"{leak}\n")
+    git(repo, "add", "notes.txt")
+    config.write_private(repo / ".env", f"DB_ROOT_PASSWORD={leak}\nLMS_HOSTNAME='x'\n")
+    problems = run(repo).problems
+    assert "a current secret value from .env is in tracked file notes.txt:1" in problems
+    assert leak not in " ".join(problems)
+
+
+def test_an_unreadable_env_reports_owner_and_mode_not_a_traceback(repo, monkeypatch):
+    def denied(self, *args, **kwargs):
+        raise PermissionError(13, "Permission denied")
+
+    monkeypatch.setattr(checks.Path, "read_text", denied)
+    (repo / ".env").chmod(0o644)
+    result = run(repo)
+    assert any("mode is" in p for p in result.problems)
+    assert ".env cannot be read (Permission denied)" in result.problems
+
+
+def test_no_long_secret_means_no_scan_and_no_failure_note(repo):
+    config.write_private(repo / ".env", "LMS_HOSTNAME=lms.example.com\nDB_ROOT_PASSWORD=short\n")
+    result = run(repo)
+    assert not any("scan" in n for n in result.notes)
 
 
 def test_no_problem_or_note_ever_contains_a_secret_value(repo):

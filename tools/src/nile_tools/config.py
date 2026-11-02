@@ -535,7 +535,12 @@ def write_private(path: Path, text: str) -> None:
 
 
 def _read(path: Path, known: Collection[str]) -> EnvFile:
-    env = parse_env(path.read_text(), known)
+    try:
+        text = path.read_text()
+    except OSError as e:
+        hint = ": run make init" if path.name == ".env" and isinstance(e, FileNotFoundError) else ""
+        raise ConfigError(f"{path.name} cannot be read ({e.strerror}){hint}") from e
+    env = parse_env(text, known)
     if env.errors:
         raise ConfigError(f"{path.name} has problems:\n" + "\n".join(f"  {e}" for e in env.errors))
     return env
