@@ -2,7 +2,7 @@
 APPS_HASH = $(shell sha256sum deploy/apps.json | cut -c1-16)
 COMPOSE_BASE = APPS_HASH=$(APPS_HASH) REPO_DIR=$(CURDIR) docker compose --project-directory . -f deploy/compose.yaml
 COMPOSE      = $(COMPOSE_BASE) --env-file deploy/versions.env --env-file .env
-COMPOSE_INIT = $(COMPOSE_BASE) --env-file deploy/versions.env
+COMPOSE_INIT = $(COMPOSE_BASE) --env-file deploy/versions.env --env-file .env.sample
 TOOLS_RUN    = run --rm --no-deps --user "$$(id -u):$$(id -g)" tools
 
 .PHONY: init build up down logs ps tools

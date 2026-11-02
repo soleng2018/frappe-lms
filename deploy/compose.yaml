@@ -125,6 +125,7 @@ services:
         DEBIAN_BASE: ${BUILD_DEBIAN_BASE}
         PYTHON_BASE_DIGEST: ${BUILD_PYTHON_BASE_DIGEST}
         NODE_VERSION: ${BUILD_NODE_VERSION}
+        BENCH_VERSION: ${BUILD_BENCH_VERSION}
         FRAPPE_BRANCH: ${BUILD_FRAPPE_TAG}
         CACHE_BUST: ${APPS_HASH:-}
       secrets:
@@ -213,8 +214,9 @@ services:
     working_dir: ${REPO_DIR}
     volumes:
       - ${REPO_DIR}:${REPO_DIR}
-    # The LMS is reached through public DNS (Cloudflare edge): Traefik's own certificate is a
-    # Cloudflare Origin one that only Cloudflare trusts. Authentik routing is decided in feature 6.
+    # The LMS is reached through public DNS (Cloudflare edge): Traefik serves a Cloudflare Origin
+    # certificate (file provider) that only Cloudflare trusts. The certresolver label on
+    # frontend is kept as the spec says, and is redundant with the entrypoint wildcard resolver. Authentik routing is decided in feature 6.
     extra_hosts:
       - "${AUTHENTIK_HOSTNAME:-authentik-unset.invalid}=host-gateway"
     logging: *logging

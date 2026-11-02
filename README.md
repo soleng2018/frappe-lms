@@ -66,6 +66,8 @@ The first `make up` builds the image, which takes a while. `configurator` and `c
 | `make logs` | Last 100 log lines per service. |
 | `make tools CMD=<command>` | Run a tools command in the tools container. Today: `init`, `whoami`. |
 
+Tests, run from `tools/`: `uv run pytest` runs the unit tests. `uv run pytest -m integration` runs the stack tests, which need the stack running and a `.env`. They rerun `create-site` against your live site, which keeps it and changes nothing except pending migrations.
+
 Planned in specs 0002 and 0003 (not built yet): `make hooks`, `make lint`, `make fmt`, `make test`, `make check`.
 
 ## 5. Layout

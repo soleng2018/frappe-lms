@@ -6,20 +6,41 @@ cd /home/frappe/frappe-bench
 
 SITE="$LMS_HOSTNAME"
 CONFIG="sites/$SITE/site_config.json"
+# PENDING exists only while the site is being created. MARKER is written when setup finished.
+PENDING="sites/.creating-$SITE"
 MARKER="sites/$SITE/.created"
 
-if [ ! -f "$MARKER" ]; then
+if [ -f "$PENDING" ]; then
+  echo "A previous run was interrupted while creating $SITE. Dropping the partial site."
+  bench drop-site "$SITE" --force --no-backup --db-root-password "$DB_ROOT_PASSWORD" || true
+  rm -rf "sites/$SITE" "$PENDING"
+fi
+
+if [ ! -d "sites/$SITE" ]; then
   echo "Creating site $SITE"
-  # A run interrupted before the marker leaves a half built site; start clean.
-  bench new-site --force \
+  touch "$PENDING"
+  # Accepted exposure: these two passwords are visible in this container's process list while
+  # new-site runs. Frappe only reads them from arguments or from config files on the volume.
+  bench new-site \
     --mariadb-user-host-login-scope='%' \
     --db-root-password "$DB_ROOT_PASSWORD" \
     --admin-password "$LMS_ADMIN_PASSWORD" \
     "$SITE"
-  # Set before any app stores an encrypted value.
-  bench --site "$SITE" set-config encryption_key "$LMS_ENCRYPTION_KEY"
+  # Set before any app stores an encrypted value. Read from the environment, not from arguments.
+  python3 - "$CONFIG" <<'PY'
+import json
+import os
+import sys
+
+path = sys.argv[1]
+with open(path) as f:
+    config = json.load(f)
+config["encryption_key"] = os.environ["LMS_ENCRYPTION_KEY"]
+with open(path, "w") as f:
+    json.dump(config, f, indent=1)
+PY
   bench --site "$SITE" enable-scheduler
-  touch "$MARKER"
+  rm -f "$PENDING"
 else
   echo "Site $SITE exists"
   CURRENT=$(python3 -c "import json,sys; print(json.load(open(sys.argv[1])).get('encryption_key',''))" "$CONFIG")
@@ -45,4 +66,5 @@ done
 
 bench --site "$SITE" migrate
 bench --site "$SITE" execute nile_auth.setup.ensure_service_user
+touch "$MARKER"
 echo "create-site done"
