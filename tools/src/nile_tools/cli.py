@@ -64,6 +64,8 @@ def init(root: Path) -> int:
     env, sample = root / ".env", root / ".env.sample"
     if not env.exists():
         _write_private(env, sample.read_text())
+    elif env.stat().st_mode & 0o077:
+        env.chmod(0o600)
     lines, changed = [], False
     for line in env.read_text().splitlines():
         key, sep, value = line.partition("=")
@@ -91,7 +93,9 @@ def _require(values: Mapping[str, str], key: str) -> str:
 def whoami(root: Path) -> int:
     """Call the LMS API as the service user, retrying for 5 minutes, and print its name."""
     values = read_env(root / ".env")
-    host, key, secret = (_require(values, k) for k in ("LMS_HOSTNAME", "LMS_API_KEY", "LMS_API_SECRET"))
+    host, key, secret = (
+        _require(values, k) for k in ("LMS_HOSTNAME", "LMS_API_KEY", "LMS_API_SECRET")
+    )
     url = f"https://{host}/api/method/frappe.auth.get_logged_user"
     headers = {"Authorization": f"token {key}:{secret}"}
     deadline = time.monotonic() + 300

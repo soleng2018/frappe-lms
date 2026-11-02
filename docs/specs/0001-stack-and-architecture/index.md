@@ -80,7 +80,7 @@ Use the frappe_docker layered image (Frappe `version-16` pinned to a release tag
 | Pinned versions and image tag | Config file keys |
 
 **Create site rules**:
-- Skip creation when `sites/<site>/site_config.json` exists. Otherwise run `bench new-site` with `--mariadb-user-host-login-scope=%`, the DB root and admin passwords from the config, and `--install-app lms --install-app nile_auth`. On a re-run install any app that is missing.
+- Skip creation when the site folder exists. A first creation holds a `sites/.creating-<site>` marker until all setup has finished; a leftover marker means an interrupted first run, and the next run drops that partial site and starts again. A finished run writes `sites/<site>/.created`. A site folder with neither marker is never dropped. Otherwise run `bench new-site` with `--mariadb-user-host-login-scope=%`, the DB root and admin passwords from the config, and `--install-app lms --install-app nile_auth`. On a re-run install any app that is missing.
 - Always finish with `bench migrate`, so an image upgrade is applied, and check that the scheduler is enabled on a new site.
 - `tools init` only fills missing keys. It never rotates the DB root, admin, API, or encryption values once the volume exists, because MariaDB ignores a changed root password after first start.
 - `configurator` re-runs on every `up` to refresh `db_host`, redis URLs, `socketio_port`, and `apps.txt`. Check how current frappe_docker keeps assets from going stale in the volume after a rebuild.

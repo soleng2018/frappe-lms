@@ -264,3 +264,10 @@ def test_init_replaces_a_leftover_wide_temp_file(root):
     cli.init(root)
     assert not (root / ".env.tmp").exists()
     assert stat.S_IMODE((root / ".env").stat().st_mode) == 0o600
+
+
+def test_init_tightens_a_wide_env_file_mode(root):
+    (root / ".env").write_text("LMS_HOSTNAME=x\n")
+    (root / ".env").chmod(0o644)
+    cli.init(root)
+    assert stat.S_IMODE((root / ".env").stat().st_mode) == 0o600

@@ -4,23 +4,32 @@
 set -euo pipefail
 cd /home/frappe/frappe-bench
 
-SITE="$LMS_HOSTNAME"
+SITE="${LMS_HOSTNAME:?LMS_HOSTNAME is blank}"
 CONFIG="sites/$SITE/site_config.json"
-# PENDING exists only while the site is being created. MARKER is written when setup finished.
+# PENDING exists from the start of a first creation until all setup below has finished. A leftover
+# one means a first run was interrupted, so the site is ours and incomplete. MARKER records a
+# finished setup. A site with neither (made before these markers) is never dropped.
 PENDING="sites/.creating-$SITE"
 MARKER="sites/$SITE/.created"
 
 if [ -f "$PENDING" ]; then
   echo "A previous run was interrupted while creating $SITE. Dropping the partial site."
-  bench drop-site "$SITE" --force --no-backup --db-root-password "$DB_ROOT_PASSWORD" || true
-  rm -rf "sites/$SITE" "$PENDING"
+  ARCHIVE="$(mktemp -d)"
+  # The root password is on this command line too (accepted exposure, see below).
+  if ! bench drop-site "$SITE" --force --no-backup --archived-sites-path "$ARCHIVE" \
+    --db-root-password "$DB_ROOT_PASSWORD"; then
+    echo "WARNING: drop-site failed. A database and user for $SITE may be left behind in the db" >&2
+    echo "service. Check with 'show databases' and drop them by hand if you see an orphan." >&2
+  fi
+  # The archive holds the site config, which includes passwords.
+  rm -rf "$ARCHIVE" "sites/$SITE" "$PENDING"
 fi
 
 if [ ! -d "sites/$SITE" ]; then
   echo "Creating site $SITE"
   touch "$PENDING"
-  # Accepted exposure: these two passwords are visible in this container's process list while
-  # new-site runs. Frappe only reads them from arguments or from config files on the volume.
+  # Accepted exposure: the DB root and admin passwords are visible in this container's process
+  # list while new-site runs. Frappe only reads them from arguments or from config files.
   bench new-site \
     --mariadb-user-host-login-scope='%' \
     --db-root-password "$DB_ROOT_PASSWORD" \
@@ -36,13 +45,18 @@ path = sys.argv[1]
 with open(path) as f:
     config = json.load(f)
 config["encryption_key"] = os.environ["LMS_ENCRYPTION_KEY"]
-with open(path, "w") as f:
+with open(path + ".tmp", "w") as f:
     json.dump(config, f, indent=1)
+os.replace(path + ".tmp", path)
 PY
   bench --site "$SITE" enable-scheduler
-  rm -f "$PENDING"
 else
   echo "Site $SITE exists"
+  if [ ! -f "$CONFIG" ]; then
+    echo "ERROR: sites/$SITE has no site_config.json and no interrupted run is recorded." >&2
+    echo "Remove the folder by hand (and its database) if it is a leftover. Nothing was changed." >&2
+    exit 1
+  fi
   CURRENT=$(python3 -c "import json,sys; print(json.load(open(sys.argv[1])).get('encryption_key',''))" "$CONFIG")
   if [ "$CURRENT" != "$LMS_ENCRYPTION_KEY" ]; then
     echo "ERROR: LMS_ENCRYPTION_KEY differs from the key stored in $CONFIG." >&2
@@ -67,4 +81,5 @@ done
 bench --site "$SITE" migrate
 bench --site "$SITE" execute nile_auth.setup.ensure_service_user
 touch "$MARKER"
+rm -f "$PENDING"
 echo "create-site done"

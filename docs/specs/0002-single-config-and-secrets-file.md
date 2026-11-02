@@ -198,7 +198,7 @@ Keys also used by Compose itself for interpolation (image tags, Traefik labels a
 - Frozen keys are never changed after the first start. The sample comments mark them "fixed after first start", and `config check` prints the frozen key names as a reminder. Changing one is a manual restore style operation, not an edit.
 - Secrets exist only in `.env`: not in the compose file, `apps.json`, build arguments, image layers, tracked files, or output.
 - The file is written atomically at mode 0600 and read with the strict syntax only.
-- If the stored encryption key or an existing service user key differs from the env value, `create-site` and `ensure_service_user` fail loudly; they never keep or replace it silently. `create-site` writes `encryption_key` into the site config before any app is installed, and its skip rule keys on a `.created` marker, not on `site_config.json`.
+- If the stored encryption key or an existing service user key differs from the env value, `create-site` and `ensure_service_user` fail loudly; they never keep or replace it silently. `create-site` writes `encryption_key` into the site config before any app is installed, and it skips creation when the site folder exists. A `sites/.creating-<site>` marker, held from the start of a first creation until setup finishes, makes the next run drop the partial site and start again. `.created` records a finished setup. It is never read as a skip rule, so a site made before the markers existed is left alone.
 - Adding a key means one change that touches the key list, the generated sample, and any compose entry together.
 
 **Security model**:

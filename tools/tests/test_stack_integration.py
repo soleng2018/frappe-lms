@@ -55,3 +55,27 @@ def test_service_user_refuses_a_changed_api_secret():
     )
     assert result.returncode != 0
     assert "different API key or secret" in result.stdout + result.stderr
+
+
+def test_create_site_recovers_from_an_interrupted_first_run():
+    site = "recovery-test.localhost"
+    env_args = ["-e", f"LMS_HOSTNAME={site}"]
+    seed = f"mkdir -p sites/{site} && touch sites/.creating-{site}"
+    try:
+        _compose("run", "--rm", "--no-deps", *env_args, "--entrypoint", "bash", "create-site", "-c", seed)
+        result = _compose("run", "--rm", "--no-deps", *env_args, "create-site")
+        assert result.returncode == 0, result.stdout + result.stderr
+        assert "Dropping the partial site" in result.stdout
+        assert "Creating site" in result.stdout
+        check = f"ls sites/.creating-{site} 2>&1; test -f sites/{site}/.created && echo finished"
+        after = _compose(
+            "run", "--rm", "--no-deps", *env_args, "--entrypoint", "bash", "create-site", "-c", check
+        )
+        assert "No such file" in after.stdout
+        assert "finished" in after.stdout
+    finally:
+        cleanup = (
+            f'bench drop-site {site} --force --no-backup --archived-sites-path "$(mktemp -d)" '
+            '--db-root-password "$DB_ROOT_PASSWORD"; rm -rf sites/{s} sites/.creating-{s}'
+        ).format(s=site)
+        _compose("run", "--rm", "--no-deps", "--entrypoint", "bash", "create-site", "-c", cleanup)
