@@ -1,4 +1,5 @@
 """Backend healthcheck: GET /api/method/ping with the Host header set to the one site on disk."""
+
 import glob
 import os
 import sys

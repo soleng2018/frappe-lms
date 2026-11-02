@@ -65,6 +65,9 @@ MCP servers: Frappe built in endpoint (recommended, once the site is up), MariaD
 
 ## Context files
 
+- [deploy/AGENTS.md](deploy/AGENTS.md) (compose, image build, version pins, container scripts)
+- [tools/AGENTS.md](tools/AGENTS.md) (the `nile_tools` package, config key list, how it runs in a container)
+
 <!-- Nested AGENTS.md files are listed here as they are created -->
 
 _Drafted by /audit from the repo, worth a quick human pass. Edit freely: once a line stops matching this draft, later runs treat it as curated and will flag rather than overwrite it._

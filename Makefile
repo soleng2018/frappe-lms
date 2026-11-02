@@ -7,7 +7,7 @@ COMPOSE      = $(COMPOSE_BASE) --env-file deploy/versions.env --env-file .env
 COMPOSE_INIT = $(COMPOSE_BASE) --env-file deploy/versions.env --env-file .env.sample
 TOOLS_RUN    = run --rm --build --quiet-build --no-deps --user "$$(id -u):$$(id -g)" tools
 
-.PHONY: guard init check build up down logs ps tools
+.PHONY: guard init check build up down logs ps tools hooks lint fmt test compose-config secrets
 guard:
 	@bad=""; for k in $$(sed -n 's/^\([A-Z][A-Z0-9_]*\)=.*/\1/p' .env.sample deploy/versions.env); do \
 	  if printenv "$$k" >/dev/null; then bad="$$bad $$k"; fi; done; \
@@ -31,3 +31,17 @@ logs: guard
 	$(COMPOSE) logs --tail=100
 tools: guard
 	$(COMPOSE) $(TOOLS_RUN) $(CMD)
+
+# Code quality (spec 0003). `check` above means the config file, not code.
+GITLEAKS_IMAGE = ghcr.io/gitleaks/gitleaks@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f
+hooks:
+	uv run --frozen --project tools pre-commit install
+lint: secrets
+	uv run --frozen --project tools pre-commit run --all-files
+fmt: lint
+secrets:
+	docker run --rm -v "$(CURDIR):/repo:ro" $(GITLEAKS_IMAGE) dir /repo --config /repo/.gitleaks.toml --no-banner --redact
+compose-config: guard
+	APPS_HASH=$(APPS_HASH) REPO_DIR=$(CURDIR) docker compose --project-directory . -f deploy/compose.yaml --env-file deploy/versions.env --env-file .env.sample --profile tools config -q
+test:
+	uv run --frozen --directory tools pytest --cov --cov-report=term-missing

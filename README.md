@@ -15,6 +15,7 @@ You need all of these before you start.
 | A running Authentik with admin access | Students and admins log in through it. |
 | Internet access during the first build | Pulls the base images and clones Frappe, LMS and payments at pinned tags. |
 | `uv` and Python 3.12 (only if you run the `tools` code or tests on the host) | Lint and unit tests. Not needed to run the stack. |
+| Docker, `uv` and `git` on any machine that commits | The commit hook runs hadolint and gitleaks in Docker, and ruff, mypy and pre-commit through `uv`. |
 
 ## 2. Secrets and settings you need
 
@@ -55,6 +56,7 @@ make check         # lists every bad or missing key at once (make up runs it for
 make up            # check, fetch upstream, build the image, start the stack
 make ps            # every long running service should show (healthy)
 make tools CMD=whoami   # proves the API path: prints the service user name
+make hooks         # once per clone: installs the pre-commit hook (needed before you commit)
 ```
 
 The first `make up` builds the image, which takes a while. `configurator` and `create-site` run once and exit 0. Then the long running services become healthy.
@@ -71,10 +73,15 @@ The first `make up` builds the image, which takes a while. `configurator` and `c
 | `make ps` | Show all containers of the stack. |
 | `make logs` | Last 100 log lines per service. |
 | `make tools CMD=<command>` | Run a tools command in the tools container. Today: `init`, `whoami`, `config check [--for up\|tools-authentik]`, `config show` (secrets as `*****`), `config sample`. |
+| `make hooks` | Install the pre-commit hook. Run once per clone. |
+| `make lint` | Scan the tree for secrets with gitleaks (in Docker), then run every hook on all files (hygiene, shellcheck, shfmt, hadolint, ruff, mypy, compose check). Hooks fix what they can and fail the run when they changed a file, so run it again. |
+| `make fmt` | Same as `make lint`. |
+| `make test` | Unit tests in `tools/` with a coverage report. Integration tests are skipped. |
+| `make compose-config` | Check that the compose file resolves with the committed pins and `.env.sample`. |
 
-Tests, run from `tools/`: `uv run pytest` runs the unit tests. `uv run pytest -m integration` runs the stack tests, which need the stack running and a `.env`. They rerun `create-site` against your live site, which keeps it and changes nothing except pending migrations.
+The stack tests need the stack running and a `.env`: run `cd tools && uv run pytest -m integration`. They rerun `create-site` against your live site, which keeps it and changes nothing except pending migrations.
 
-Planned in spec 0003 (not built yet): `make hooks`, `make lint`, `make fmt`, `make test`.
+Style: `tools/` uses spaces and 100 columns, `apps/nile_auth/` follows Frappe (tabs, 110 columns). Details in [spec 0003](docs/specs/0003-coding-standards-and-tooling.md).
 
 ## 5. Layout
 

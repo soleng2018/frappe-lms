@@ -1,4 +1,4 @@
-"""The key list, a strict .env parser, validators, generators, the sample file and secret masking."""
+"""The key list, a strict .env parser, validators, generators, the sample and secret masking."""
 
 import base64
 import logging
@@ -510,7 +510,7 @@ def install_masking(values: Iterable[str]) -> None:
     make_record = logging.getLogRecordFactory()
 
     def factory(*args: object, **kwargs: object) -> logging.LogRecord:
-        record = make_record(*args, **kwargs)  # type: ignore[arg-type]
+        record = make_record(*args, **kwargs)
         record.msg, record.args = scrub(record.getMessage(), secret_values), None
         return record
 

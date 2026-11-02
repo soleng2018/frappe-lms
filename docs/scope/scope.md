@@ -24,7 +24,7 @@ _The Frappe links have not been read by `/scope`; `/architect` should read the o
 | # | Feature | Phase | Status |
 |---|---------|-------|--------|
 | 1 | Stack & architecture | Foundation | done |
-| 2 | Coding standards & tooling | Foundation | in-progress |
+| 2 | Coding standards & tooling | Foundation | done |
 | 3 | Single config & secrets file | Foundation | done |
 | 4 | Data model (course, quiz, certificate, roles) | Foundation | planned |
 | 5 | LMS running behind Traefik | Slice 1 | planned |
@@ -56,11 +56,11 @@ spec [0001](../specs/0001-stack-and-architecture/index.md) · code in `deploy/`,
 ### 2. Coding standards & tooling
 Capture conventions, then install lint, format, and checks from the real scaffolded project.
 **Done when:** root `AGENTS.md` reflects the real stack, and lint and format run clean.
-spec [0003](../specs/0003-coding-standards-and-tooling.md)
+spec [0003](../specs/0003-coding-standards-and-tooling.md) · code in `.pre-commit-config.yaml`, `Makefile`, `tools/pyproject.toml`, `apps/nile_auth/pyproject.toml`
 - [x] Design it (spec): `/architect coding standards & tooling`
-- [ ] Capture conventions and tooling choices: `/audit`
-- [ ] Install the tooling: `/develop tooling`
-- [ ] Check it runs clean: `/test`
+- [x] Capture conventions and tooling choices: `/audit`
+- [x] Install the tooling: `/develop tooling`
+- [x] Check it runs clean: `/test`
 
 ### 3. Single config & secrets file
 One file holds every parameter and secret: master API tokens, app URL, IDP details, backup settings. Nothing sensitive is hardcoded anywhere else.

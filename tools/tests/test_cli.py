@@ -141,7 +141,7 @@ def _resp(status, body=None):
 
 def test_whoami_prints_service_user(env_root, monkeypatch, capsys, clock):
     # covers: AC-3
-    seen = {}
+    seen: dict[str, object] = {}
 
     def fake_get(url, headers, timeout):
         seen.update(url=url, headers=headers)
@@ -206,7 +206,12 @@ def test_main_dispatches_to_the_named_command(monkeypatch, tmp_path):
     called = []
     monkeypatch.setattr(sys, "argv", ["tools", "init"])
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(cli, "init", lambda root: called.append(root) or 0)
+
+    def fake_init(root):
+        called.append(root)
+        return 0
+
+    monkeypatch.setattr(cli, "init", fake_init)
     assert cli.main() == 0
     assert called == [tmp_path]
 
@@ -336,11 +341,12 @@ def test_config_check_passes_the_chosen_scope_through(monkeypatch, tmp_path):
 
     seen = []
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(
-        checks,
-        "check",
-        lambda root, scope, environ, git: seen.append(scope) or checks.CheckResult((), ()),
-    )
+
+    def fake_check(root, scope, environ, git):
+        seen.append(scope)
+        return checks.CheckResult((), ())
+
+    monkeypatch.setattr(checks, "check", fake_check)
     assert cli.main(["config", "check", "--for", "tools-authentik"]) == 0
     assert cli.main(["config", "check"]) == 0
     assert seen == ["tools-authentik", "up"]
@@ -367,7 +373,9 @@ def test_config_show_includes_the_committed_pins_unmasked(tmp_path, monkeypatch,
 def test_config_show_marks_a_blank_secret_blank_and_never_prints_a_set_one(
     tmp_path, monkeypatch, capsys
 ):
-    (tmp_path / ".env").write_text("LMS_API_KEY=0123456789abcdef0123456789abcdef\n")
+    (tmp_path / ".env").write_text(
+        "LMS_API_KEY=0123456789abcdef0123456789abcdef\n"  # gitleaks:allow
+    )
     monkeypatch.chdir(tmp_path)
     cli.main(["config", "show"])
     out = capsys.readouterr().out

@@ -51,7 +51,11 @@ def _run(root: Path, **env: str) -> subprocess.CompletedProcess[str]:
     }
     return subprocess.run(
         ["bash", str(root / "create-site.sh")],
-        check=False, capture_output=True, text=True, env=full_env, timeout=30,
+        check=False,
+        capture_output=True,
+        text=True,
+        env=full_env,
+        timeout=30,
     )
 
 

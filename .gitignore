@@ -16,6 +16,10 @@
 # Local caches
 docs/.agent-cache/
 __pycache__/
+.coverage
+.ruff_cache/
+.mypy_cache/
+.pytest_cache/
 .venv/
 .DS_Store
 

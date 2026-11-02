@@ -1,0 +1,15 @@
+# Default rules, plus paths a tree scan must skip: the real config file (spec 0002 scans it
+# itself) and folders that are not ours.
+[extend]
+useDefault = true
+
+[allowlist]
+paths = [
+  '''(^|/)\.env$''',
+  '''(^|/)deploy/\.upstream/''',
+  '''(^|/)\.venv/''',
+  '''__pycache__/''',
+  '''\.ruff_cache/''',
+  '''\.mypy_cache/''',
+  '''\.pytest_cache/''',
+]
