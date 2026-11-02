@@ -23,7 +23,7 @@ _The Frappe links have not been read by `/scope`; `/architect` should read the o
 
 | # | Feature | Phase | Status |
 |---|---------|-------|--------|
-| 1 | Stack & architecture | Foundation | in-progress |
+| 1 | Stack & architecture | Foundation | done |
 | 2 | Coding standards & tooling | Foundation | in-progress |
 | 3 | Single config & secrets file | Foundation | in-progress |
 | 4 | Data model (course, quiz, certificate, roles) | Foundation | planned |
