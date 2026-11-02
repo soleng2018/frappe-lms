@@ -1,7 +1,7 @@
 # 0001. Run Frappe LMS as a frappe_docker stack with a Python tools container
 
 **Date**: 2026-11-01
-**Status**: Proposed
+**Status**: Accepted
 
 ## Summary
 
@@ -26,7 +26,7 @@ Light acceptance criteria for the foundation, derived from the chosen stack. The
 
 **Chosen option**: Option 1: frappe_docker official images, layered custom image, one compose file, Python tools container.
 
-Use the frappe_docker layered image (Frappe `version-16` pinned to a release tag, plus LMS, plus one custom app copied from this repo) with MariaDB, dedicated redis containers, and the nginx `frontend`, run from one compose file behind Traefik, and drive all setup through a Python tools container that calls the Frappe and Authentik REST APIs.
+Use the frappe_docker layered image (Frappe `version-16` pinned to a release tag, plus LMS (and its required `payments` app), plus one custom app copied from this repo) with MariaDB, dedicated redis containers, and the nginx `frontend`, run from one compose file behind Traefik, and drive all setup through a Python tools container that calls the Frappe and Authentik REST APIs.
 
 **Implementation skills**: `frappe-app-dev` (`frappe/skills`, `.claude/skills/frappe-app-dev/`) · `docker-compose-patterns` (`docker/skills`, `.claude/skills/docker-compose-patterns/`) · `uv` (`astral-sh/claude-code-plugins`, `.claude/skills/uv/`)
 
@@ -36,8 +36,8 @@ Use the frappe_docker layered image (Frappe `version-16` pinned to a release tag
 |---|---|---|
 | Application type | Monolith: Frappe LMS as the single app, plus one small custom Frappe app | Small team, dev server, one product. Nothing to split. |
 | Language | Python for the tools package and the custom app. The custom app runs on the Python version of the Frappe image (the build must check what `version-16` requires, which may be newer than 3.12). The tools image has its own Python 3.12 | Frappe is Python. Decoupling the two avoids a forced version match. |
-| Framework | Frappe `version-16` pinned to a `v16.x.y` release tag. LMS pinned to an exact release tag (latest checked: v2.68.0, which allows Frappe >=15.121 and <17) | Current frappe_docker default and where LMS work is going. A branch name moves, so only tags are pinned. |
-| Custom Frappe app | `nile_auth` (design in scope feature #7): login hook that reads Authentik groups, sets roles, refuses others. Lives in `apps/nile_auth/` and is copied into the image build and installed from that local path | Frappe has no built in group to role mapping, and refusing at login needs a hook. A local copy needs no git URL or token at build time. `apps.json` carries only LMS. |
+| Framework | Frappe `version-16` pinned to a `v16.x.y` release tag. LMS pinned to an exact release tag (latest checked: v2.68.0, which allows Frappe >=15.121 and <17) | Current frappe_docker default and where LMS work is going. A branch name moves, so only tags are pinned. **Exception:** `payments` publishes no tags, so `apps.json` pins it to the `version-16` branch. A rebuild with a changed `apps.json` or `CACHE_BUST` can pick up new `payments` code. Accepted for this dev server, and revisited if `payments` starts tagging or the pin bites. |
+| Custom Frappe app | `nile_auth` (design in scope feature #7): login hook that reads Authentik groups, sets roles, refuses others. Lives in `apps/nile_auth/` and is copied into the image build and installed from that local path | Frappe has no built in group to role mapping, and refusing at login needs a hook. A local copy needs no git URL or token at build time. `apps.json` carries LMS and `payments` (LMS lists it in `required_apps`, so it must be in the image). |
 | Primary DB | MariaDB container, version from the frappe_docker MariaDB override (check that `version-16` accepts it), named volume. Keep the upstream flags `--character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci --skip-character-set-client-handshake` | Supported database for Frappe. Postgres is experimental, so not used. Frappe misbehaves without those flags. |
 | Cache and queue | Dedicated redis containers (cache, queue) from frappe_docker | Upstream layout, isolated from other apps on this server. |
 | Web serving | `frontend` (nginx, same image) serves `/assets`, proxies to `backend` (gunicorn) and `/socket.io` to `websocket`, and receives the site name through `FRAPPE_SITE_NAME_HEADER` | Gunicorn does not serve static assets, and one entry point removes any path routing in Traefik. |
@@ -50,7 +50,7 @@ Use the frappe_docker layered image (Frappe `version-16` pinned to a release tag
 | Reverse proxy and TLS | Existing Traefik v3.5.0. Labels on `frontend` only: `traefik.enable`, `traefik.docker.network=traefik`, `websecure` entrypoint, `letsencrypt` resolver, service port 8080, host rule from the config file. Only `frontend` joins the external `traefik` network | Same pattern as `/home/nova/lms`. The network label avoids random IP picks and intermittent 502s. No ports published. |
 | Site identity | Site name equals the public hostname. `create-site` sets `host_name` to `https://<hostname>` in the site config | Frappe picks the site from the Host header, and behind TLS terminating Traefik it would otherwise build `http://` URLs and break the OIDC redirect URI. |
 | Auth | Frappe OIDC (Social Login Key with Custom provider) against Authentik, created by the tools container through the REST API, with `bench execute` as the fallback | Requirements 1 and 2. Authentik's own Frappe guide uses this mechanism. REST creation is unverified, so scope feature #6 proves it first. |
-| Script runtime | `tools` service in the same compose file, Python 3.12 image, run with `docker compose run --no-deps tools <command>`. Gets `extra_hosts: <hostname>:host-gateway` and the same for the Authentik hostname so the public names resolve to the host where Traefik listens | Same environment everywhere. Without `extra_hosts` a container may resolve the public name to an address it cannot reach. |
+| Script runtime | `tools` service in the same compose file, Python 3.12 image, run with `docker compose run --no-deps tools <command>`. Gets `extra_hosts: <hostname>:host-gateway` and the same for the Authentik hostname so the public names resolve to the host where Traefik listens | Same environment everywhere. Without `extra_hosts` a container may resolve the public name to an address it cannot reach. **As built:** only the Authentik hostname is mapped to `host-gateway`. The LMS is reached through public DNS and Cloudflare, because Traefik serves a Cloudflare Origin certificate that only Cloudflare trusts. |
 | Python tooling | `uv` with `pyproject.toml` and a lock file, `httpx`, `PyYAML`, `pytest`, `ruff` | Reproducible installs and one project file. Final lint choices belong to scope feature #2. |
 | API access from scripts | Public HTTPS hostname, API key and secret of a dedicated service user (`Authorization: token key:secret`). The tools container retries every 5 seconds for up to 5 minutes, then fails with a clear message naming the URL | Engineer's choice. Tests the real path end to end. |
 | Config file | One dotenv file at the repo root (name settled in scope feature #3), passed to compose with `--env-file` and read by the tools package. Not committed. A sample file lists every key | Compose can only interpolate dotenv, so YAML or a generated `.env` would break the one file rule. |
@@ -80,7 +80,7 @@ Use the frappe_docker layered image (Frappe `version-16` pinned to a release tag
 | Pinned versions and image tag | Config file keys |
 
 **Create site rules**:
-- Skip creation when `sites/<site>/site_config.json` exists. Otherwise run `bench new-site` with `--mariadb-user-host-login-scope=%`, the DB root and admin passwords from the config, and `--install-app lms --install-app nile_auth`. On a re-run install any app that is missing.
+- Skip creation when the site folder exists. A first creation holds a `sites/.creating-<site>` marker until all setup has finished; a leftover marker means an interrupted first run, and the next run drops that partial site and starts again. A finished run writes `sites/<site>/.created`. A site folder with neither marker is never dropped. Otherwise run `bench new-site` with `--mariadb-user-host-login-scope=%`, the DB root and admin passwords from the config, and `--install-app lms --install-app nile_auth`. On a re-run install any app that is missing.
 - Always finish with `bench migrate`, so an image upgrade is applied, and check that the scheduler is enabled on a new site.
 - `tools init` only fills missing keys. It never rotates the DB root, admin, API, or encryption values once the volume exists, because MariaDB ignores a changed root password after first start.
 - `configurator` re-runs on every `up` to refresh `db_host`, redis URLs, `socketio_port`, and `apps.txt`. Check how current frappe_docker keeps assets from going stale in the volume after a rebuild.

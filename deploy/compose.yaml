@@ -1,0 +1,237 @@
+# Run from the repo root through the Makefile:
+#   docker compose --project-directory . --env-file deploy/versions.env --env-file .env -f deploy/compose.yaml ...
+name: nile-lms
+
+x-logging: &logging
+  driver: json-file
+  options: { max-size: 10m, max-file: "5" }
+
+x-image: &image
+  image: nile-lms:${BUILD_LMS_TAG}-${BUILD_NILE_AUTH_VERSION}
+  pull_policy: never
+  platform: linux/amd64
+
+x-app: &app
+  <<: *image
+  logging: *logging
+  restart: unless-stopped
+  volumes:
+    - sites:/home/frappe/frappe-bench/sites
+    - logs:/home/frappe/frappe-bench/logs
+    - ./deploy/scripts:/scripts:ro
+  depends_on:
+    create-site:
+      condition: service_completed_successfully
+
+services:
+  db:
+    image: ${DB_IMAGE}
+    logging: *logging
+    restart: unless-stopped
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --skip-character-set-client-handshake
+      # Upstream frappe_docker setting for MariaDB 11.8 (Frappe needs the old isolation behaviour).
+      - --innodb-snapshot-isolation=OFF
+    environment:
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      MARIADB_AUTO_UPGRADE: "1"
+    volumes:
+      - db-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      start_period: 10s
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis-cache:
+    image: ${REDIS_IMAGE}
+    logging: *logging
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis-queue:
+    image: ${REDIS_IMAGE}
+    logging: *logging
+    restart: unless-stopped
+    volumes:
+      - redis-queue-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  configurator:
+    <<: *image
+    logging: *logging
+    restart: "no"
+    entrypoint: ["bash", "-c"]
+    command:
+      - >
+        ls -1 apps > sites/apps.txt;
+        bench set-config -g db_host db;
+        bench set-config -gp db_port 3306;
+        bench set-config -g redis_cache "redis://redis-cache:6379";
+        bench set-config -g redis_queue "redis://redis-queue:6379";
+        bench set-config -g redis_socketio "redis://redis-queue:6379";
+        bench set-config -gp socketio_port 9000;
+        bench set-config -g chromium_path /usr/lib/chromium/chromium-headless-shell;
+    volumes:
+      - sites:/home/frappe/frappe-bench/sites
+    depends_on:
+      db: { condition: service_healthy }
+      redis-cache: { condition: service_healthy }
+      redis-queue: { condition: service_healthy }
+
+  create-site:
+    <<: *image
+    logging: *logging
+    restart: "no"
+    entrypoint: ["bash", "/scripts/create-site.sh"]
+    environment:
+      LMS_HOSTNAME: ${LMS_HOSTNAME}
+      DB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      LMS_ADMIN_PASSWORD: ${LMS_ADMIN_PASSWORD}
+      LMS_ENCRYPTION_KEY: ${LMS_ENCRYPTION_KEY}
+      LMS_SERVICE_USER: ${LMS_SERVICE_USER}
+      LMS_API_KEY: ${LMS_API_KEY}
+      LMS_API_SECRET: ${LMS_API_SECRET}
+      AUTHENTIK_ADMIN_GROUP: ${AUTHENTIK_ADMIN_GROUP}
+      AUTHENTIK_STUDENT_GROUP_PREFIX: ${AUTHENTIK_STUDENT_GROUP_PREFIX}
+      AUTHENTIK_STUDENT_GROUP_SUFFIX: ${AUTHENTIK_STUDENT_GROUP_SUFFIX}
+    volumes:
+      - sites:/home/frappe/frappe-bench/sites
+      - logs:/home/frappe/frappe-bench/logs
+      - ./deploy/scripts:/scripts:ro
+    depends_on:
+      configurator: { condition: service_completed_successfully }
+
+  backend:
+    <<: *app
+    build:
+      context: .
+      dockerfile: deploy/Containerfile
+      additional_contexts:
+        fd: deploy/.upstream/frappe_docker
+      args:
+        PYTHON_VERSION: ${BUILD_PYTHON_VERSION}
+        DEBIAN_BASE: ${BUILD_DEBIAN_BASE}
+        PYTHON_BASE_DIGEST: ${BUILD_PYTHON_BASE_DIGEST}
+        NODE_VERSION: ${BUILD_NODE_VERSION}
+        BENCH_VERSION: ${BUILD_BENCH_VERSION}
+        FRAPPE_BRANCH: ${BUILD_FRAPPE_TAG}
+        CACHE_BUST: ${APPS_HASH:-}
+      secrets:
+        - apps_json
+    healthcheck:
+      test: ["CMD", "python3", "/scripts/healthcheck-backend.py"]
+      start_period: 30s
+      interval: 10s
+      timeout: 5s
+      retries: 6
+
+  frontend:
+    <<: *app
+    command: ["nginx-entrypoint.sh"]
+    environment:
+      BACKEND: backend:8000
+      SOCKETIO: websocket:9000
+      NGINX_LISTEN_PORT: "8080"
+      FRAPPE_SITE_NAME_HEADER: ${LMS_HOSTNAME}
+      UPSTREAM_REAL_IP_ADDRESS: 127.0.0.1
+      UPSTREAM_REAL_IP_HEADER: X-Forwarded-For
+      UPSTREAM_REAL_IP_RECURSIVE: "off"
+      PROXY_READ_TIMEOUT: "120"
+      CLIENT_MAX_BODY_SIZE: 50m
+    depends_on:
+      create-site: { condition: service_completed_successfully }
+      backend: { condition: service_healthy }
+      websocket: { condition: service_healthy }
+    networks: [default, traefik]
+    labels:
+      traefik.enable: "true"
+      traefik.docker.network: ${TRAEFIK_NETWORK}
+      traefik.http.routers.nile-lms.rule: Host(`${LMS_HOSTNAME}`)
+      traefik.http.routers.nile-lms.entrypoints: ${TRAEFIK_ENTRYPOINT}
+      traefik.http.routers.nile-lms.tls: "true"
+      traefik.http.routers.nile-lms.tls.certresolver: ${TRAEFIK_CERT_RESOLVER}
+      traefik.http.routers.nile-lms.service: nile-lms-svc
+      traefik.http.services.nile-lms-svc.loadbalancer.server.port: "8080"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://127.0.0.1:8080/api/method/ping"]
+      start_period: 15s
+      interval: 10s
+      timeout: 5s
+      retries: 6
+
+  websocket:
+    <<: *app
+    command: ["node", "/home/frappe/frappe-bench/apps/frappe/socketio.js"]
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/9000"]
+      start_period: 10s
+      interval: 10s
+      timeout: 5s
+      retries: 6
+
+  queue-short:
+    <<: *app
+    command: ["bench", "worker", "--queue", "short,default"]
+    healthcheck: &process-check
+      test: ["CMD", "python3", "/scripts/healthcheck-process.py", "worker"]
+      start_period: 20s
+      interval: 15s
+      timeout: 5s
+      retries: 4
+
+  queue-long:
+    <<: *app
+    command: ["bench", "worker", "--queue", "long,default,short"]
+    healthcheck: *process-check
+
+  scheduler:
+    <<: *app
+    command: ["bench", "schedule"]
+    healthcheck:
+      <<: *process-check
+      test: ["CMD", "python3", "/scripts/healthcheck-process.py", "schedule"]
+
+  # On demand: make tools CMD=<command>. Holds no secret in its environment; it reads .env from the mounted repo.
+  tools:
+    profiles: [tools]
+    image: nile-tools:local
+    build:
+      context: tools
+      args:
+        TOOLS_PYTHON_IMAGE: ${TOOLS_PYTHON_IMAGE}
+    working_dir: ${REPO_DIR}
+    volumes:
+      - ${REPO_DIR}:${REPO_DIR}
+    # The LMS is reached through public DNS (Cloudflare edge): Traefik serves a Cloudflare Origin
+    # certificate (file provider) that only Cloudflare trusts. The certresolver label on
+    # frontend is kept as the spec says, and is redundant with the entrypoint wildcard resolver. Authentik routing is decided in feature 6.
+    extra_hosts:
+      - "${AUTHENTIK_HOSTNAME:-authentik-unset.invalid}=host-gateway"
+    logging: *logging
+
+secrets:
+  apps_json:
+    file: ./deploy/apps.json
+
+volumes:
+  sites:
+  logs:
+  db-data:
+  redis-queue-data:
+
+networks:
+  traefik:
+    name: ${TRAEFIK_NETWORK}
+    external: true
