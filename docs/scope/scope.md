@@ -72,7 +72,7 @@ spec [0002](../specs/0002-single-config-and-secrets-file.md) · code in `tools/s
   - [x] Thin thread: `init`, sample, Makefile wrapper, `db` and `frontend` wiring (AC-1, AC-3, AC-6)
   - [x] Full key inventory, `versions.env`, delivery to all services, `create-site` wiring and mismatch guards (AC-3, AC-6, AC-8, AC-9)
   - [x] `config check`, git and secret scan, drift and parity tests (AC-2, AC-4, AC-5)
-- [ ] Verify it: `/check verify single config & secrets file`
+- [x] Verify it: `/check verify single config & secrets file`
 - [ ] Test it: `/test single config & secrets file`
 - [ ] Review it (fresh model): `/check review single config & secrets file`
 - [ ] Document it: `/document single config & secrets file`

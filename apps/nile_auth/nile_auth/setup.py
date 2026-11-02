@@ -1,6 +1,7 @@
 """Site setup run by create-site. Reads its inputs from the container environment, never from arguments."""
 
 import os
+import sys
 
 import frappe
 
@@ -16,9 +17,11 @@ def ensure_service_user():
     if frappe.db.exists("User", user_id):
         user = frappe.get_doc("User", user_id)
         if user.api_key != api_key or user.get_password("api_secret") != api_secret:
-            frappe.throw(
-                f"Service user {user_id} already has a different API key or secret than the .env file. "
-                "Nothing was changed. Restore the original .env values."
+            # bench execute re-evaluates the path as code after any Exception and hides the real
+            # message behind a NameError, so exit directly instead of raising.
+            sys.exit(
+                f"ERROR: Service user {user_id} already has a different API key or secret than the "
+                ".env file. Nothing was changed. Restore the original .env values."
             )
         print(f"Service user {user_id} already set up")
         return
