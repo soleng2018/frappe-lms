@@ -252,3 +252,152 @@ def test_init_tightens_a_wide_env_file_mode(root):
     (root / ".env").chmod(0o644)
     cli.init(root)
     assert stat.S_IMODE((root / ".env").stat().st_mode) == 0o600
+
+
+# --- init: errors, appends and the optional list (AC-3) ---
+
+
+def test_init_refuses_a_file_with_a_syntax_error_and_leaves_it_untouched(root):
+    bad = "LMS_HOSTNAME='x'\nDB_ROOT_PASSWORD=\n"
+    (root / ".env").write_text(bad)
+    with pytest.raises(config.ConfigError, match="line 1: LMS_HOSTNAME"):
+        cli.init(root)
+    assert (root / ".env").read_text() == bad
+
+
+def test_main_init_with_a_syntax_error_exits_one_and_names_the_line(root, monkeypatch, capsys):
+    (root / ".env").write_text("export LMS_HOSTNAME=a\n")
+    monkeypatch.chdir(root)
+    assert cli.main(["init"]) == 1
+    assert "line 1: 'export' is not allowed" in capsys.readouterr().err
+
+
+def test_init_appends_keys_added_since_and_says_updated(root, capsys):
+    (root / ".env").write_text("LMS_HOSTNAME=mine.example.com\n")
+    assert cli.init(root) == 0
+    values = values_of(root / ".env")
+    assert values["LMS_HOSTNAME"] == "mine.example.com"
+    assert set(values) == {k.name for k in config.env_keys()}
+    assert capsys.readouterr().out.startswith("Updated ")
+
+
+def test_init_does_not_rewrite_the_file_when_nothing_changes(root):
+    cli.init(root)
+    before = (root / ".env").stat().st_mtime_ns
+    cli.init(root)
+    assert (root / ".env").stat().st_mtime_ns == before
+
+
+def test_init_lists_optional_operator_keys_apart_from_required_ones(root, monkeypatch, capsys):
+    optional = config.Key("SMTP_HOST", "SMTP", "Mail relay", "operator")
+    monkeypatch.setattr(config, "KEYS", (*config.KEYS, optional))
+    cli.init(root)
+    out = capsys.readouterr().out
+    assert "Optional, left blank: SMTP_HOST" in out
+    assert "SMTP_HOST" not in out.split("Optional")[0]
+
+
+def test_init_names_the_blank_required_keys_in_one_line(root, capsys):
+    cli.init(root)
+    line = next(ln for ln in capsys.readouterr().out.splitlines() if ln.startswith("Still blank"))
+    assert line == "Still blank, fill these in: " + ", ".join(REQUIRED_OPERATOR)
+
+
+# --- config check, show and main wiring (AC-4, AC-7) ---
+
+
+def test_config_check_success_says_so_on_stdout_and_prints_the_frozen_reminder(
+    monkeypatch, tmp_path, capsys
+):
+    from nile_tools import checks
+
+    monkeypatch.setattr(checks, "check", lambda *a: checks.CheckResult((), ("a note",)))
+    assert cli.config_check(tmp_path, "up") == 0
+    out = capsys.readouterr()
+    assert "a note" in out.out and "Config is fine for: up" in out.out
+    assert out.err == ""
+
+
+def test_config_check_failure_lists_each_problem_on_stderr_and_not_the_fine_line(
+    monkeypatch, tmp_path, capsys
+):
+    from nile_tools import checks
+
+    result = checks.CheckResult(("first", "second"), ())
+    monkeypatch.setattr(checks, "check", lambda *a: result)
+    assert cli.config_check(tmp_path, "tools-authentik") == 1
+    out = capsys.readouterr()
+    assert out.err.splitlines() == ["ERROR first", "ERROR second"]
+    assert "Config is fine" not in out.out
+
+
+def test_config_check_passes_the_chosen_scope_through(monkeypatch, tmp_path):
+    from nile_tools import checks
+
+    seen = []
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        checks,
+        "check",
+        lambda root, scope, environ, git: seen.append(scope) or checks.CheckResult((), ()),
+    )
+    assert cli.main(["config", "check", "--for", "tools-authentik"]) == 0
+    assert cli.main(["config", "check"]) == 0
+    assert seen == ["tools-authentik", "up"]
+
+
+@pytest.mark.parametrize("argv", [["config", "check", "--for", "nope"], ["config"], []])
+def test_main_rejects_bad_arguments_with_exit_two(argv, capsys):
+    with pytest.raises(SystemExit) as exc:
+        cli.main(argv)
+    assert exc.value.code == 2
+
+
+def test_config_show_includes_the_committed_pins_unmasked(tmp_path, monkeypatch, capsys):
+    (tmp_path / ".env").write_text("LMS_HOSTNAME=a.example.com\n")
+    (tmp_path / "deploy").mkdir()
+    (tmp_path / "deploy" / "versions.env").write_text("BUILD_LMS_TAG=v2.3.4\n")
+    monkeypatch.chdir(tmp_path)
+    assert cli.main(["config", "show"]) == 0
+    out = capsys.readouterr().out
+    assert "BUILD_LMS_TAG=v2.3.4" in out
+    assert "BUILD_FRAPPE_TAG=(blank)" in out
+
+
+def test_config_show_marks_a_blank_secret_blank_and_never_prints_a_set_one(
+    tmp_path, monkeypatch, capsys
+):
+    (tmp_path / ".env").write_text("LMS_API_KEY=0123456789abcdef0123456789abcdef\n")
+    monkeypatch.chdir(tmp_path)
+    cli.main(["config", "show"])
+    out = capsys.readouterr().out
+    assert "LMS_API_KEY=*****" in out
+    assert "LMS_API_SECRET=(blank)" in out
+    assert "0123456789abcdef" not in out
+
+
+def test_config_show_reports_a_bad_versions_file_without_a_traceback(tmp_path, monkeypatch, capsys):
+    (tmp_path / ".env").write_text("")
+    (tmp_path / "deploy").mkdir()
+    (tmp_path / "deploy" / "versions.env").write_text("BUILD_LMS_TAG='x'\n")
+    monkeypatch.chdir(tmp_path)
+    assert cli.main(["config", "show"]) == 1
+    assert "versions.env has problems" in capsys.readouterr().err
+
+
+def test_main_masks_secrets_in_later_log_records(tmp_path, monkeypatch, capsys):
+    secret = "Zk3-very-secret-value-9"
+    (tmp_path / ".env").write_text(f"DB_ROOT_PASSWORD={secret}\n")
+    monkeypatch.chdir(tmp_path)
+    cli.main(["config", "sample"])
+    record = logging.getLogger("t").makeRecord("t", 20, "f", 1, "pw %s", (secret,), None)
+    assert record.getMessage() == "pw *****"
+
+
+def test_main_still_runs_when_the_env_file_is_bad_so_the_error_can_be_shown(
+    tmp_path, monkeypatch, capsys
+):
+    (tmp_path / ".env").write_text("DB_ROOT_PASSWORD='hunter2hunter2'\n")
+    monkeypatch.chdir(tmp_path)
+    assert cli.main(["config", "sample"]) == 0
+    assert capsys.readouterr().out == config.render_sample()

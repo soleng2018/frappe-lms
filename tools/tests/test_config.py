@@ -350,3 +350,185 @@ def test_the_real_process_prints_no_secret_in_a_traceback(tmp_path):
     )
     assert done.returncode == 1
     assert secret not in done.stderr and "boom *****" in done.stderr
+
+
+# --- more edges: parser, validators, key list, scrub, fill, add_missing ---
+
+
+def test_parser_flags_a_whitespace_only_line_as_trailing_spaces():
+    errors = parse("LMS_HOSTNAME=a\n   \n").errors
+    assert errors == ("line 2: trailing spaces",)
+
+
+def test_parser_reports_an_unknown_key_and_its_bad_value_together():
+    errors = parse("LMS_HOSTNME='a'\n").errors
+    assert any("unknown key LMS_HOSTNME" in e for e in errors)
+    assert any("character outside" in e for e in errors)
+
+
+def test_parser_allows_a_blank_value_and_keeps_it_as_an_empty_string():
+    env = parse("LMS_HOSTNAME=\n")
+    assert not env.errors
+    assert env.values["LMS_HOSTNAME"] == ""
+
+
+def test_parser_only_allows_extras_that_start_with_compose_underscore():
+    assert not parse("COMPOSE_PROJECT_NAME=x\n").errors
+    assert any("unknown key COMPOSEX" in e for e in parse("COMPOSEX=x\n").errors)
+
+
+def test_parser_skips_a_duplicate_so_the_first_value_wins():
+    env = parse("LMS_HOSTNAME=first\nLMS_HOSTNAME=second\n")
+    assert env.values["LMS_HOSTNAME"] == "first"
+    assert env.lines["LMS_HOSTNAME"] == 1
+
+
+@pytest.mark.parametrize(
+    "bad",
+    ["", "a.com.", "a b.com", "under_score.com", "a" * 250 + ".com", "-a.com", "a-.com"],
+)
+def test_hostname_validator_rejects(bad):
+    assert config.VALIDATORS["hostname"](bad) is not None
+
+
+@pytest.mark.parametrize("good", ["a", "UPPER.Example.COM", "x1.y-2.z"])
+def test_hostname_validator_accepts(good):
+    assert config.VALIDATORS["hostname"](good) is None
+
+
+@pytest.mark.parametrize("bad", ["a@b", "@b.com", "a b@c.com", "a@b..com", "a@@b.com"])
+def test_email_validator_rejects(bad):
+    assert config.VALIDATORS["email"](bad) is not None
+
+
+def test_letters_validator_rejects_non_ascii_letters():
+    assert config.VALIDATORS["letters"]("Nilé") is not None
+
+
+def test_every_secret_the_spec_lists_is_marked_secret_and_nothing_else_is():
+    secrets_in_spec = {
+        "LMS_ADMIN_PASSWORD",
+        "LMS_ENCRYPTION_KEY",
+        "LMS_API_KEY",
+        "LMS_API_SECRET",
+        "DB_ROOT_PASSWORD",
+        "AUTHENTIK_API_TOKEN",
+    }
+    assert {k.name for k in config.KEYS if k.secret} == secrets_in_spec
+
+
+def test_the_authentik_master_token_is_delivered_to_no_service():
+    assert all("AUTHENTIK_API_TOKEN" not in v.values() for v in config.delivery().values())
+
+
+def test_create_site_receives_exactly_the_variables_the_spec_lists():
+    assert set(config.delivery()["create-site"].values()) == {
+        "LMS_HOSTNAME",
+        "DB_ROOT_PASSWORD",
+        "LMS_ADMIN_PASSWORD",
+        "LMS_ENCRYPTION_KEY",
+        "LMS_SERVICE_USER",
+        "LMS_API_KEY",
+        "LMS_API_SECRET",
+        "AUTHENTIK_ADMIN_GROUP",
+        "AUTHENTIK_STUDENT_GROUP_PREFIX",
+        "AUTHENTIK_STUDENT_GROUP_SUFFIX",
+    }
+
+
+def test_every_scope_enforces_up_and_the_required_for_values_are_known_scopes():
+    assert all("up" in needed for needed in config.SCOPES.values())
+    known = {s for needed in config.SCOPES.values() for s in needed}
+    assert {k.required_for for k in config.KEYS if k.required_for} <= known
+
+
+def test_two_generated_values_for_the_same_key_differ():
+    key = _key("LMS_API_SECRET")
+    assert config.generate_value(key) != config.generate_value(key)
+
+
+def test_scrub_masks_the_longest_secret_first_when_one_contains_another():
+    out = config.scrub("x abcdefgh12345 y", ["abcdefgh", "abcdefgh12345"])
+    assert out == "x ***** y"
+
+
+def test_scrub_ignores_blank_values_and_leaves_text_unchanged():
+    assert config.scrub("plain text", ["", "short"]) == "plain text"
+
+
+def test_scrub_masks_every_occurrence():
+    assert config.scrub("tok-1234567 and tok-1234567", ["tok-1234567"]) == "***** and *****"
+
+
+def test_show_lists_every_known_key_once_even_when_no_values_are_set():
+    rows = config.render_show({}).splitlines()
+    assert [r.split("=")[0] for r in rows] == [k.name for k in config.KEYS]
+    assert all(r.endswith("=(blank)") for r in rows)
+
+
+def test_fill_generated_leaves_comment_lines_that_mention_a_key_alone():
+    text = "# LMS_API_KEY=\nLMS_API_KEY=\n"
+    out = config.fill_generated(text)
+    assert out.splitlines()[0] == "# LMS_API_KEY="
+    assert len(parse(out).values["LMS_API_KEY"]) == 32
+
+
+def test_fill_generated_asks_the_maker_once_per_blank_generated_key():
+    asked = []
+
+    def make(key):
+        asked.append(key.name)
+        return "made"
+
+    out = config.fill_generated("LMS_API_KEY=\nLMS_API_SECRET=x\nLMS_HOSTNAME=\n", make=make)
+    assert asked == ["LMS_API_KEY"]
+    assert out == "LMS_API_KEY=made\nLMS_API_SECRET=x\nLMS_HOSTNAME=\n"
+
+
+def test_fill_generated_keeps_a_missing_final_newline_as_it_was():
+    assert not config.fill_generated("LMS_HOSTNAME=a").endswith("\n")
+    assert config.fill_generated("LMS_HOSTNAME=a\n").endswith("\n")
+
+
+def test_add_missing_to_an_empty_file_gives_a_valid_file_with_every_key():
+    out = config.add_missing("", set())
+    env = parse(out)
+    assert not env.errors
+    assert list(env.values) == NAMES
+
+
+def test_add_missing_twice_gives_the_same_text_as_once():
+    once = config.add_missing("LMS_HOSTNAME=a\n", {"LMS_HOSTNAME"})
+    assert config.add_missing(once, parse(once).values) == once
+
+
+def test_add_missing_keeps_the_values_already_in_the_file():
+    out = config.add_missing("LMS_HOSTNAME=mine.example.com\n", {"LMS_HOSTNAME"})
+    assert parse(out).values["LMS_HOSTNAME"] == "mine.example.com"
+
+
+def test_load_env_ignores_process_variables_that_are_not_env_keys(tmp_path):
+    (tmp_path / ".env").write_text("LMS_HOSTNAME=file.example.com\n")
+    env = config.load_env(tmp_path, {"BUILD_LMS_TAG": "v9", "PATH": "/bin"})
+    assert env.values == {"LMS_HOSTNAME": "file.example.com"}
+
+
+def test_load_env_names_the_file_when_it_is_bad(tmp_path):
+    (tmp_path / ".env").write_text("LMS_HOSTNAME='x'\n")
+    with pytest.raises(config.ConfigError, match=r"^\.env has problems:"):
+        config.load_env(tmp_path, {})
+
+
+def test_load_versions_rejects_a_key_that_belongs_in_env(tmp_path):
+    (tmp_path / "deploy").mkdir()
+    (tmp_path / "deploy" / "versions.env").write_text("DB_ROOT_PASSWORD=x\n")
+    with pytest.raises(config.ConfigError, match="unknown key DB_ROOT_PASSWORD"):
+        config.load_versions(tmp_path)
+
+
+def test_write_private_removes_a_stale_temp_file_and_creates_the_target_at_0600(tmp_path):
+    (tmp_path / ".env.tmp").write_text("stale")
+    (tmp_path / ".env.tmp").chmod(0o666)
+    config.write_private(tmp_path / ".env", "A=1\n")
+    assert (tmp_path / ".env").stat().st_mode & 0o777 == 0o600
+    assert not (tmp_path / ".env.tmp").exists()
