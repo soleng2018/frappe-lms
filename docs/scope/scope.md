@@ -80,7 +80,7 @@ spec [0002](../specs/0002-single-config-and-secrets-file.md) · code in `tools/s
 ### 4. Data model (course, quiz, certificate, roles) · in-progress
 Decide how courses, chapters, lessons, quizzes, attempts, and certificates map onto Frappe, and which Frappe roles the two IDP groups become.
 **Done when:** the mapping is written down and covers everything slices 1 to 3 need without a rework.
-spec [0004](../specs/0004-data-model.md) · code in `apps/nile_auth/`, `tools/src/nile_tools/`
+spec [0004](../specs/0004-data-model/index.md) · code in `apps/nile_auth/`, `tools/src/nile_tools/`
 - [x] Design it (spec): `/architect data model`
 - [x] Build it: `/develop data model`
   - [x] Custom fields (`nile_key`, `nile_group`) and the Moderator delete permission fixture in `nile_auth` (AC-3, AC-4, AC-6)
