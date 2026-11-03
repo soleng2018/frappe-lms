@@ -5,7 +5,7 @@
 
 ## Summary
 
-The LMS already has records for courses, chapters, lessons, quizzes, attempts, progress, and certificates, and they already enforce most of your rules: a quiz lesson only counts when the student scores 80% or more, retakes stop at the limit, and a certificate is only issued at 100% progress. So this spec adds no new record types. It fixes how the content is shaped (one course, chapter 1 for concepts, one chapter per feature, a quiz after every video and after every lab guide), how students and admins are recorded (one LMS Batch per workshop group, two LMS roles for admins), and one small custom field (`nile_key`) so a re run of the content sync never makes duplicates. Slices 1 to 3 build on this without a rework.
+The LMS already has records for courses, chapters, lessons, quizzes, attempts, progress, and certificates, and they already enforce most of your rules: a quiz lesson only counts when the student scores 80% or more, retakes stop at the limit, and a certificate is only issued at 100% progress. So this spec adds no new record types. It fixes how the content is shaped (one course, chapter 1 for concepts, one chapter per feature, a quiz after every video and after every lab guide), how students and admins are recorded (one LMS Batch per workshop group, two LMS roles for admins), and one small custom field (`nile_key`) so a re run of the content sync never makes duplicates. Slices 1 to 3 build on this without a rework. Updated 2026-11-03 after the live site checks: LMS only plays a video and only gates a quiz from a macro in the lesson `body`, so the sync writes `{{ YouTubeVideo("id") }}` and `{{ Quiz("name") }}` into the body, as well as `youtube` and `quiz_id`.
 
 ## Context
 
@@ -17,6 +17,8 @@ The course is larger than the scope first assumed. Chapter 1 holds a set of core
 
 The LMS records and rules named below were read from the pinned release (v2.68.0) source, not recalled. Spec 0001 had listed the role names as unverified, and this spec confirms them.
 
+The first version of this spec had the sync set only `youtube` on a video lesson and only `quiz_id` on a quiz lesson. The live site test (`tools/tests/test_data_model_integration.py`) showed that is not enough. LMS finds a lesson's quiz from a `{{ Quiz("<quiz name>") }}` macro in `body`, so a quiz lesson with only `quiz_id` completes without a pass, and a video shows from a `{{ YouTubeVideo("<id>") }}` macro in `body`. A quiz lesson with the macro needs the pass, as AC-2 and AC-5 require.
+
 ## Requirements
 
 **User stories**:
@@ -26,16 +28,17 @@ The LMS records and rules named below were read from the pinned release (v2.68.0
 - As the operator, I want a re run of the content sync to update records in place so that renaming a lesson never leaves a duplicate.
 
 **Acceptance criteria**:
-- **AC-1**: One LMS Course holds Chapter 1 (concept videos) and one chapter per feature. A chapter can hold any mix of video, lab guide, and quiz lessons (a lab need not have a video). Where a quiz follows a lesson, it is a quiz lesson of its own, and each quiz is linked both ways to its lesson (`lesson.quiz_id` names the quiz, and `quiz.lesson` and `quiz.course` name the lesson and course).
+- **AC-1**: One LMS Course holds Chapter 1 (concept videos) and one chapter per feature. A chapter can hold any mix of video, lab guide, and quiz lessons (a lab need not have a video). Where a quiz follows a lesson, it is a quiz lesson of its own, and each quiz is linked both ways to its lesson (`lesson.quiz_id` names the quiz, and `quiz.lesson` and `quiz.course` name the lesson and course). The link is also written into the lesson body as a macro (AC-10), because LMS reads it from there.
 - **AC-2**: Every quiz has `passing_percentage` 80 and `max_attempts` 3 unless its content file sets another value. A score under the pass mark does not complete the quiz lesson. A fourth attempt is refused.
 - **AC-3**: Every record the sync creates (course, chapter, lesson, quiz, question) carries a unique `nile_key`. Running the sync twice creates nothing new. Changing a title in git updates the same record. A record whose `nile_key` is no longer in git is removed from the course outline (and unpublished), so progress can still reach 100.
 - **AC-4**: At login a member of a `NileWorkshopNAdmin` group is a Website User with the LMS Student role, is enrolled in the LMS Batch whose `nile_group` is that group name, and has an LMS Enrollment in every published course on that batch. A member of `hol-admins` is a System User with the Moderator and Course Creator roles. Two logins at the same moment never create two batches for one group.
 - **AC-5**: The course has certification on and lesson order not enforced. A student with every lesson and quiz complete (progress 100) can request a certificate. A student with any quiz not yet passed has progress under 100 and is refused.
 - **AC-6**: A hol-admin can read every Enrollment, Course Progress, Quiz Submission, Batch, Batch Enrollment, and Certificate record, and can delete one student's Quiz Submissions for one quiz to reset their attempts. LMS gives that delete only to System Manager, so `nile_auth` ships a permission fixture that gives Moderator delete on Quiz Submission.
 - **AC-7**: A student can read only their own enrollment, progress, and attempts. Certificates follow LMS's own rule (a published certificate is visible), which the integration test records.
-- **AC-8**: Before anything is written, the content check names every problem at once: a quiz with no lesson, a quiz lesson with no quiz, an empty chapter, a repeated `nile_key`, a pass mark outside 1 to 100, an attempt limit under 1, a quiz with no questions (LMS would force its pass mark to 100), or an open ended question (it is never graded automatically, so the lesson could never complete).
+- **AC-8**: Before anything is written, the content check names every problem at once: a quiz with no lesson, a quiz lesson with no quiz, an empty chapter, a repeated `nile_key`, a pass mark outside 1 to 100, an attempt limit under 1, a quiz with no questions (LMS would force its pass mark to 100), or an open ended question (it is never graded automatically, so the lesson could never complete), or a video lesson whose `youtube` value is not a plain video id.
 
 - **AC-9**: Git is the only place content is authored. A check run (`sync --check`) changes nothing and lists every synced record whose fields differ from what git would write, and every LMS record in the course with no `nile_key`. A normal sync names each LMS edit it is about to overwrite before it does so.
+- **AC-10**: The sync writes the body of every video and quiz lesson. A video lesson body is exactly `{{ YouTubeVideo("<id>") }}`, and `youtube` holds the same id. A quiz lesson body is exactly `{{ Quiz("<quiz name>") }}`, where the name is the name LMS gave the quiz, and `quiz_id` holds the same name. A lab lesson body is the markdown from git and has no macro. A student cannot complete a quiz lesson without passing its quiz, and the video plays. The check run (AC-9) reports a lesson whose body differs from the macro git implies, so a quiz lesson with an empty body or a stale quiz name is found and fixed.
 
 ## Options considered
 
@@ -101,13 +104,15 @@ Content, written by the sync (feature 8) through the REST API:
 |---|---|---|---|
 | LMS Course | `title`, `short_introduction`, `description`, `published`=1, `status`=Approved, `enable_certification`=1, `enforce_lesson_completion`=0, `instructors`, `chapters` (the Chapter Reference rows) | `nile_key` (unique) | has many Course Chapter |
 | Course Chapter | `title`, `course`, `lessons` (the Lesson Reference rows) | `nile_key` (unique) | one course, has many Course Lesson |
-| Course Lesson, video | `title`, `chapter`, `youtube` | `nile_key` (unique) | one chapter |
+| Course Lesson, video | `title`, `chapter`, `youtube` (the video id), `body` (`{{ YouTubeVideo("<id>") }}`) | `nile_key` (unique) | one chapter |
 | Course Lesson, lab guide | `title`, `chapter`, `body` (markdown from git) | `nile_key` (unique) | one chapter |
-| Course Lesson, quiz | `title`, `chapter`, `quiz_id` | `nile_key` (unique) | one chapter, one LMS Quiz |
+| Course Lesson, quiz | `title`, `chapter`, `quiz_id` (the quiz name), `body` (`{{ Quiz("<quiz name>") }}`) | `nile_key` (unique) | one chapter, one LMS Quiz |
 | LMS Quiz | `title`, `course`, `lesson`, `passing_percentage`, `max_attempts`, `questions` | `nile_key` (unique) | one quiz lesson (1:1), many LMS Question |
 | LMS Question | question text, type, options, correct answers, marks | `nile_key` (unique) | belongs to one quiz through a Quiz Question row |
 
 Order and membership: LMS counts progress only for lessons listed in the course's chapter table (Chapter Reference) and in each chapter's lesson table (Lesson Reference). Setting `chapter` on a lesson is not enough. The sync writes both tables, and the row position (`idx`) is the order. `total_marks` and a lesson's `course` are filled by LMS, so the sync never sets them.
+
+Lesson body: for a video or quiz lesson the body is derived, never authored. It is built by one pure function from the lesson and, for a quiz lesson, the quiz name LMS returned. The macro is the whole body (no extra text), so the compare in AC-9 is an exact string match. `youtube` and `quiz_id` stay set beside the macro, since LMS screens and the sync's own lookups read them. Macro text is `{{ YouTubeVideo("<id>") }}` and `{{ Quiz("<quiz name>") }}`, one space inside each brace pair, double quotes. The `content` field (Editor.js blocks) is not written. The live test showed the body macro is enough.
 
 The usual course shape is: Chapter 1 holds concept videos, each followed by its quiz. Each feature chapter holds its videos and quizzes, then the lab guide and its quiz. No lesson type is required: a feature chapter may have no videos and start at the lab guide, or have a video with no lab. The content check only enforces structure (AC-8), never a fixed lesson pattern. A quiz that exists must be linked, and a chapter must hold at least one lesson.
 
@@ -142,7 +147,9 @@ not started → attempted below the pass mark (attempts left) → passed (lesson
 |---|---|---|
 | Sync creates or updates a record | `nile_key` | a stable id inside the content file (format in feature 11) |
 | Sync creates a quiz | `passing_percentage` and `max_attempts` | the quiz's content file, else the defaults 80 and 3 written in the sync code as named constants |
-| Sync creates a quiz lesson | `quiz_id`, `quiz.lesson`, `quiz.course` | the names returned when the quiz and lesson were created: create the quiz, then the lesson with `quiz_id`, then set `lesson` and `course` on the quiz |
+| Sync creates a quiz lesson | `quiz_id`, `body`, `quiz.lesson`, `quiz.course` | the names returned when the quiz and lesson were created: create the quiz first (its `name` comes back), then the lesson with `quiz_id` and `body` = `{{ Quiz("<that name>") }}`, then set `lesson` and `course` on the quiz |
+| Sync creates a video lesson | `youtube`, `body` | the video id in the content file (format in feature 11, the id only, not a URL). `body` = `{{ YouTubeVideo("<id>") }}` |
+| Sync updates a quiz lesson | `body` | rebuilt from the quiz's current `name`, so a quiz recreated under a new name gets its lesson body rewritten in the same run |
 | Sync creates a course | `enable_certification`=1, `enforce_lesson_completion`=0 | decided in this spec |
 | Sync creates a course | `instructors` | the service user |
 | Sync creates a course | `short_introduction`, `description` | the course content file (format in feature 11) |
@@ -169,6 +176,7 @@ not started → attempted below the pass mark (attempts left) → passed (lesson
 - Drift is found by comparing the fields git would write with the fields the LMS holds, so no hash or extra state is stored.
 - Every quiz lesson has exactly one quiz, and every quiz has exactly one lesson and a course. A quiz without a lesson would be passable but never counted, so the certificate could never be reached.
 - Quizzes are never shared between lessons.
+- A quiz lesson's body always names its own quiz. A quiz lesson with `quiz_id` but no macro can be completed without passing, so the sync never writes one, and the check run reports one it finds.
 - There is one course certificate per student and course (no batch level certificate).
 - The sync only changes records that carry a `nile_key`. It never touches other LMS content.
 - A Batch exists only for a group the student actually belongs to, and is named exactly as the group.
@@ -188,6 +196,9 @@ not started → attempted below the pass mark (attempts left) → passed (lesson
 - Failure case: a student scores 79% on a quiz, the lesson stays incomplete, a third miss locks the quiz, the fourth attempt is refused, an admin deletes the submissions, and the student can try again, verifies AC-2 and AC-6.
 - Failure case: the sync runs twice with a renamed lesson title and creates no duplicate, verifies AC-3.
 - Failure case: the content check is given a quiz with no lesson and a repeated `nile_key`, and names both, verifies AC-8.
+- Happy path: the body function returns exactly `{{ YouTubeVideo("abc") }}` for a video lesson and `{{ Quiz("<name>") }}` for a quiz lesson, verifies AC-10.
+- Failure case: the compare is given a quiz lesson with `quiz_id` set and an empty body, and reports it, verifies AC-10 and AC-9.
+- Failure case: the live test of a quiz lesson with only `quiz_id` completing without a pass stays in the suite as the reason the macro is needed, and a quiz lesson with the macro needs the pass, verifies AC-10 and AC-2.
 - Auth and permission: a student requesting another student's attempts or enrollment gets nothing back, verifies AC-7. A hol-admin reads them all, verifies AC-6.
 - Happy path: a first login by a `NileWorkshop3Admin` member creates the batch, the batch enrollment, and a course enrollment, and a second login creates nothing new, verifies AC-4.
 
@@ -199,6 +210,7 @@ Tracer Bullet: land the thinnest real path first (a custom field and the content
 1a. Add the permission fixture that gives Moderator delete on LMS Quiz Submission, satisfies **AC-6**
 2. Add the content model to `tools/src/nile_tools/`: frozen data classes for course, chapter, lesson (video, lab guide, quiz), and quiz, plus the named defaults 80 and 3, satisfies **AC-1**, **AC-2**
 3. Add a pure content check over that model that returns every problem at once (quiz and lesson links, empty chapters, repeated keys, pass mark and attempt limits, quizzes with no questions, open ended questions), with unit tests, satisfies **AC-1**, **AC-2**, **AC-8**
+2a. Add a pure `lesson_body` function to `tools/src/nile_tools/content.py` that returns the macro body for a video lesson, the quiz macro for a quiz lesson given the quiz name, and the markdown for a lab lesson, plus a check that a video `youtube` value is a plain video id (letters, digits, `-`, `_`, 11 characters), with unit tests, satisfies **AC-8**, **AC-10**
 3a. Add a pure function in `tools/` that compares the records git would write with the records fetched from the LMS and returns the differences and the unmanaged records, with unit tests. Feature 8 wraps it in `sync --check` and in the pre overwrite warning, satisfies **AC-9**
 4. Add the model constants to `apps/nile_auth/` (student roles, admin roles, user types, the batch default values) in one module, for feature 7 to use, satisfies **AC-4**
 5. Add an `integration` test that runs on the live site once feature 5 is up. It checks that the four custom fields exist, the role names exist, the quiz and lesson fields named here exist, and a test quiz at 80% with 3 attempts behaves as AC-2 and AC-5 say, satisfies **AC-2**, **AC-5**, **AC-6**, **AC-7**
@@ -229,8 +241,10 @@ Tracer Bullet: land the thinnest real path first (a custom field and the content
 - [ ] Feature 8 builds `sync --check` and the warning before an overwrite on top of the compare function from task 3a. Two way sync (exporting LMS edits back into git) was considered and left out.
 - [ ] Feature 8 adds each newly synced course to every existing Batch (Batch Course row). Verify whether LMS enrolls existing batch members on that change. If it does not, `nile_auth` fills the gap at next login, as AC-4 says.
 - [ ] Feature 9 settles how an admin sees which students are locked out, and whether to build the attempt reset as a `tools` command.
-- [ ] Feature 11 sets the content file format, including where `nile_key`, `passing_percentage`, and `max_attempts` live.
-- [ ] Live site checks for the integration test, because the source was read but not run: (1) `create_certificate` works for a Website User with LMS Student and needs no Course Evaluator record; (2) `mark_lesson_progress`, a public method that completes a lesson by position, is refused for, or cannot complete, a quiz lesson. If it can, a student could skip a quiz, and a guard goes in `nile_auth`; (3) whether the player and quiz access read the newer lesson `content` field (Editor.js blocks) rather than the legacy `quiz_id`, `youtube` and `body`. If so, the sync writes `content` instead and this spec is updated; (4) the Batch Course child record has no required field beyond `course`; (5) LMS creates course enrollments from a batch enrollment when `nile_auth` inserts it as another user, and the student sees them; (6) Moderator can delete a Quiz Submission after the fixture, and a System User with those roles opens the Desk; (7) video lessons complete on view or on a mark, and the quiz lesson does not.
+- [ ] Feature 11 sets the content file format, including where `nile_key`, `passing_percentage`, and `max_attempts` live, and that a video is given by its id only.
+- [ ] Feature 8 builds the order of writes AC-10 needs (quiz, then quiz lesson with the macro body, then the back link), and calls `lesson_body` from task 2a.
+- [x] `apps/nile_auth/README.md` no longer says the spec needs updating.
+- [ ] Live site checks for the integration test, because the source was read but not run: (1) `create_certificate` works for a Website User with LMS Student and needs no Course Evaluator record; (2) `mark_lesson_progress`, a public method that completes a lesson by position, is refused for, or cannot complete, a quiz lesson. If it can, a student could skip a quiz, and a guard goes in `nile_auth` (the live test showed it can complete a quiz lesson that has only `quiz_id`, so the macro in AC-10 is the fix, and the test must also try it on a lesson with the macro); (3) answered: LMS reads the macro in `body`, and the sync writes it (AC-10). Still to confirm on the live site: a video lesson with `YouTubeVideo` in `body` plays in the student view, which the source says but no test has run; (4) the Batch Course child record has no required field beyond `course`; (5) LMS creates course enrollments from a batch enrollment when `nile_auth` inserts it as another user, and the student sees them; (6) Moderator can delete a Quiz Submission after the fixture, and a System User with those roles opens the Desk; (7) video lessons complete on view or on a mark, and the quiz lesson does not.
 - [ ] `percentage` on a Quiz Submission is a whole number. The manager views compute pass or fail with the same comparison LMS uses, and accept the rounding edge.
 - [ ] Add the LMS field and role names to `tools/AGENTS.md` when task 6 is done (`/sync` owns the file).
 - [ ] Update spec 0001's follow up: LMS role names are now confirmed.

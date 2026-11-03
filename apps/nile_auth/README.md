@@ -26,7 +26,8 @@ group to role mapping at login. The design is in [spec 0004](../../docs/specs/00
 - **Quiz lessons are gated by the body, not by `quiz_id`.** LMS finds a lesson's quizzes from a
   `{{ Quiz("<quiz name>") }}` macro in `body` (or from `content` blocks). A quiz lesson with only
   `quiz_id` can be marked complete without passing. Video lessons show only when `body` has a
-  `{{ YouTubeVideo("<id>") }}` macro (from reading the source, not run). The spec needs updating.
+  `{{ YouTubeVideo("<id>") }}` macro (from reading the source, not run). The sync therefore writes both
+  macros into `body` (spec 0004 AC-10), built by `lesson_body` in `tools/src/nile_tools/content.py`.
 - A passing `submit_quiz` completes the quiz lesson by itself, when `quiz.lesson` and `quiz.course` are set.
 - Video and lab lessons complete when the student marks them (`save_progress`).
 - `create_certificate` works for a Website User with only LMS Student, no evaluator needed. It is refused

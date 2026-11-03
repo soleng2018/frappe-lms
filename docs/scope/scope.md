@@ -88,6 +88,9 @@ spec [0004](../specs/0004-data-model.md) · code in `apps/nile_auth/`, `tools/sr
   - [x] Compare function for drift between git and the LMS (AC-9)
   - [x] Model constants for roles, user types, and batch defaults in `nile_auth` (AC-4)
   - [x] Live site integration test and recorded LMS names, once feature 5 is up (AC-2, AC-5, AC-6, AC-7)
+- [x] Rebuild for the body macros: `/develop data model`
+  - [x] `lesson_body` function and the video id check in `tools`, with unit tests (AC-8, AC-10)
+  - [x] Compare reports quiz and video lessons whose body is not the macro, and the live test also tries a lesson with the macro (AC-9, AC-10)
 - [ ] Verify it: `/check verify data model`
 - [ ] Test it: `/test data model`
 - [ ] Review it (fresh model): `/check review data model`

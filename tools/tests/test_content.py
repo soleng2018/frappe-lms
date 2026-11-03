@@ -1,4 +1,4 @@
-"""Unit tests for nile_tools.content: defaults and the content check (AC-1, AC-2, AC-8)."""
+"""Unit tests for nile_tools.content: defaults, the check and lesson bodies (AC-1, 2, 8, 10)."""
 
 from dataclasses import replace
 
@@ -14,7 +14,10 @@ from nile_tools.content import (
     QuizLesson,
     VideoLesson,
     check_course,
+    lesson_body,
 )
+
+VIDEO_ID = "dQw4w9WgXcQ"
 
 
 def good_course() -> Course:
@@ -25,7 +28,7 @@ def good_course() -> Course:
             Chapter(
                 "ch1",
                 "Concepts",
-                (VideoLesson("v1", "What is Nile", "abc"), QuizLesson("l1", "Quiz", "q1")),
+                (VideoLesson("v1", "What is Nile", VIDEO_ID), QuizLesson("l1", "Quiz", "q1")),
             ),
             Chapter(
                 "ch2",
@@ -149,3 +152,28 @@ def test_reports_every_problem_at_once() -> None:
     course = good_course()
     bad = replace(course.quizzes[0], passing_percentage=0, max_attempts=0, questions=())
     assert len(check_course(replace(course, quizzes=(bad, course.quizzes[1])))) == 3
+
+
+def test_video_body_is_the_youtube_macro() -> None:
+    assert lesson_body(VideoLesson("v", "t", "abc12345678")) == '{{ YouTubeVideo("abc12345678") }}'
+
+
+def test_quiz_body_is_the_quiz_macro_with_the_lms_name() -> None:
+    assert lesson_body(QuizLesson("l", "t", "q"), "QZ-0001") == '{{ Quiz("QZ-0001") }}'
+
+
+def test_quiz_body_without_a_quiz_name_is_refused() -> None:
+    with pytest.raises(ValueError, match="quiz lesson 'l' needs the quiz name"):
+        lesson_body(QuizLesson("l", "t", "q"))
+
+
+def test_lab_body_is_the_markdown_and_ignores_a_quiz_name() -> None:
+    assert lesson_body(LabLesson("l", "t", "# Do it"), "QZ-1") == "# Do it"
+
+
+@pytest.mark.parametrize("bad", ["abc", "https://youtu.be/dQw4w9WgXcQ", "", "dQw4w9WgXcQ "])
+def test_video_value_that_is_not_an_id(bad: str) -> None:
+    course = good_course()
+    chapter = replace(course.chapters[0], lessons=(VideoLesson("v1", "x", bad),))
+    problems = check_course(replace(course, chapters=(chapter, course.chapters[1])))
+    assert any("video lesson 'v1' youtube" in p for p in problems)

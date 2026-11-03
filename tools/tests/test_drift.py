@@ -1,4 +1,4 @@
-"""Unit tests for nile_tools.drift: edits made in the LMS and unmanaged records (AC-9)."""
+"""Unit tests for nile_tools.drift: edits made in the LMS and unmanaged records (AC-9, AC-10)."""
 
 from nile_tools.drift import Difference, Record, compare
 
@@ -47,3 +47,18 @@ def test_lists_records_with_no_key() -> None:
     mine = Record("Course Lesson", None, {"title": "Hand made"}, "L9")
     drift = compare([], [Record("Course Lesson", "v1", {}, "L1"), mine])
     assert drift.unmanaged == (mine,)
+
+
+def test_quiz_lesson_with_quiz_id_but_no_body_macro_is_drift() -> None:
+    body = '{{ Quiz("QZ-1") }}'
+    wanted = [Record("Course Lesson", "l1", {"quiz_id": "QZ-1", "body": body})]
+    found = [Record("Course Lesson", "l1", {"quiz_id": "QZ-1", "body": ""}, "L1")]
+    assert compare(wanted, found).differences == (
+        Difference("Course Lesson", "l1", "body", body, ""),
+    )
+
+
+def test_stale_quiz_name_in_the_body_is_drift() -> None:
+    wanted = [Record("Course Lesson", "l1", {"body": '{{ Quiz("QZ-2") }}'})]
+    found = [Record("Course Lesson", "l1", {"body": '{{ Quiz("QZ-1") }}'}, "L1")]
+    assert len(compare(wanted, found).differences) == 1

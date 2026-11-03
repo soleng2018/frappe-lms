@@ -1,5 +1,6 @@
 """The course content model and the check that runs before anything is written to the LMS."""
 
+import re
 from collections import Counter
 from collections.abc import Iterable
 from dataclasses import dataclass
@@ -18,10 +19,14 @@ __all__ = [
     "QuizLesson",
     "VideoLesson",
     "check_course",
+    "lesson_body",
 ]
 
 DEFAULT_PASSING_PERCENTAGE = 80
 DEFAULT_MAX_ATTEMPTS = 3
+
+# A YouTube video id: 11 letters, digits, dashes or underscores. A URL is not an id.
+_VIDEO_ID = re.compile(r"[A-Za-z0-9_-]{11}")
 
 # The question types LMS knows. Only Open Ended is never graded automatically.
 QuestionType = Literal["Choices", "User Input", "Open Ended"]
@@ -98,6 +103,22 @@ class Course:
     quizzes: tuple[Quiz, ...] = ()
 
 
+def lesson_body(lesson: Lesson, quiz_name: str | None = None) -> str:
+    """Return the `body` the LMS needs: a video or quiz macro, or the lab markdown.
+
+    `quiz_name` is the name LMS gave the quiz, so it is only known after the quiz is created.
+    """
+    match lesson:
+        case VideoLesson(youtube=video_id):
+            return f'{{{{ YouTubeVideo("{video_id}") }}}}'
+        case QuizLesson(key=key):
+            if not quiz_name:
+                raise ValueError(f"quiz lesson {key!r} needs the quiz name to build its body")
+            return f'{{{{ Quiz("{quiz_name}") }}}}'
+        case LabLesson(body=body):
+            return body
+
+
 def _repeats(keys: Iterable[str]) -> list[str]:
     return sorted(k for k, n in Counter(keys).items() if n > 1)
 
@@ -145,6 +166,15 @@ def _link_problems(course: Course) -> list[str]:
     return problems
 
 
+def _video_problems(course: Course) -> list[str]:
+    videos = (x for c in course.chapters for x in c.lessons if isinstance(x, VideoLesson))
+    return [
+        f"video lesson {v.key!r} youtube is {v.youtube!r}, must be the 11 character video id"
+        for v in videos
+        if not _VIDEO_ID.fullmatch(v.youtube)
+    ]
+
+
 def _quiz_problems(quiz: Quiz) -> list[str]:
     name = f"quiz {quiz.key!r}"
     problems = []
@@ -166,7 +196,7 @@ def _quiz_problems(quiz: Quiz) -> list[str]:
 
 def check_course(course: Course) -> tuple[str, ...]:
     """Return every problem in the course at once, or an empty tuple when it is sound."""
-    problems = _key_problems(course) + _link_problems(course)
+    problems = _key_problems(course) + _link_problems(course) + _video_problems(course)
     problems += [f"chapter {c.key!r} has no lessons" for c in course.chapters if not c.lessons]
     for quiz in course.quizzes:
         problems += _quiz_problems(quiz)
