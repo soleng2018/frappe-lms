@@ -125,7 +125,7 @@ spec [0005](../specs/0005-content-sync/index.md) · code in `tools/src/nile_tool
   - [x] `sync --check`, the live integration test, and the README (AC-2, AC-4, AC-5, AC-6, AC-8)
 - [ ] Verify it: `/check verify content sync`
 - [ ] Test it: `/test content sync`
-- [ ] Review it (fresh model): `/check review content sync`
+- [x] Review it (fresh model): `/check review content sync`
 - [ ] Document it: `/document content sync`
 
 ### 9. Quiz pass rules & certificate · needs a decision
