@@ -82,7 +82,7 @@ Decide how courses, chapters, lessons, quizzes, attempts, and certificates map o
 **Done when:** the mapping is written down and covers everything slices 1 to 3 need without a rework.
 spec [0004](../specs/0004-data-model.md) · code in `apps/nile_auth/`, `tools/src/nile_tools/`
 - [x] Design it (spec): `/architect data model`
-- [ ] Build it: `/develop data model`
+- [x] Build it: `/develop data model`
   - [x] Custom fields (`nile_key`, `nile_group`) and the Moderator delete permission fixture in `nile_auth` (AC-3, AC-4, AC-6)
   - [x] Content model and pure content check in `tools` (AC-1, AC-2, AC-8)
   - [x] Compare function for drift between git and the LMS (AC-9)
