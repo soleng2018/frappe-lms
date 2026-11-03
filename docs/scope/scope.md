@@ -30,7 +30,7 @@ _The Frappe links have not been read by `/scope`; `/architect` should read the o
 | 5 | LMS running behind Traefik | Slice 1 | planned |
 | 6 | IDP login (OIDC) | Slice 1 | planned |
 | 7 | Group to role mapping | Slice 1 | planned |
-| 8 | Content sync, one course | Slice 1 | planned |
+| 8 | Content sync, one course | Slice 1 | in-progress |
 | 9 | Quiz pass rules & certificate | Slice 1 | planned |
 | 10 | Branding & theme | Slice 2 | planned |
 | 11 | Guide format & full authoring | Slice 2 | planned |
@@ -80,7 +80,7 @@ spec [0002](../specs/0002-single-config-and-secrets-file.md) · code in `tools/s
 ### 4. Data model (course, quiz, certificate, roles) · in-progress
 Decide how courses, chapters, lessons, quizzes, attempts, and certificates map onto Frappe, and which Frappe roles the two IDP groups become.
 **Done when:** the mapping is written down and covers everything slices 1 to 3 need without a rework.
-spec [0004](../specs/0004-data-model.md) · code in `apps/nile_auth/`, `tools/src/nile_tools/`
+spec [0004](../specs/0004-data-model/index.md) · code in `apps/nile_auth/`, `tools/src/nile_tools/`
 - [x] Design it (spec): `/architect data model`
 - [x] Build it: `/develop data model`
   - [x] Custom fields (`nile_key`, `nile_group`) and the Moderator delete permission fixture in `nile_auth` (AC-3, AC-4, AC-6)
@@ -113,10 +113,20 @@ Members of `NileWorkshopNAdmin` groups (N is 1, 2, 3…) become students, and `h
 **Done when:** a user in a NileWorkshop group gets the student role, a `hol-admins` user gets admin, and a user in neither is refused. Group changes apply at the next login.
 - [ ] Design it (spec): `/architect group to role mapping`
 
-### 8. Content sync, one course · needs a decision
+### 8. Content sync, one course · in-progress
 Push one course from git to Frappe through its API: a YouTube video lesson, a lab guide lesson, and a quiz for each. The thinnest real version of the authoring path.
 **Done when:** the sync script creates the course in Frappe from files in git, and running it again updates it without duplicates.
-- [ ] Design it (spec): `/architect content sync`
+spec [0005](../specs/0005-content-sync/index.md) · code in `tools/src/nile_tools/`, `content/`
+- [x] Design it (spec): `/architect content sync`
+- [x] Build it: `/develop content sync`
+  - [x] Probe the live site, extend the content model, and add the loader and the LMS client (AC-1, AC-3, AC-7)
+  - [x] Thin thread, then the full create path with quizzes and outline tables (AC-1, AC-4)
+  - [x] Update, removals, progress recompute, and batches (AC-2, AC-5, AC-6, AC-8)
+  - [x] `sync --check`, the live integration test, and the README (AC-2, AC-4, AC-5, AC-6, AC-8)
+- [ ] Verify it: `/check verify content sync`
+- [ ] Test it: `/test content sync`
+- [x] Review it (fresh model): `/check review content sync`
+- [ ] Document it: `/document content sync`
 
 ### 9. Quiz pass rules & certificate · needs a decision
 A student passes each quiz at 80% or higher, with a limited number of retakes, and earns a certificate after passing both the video quiz and the lab quiz.

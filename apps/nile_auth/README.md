@@ -1,7 +1,7 @@
 # nile_auth
 
 The one custom Frappe app. It holds the service user setup, the data model fixtures, and (later) the
-group to role mapping at login. The design is in [spec 0004](../../docs/specs/0004-data-model.md).
+group to role mapping at login. The design is in [spec 0004](../../docs/specs/0004-data-model/index.md).
 
 ## Verified LMS names (LMS v2.68.0, checked on the live site)
 

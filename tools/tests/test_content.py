@@ -9,6 +9,7 @@ from nile_tools.content import (
     Chapter,
     Course,
     LabLesson,
+    Option,
     Question,
     Quiz,
     QuizLesson,
@@ -18,6 +19,10 @@ from nile_tools.content import (
 )
 
 VIDEO_ID = "dQw4w9WgXcQ"
+
+
+def _q(key: str, *options: Option) -> Question:
+    return Question(key, "?", options=options or (Option("yes", True), Option("no")))
 
 
 def good_course() -> Course:
@@ -37,8 +42,8 @@ def good_course() -> Course:
             ),
         ),
         quizzes=(
-            Quiz("q1", "Quiz", "l1", (Question("a", "?"),)),
-            Quiz("q2", "Lab quiz", "l2", (Question("b", "?"),)),
+            Quiz("q1", "Quiz", "l1", (_q("a"),)),
+            Quiz("q2", "Lab quiz", "l2", (_q("b"),)),
         ),
     )
 
@@ -63,7 +68,7 @@ def test_a_lab_without_a_video_is_fine() -> None:
 
 def test_quiz_with_no_lesson_and_repeated_key_are_both_named() -> None:
     course = good_course()
-    orphan = Quiz("q3", "Orphan", "nowhere", (Question("c", "?"),))
+    orphan = Quiz("q3", "Orphan", "nowhere", (_q("c"),))
     dup = replace(course.chapters[1], key="ch1")
     problems = check_course(
         replace(course, chapters=(course.chapters[0], dup), quizzes=(*course.quizzes, orphan))
@@ -142,7 +147,7 @@ def test_open_ended_question() -> None:
 
 def test_repeated_question_key_across_quizzes_and_blank_key() -> None:
     course = good_course()
-    q2 = replace(course.quizzes[1], questions=(Question("a", "?"), Question(" ", "?")))
+    q2 = replace(course.quizzes[1], questions=(_q("a"), _q(" ")))
     problems = check_course(replace(course, quizzes=(course.quizzes[0], q2)))
     assert any("question nile_key is repeated: 'a'" in p for p in problems)
     assert any("question nile_key is empty" in p for p in problems)
@@ -225,3 +230,37 @@ def test_user_input_question_is_gradable() -> None:
     course = good_course()
     ok = replace(course.quizzes[0], questions=(Question("a", "?", type="User Input"),))
     assert check_course(replace(course, quizzes=(ok, course.quizzes[1]))) == ()
+
+
+def _choice(*options: Option) -> tuple[str, ...]:
+    course = good_course()
+    bad = replace(course.quizzes[0], questions=(_q("a", *options),))
+    return check_course(replace(course, quizzes=(bad, course.quizzes[1])))
+
+
+def test_a_choice_question_with_two_to_four_options_is_sound() -> None:
+    assert _choice(Option("a", True), Option("b")) == ()
+    assert _choice(*(Option(x, x == "a") for x in "abcd")) == ()
+
+
+def test_a_choice_question_with_one_or_five_options_is_named() -> None:
+    assert "has 1 options, must be 2 to 4" in "".join(_choice(Option("a", True)))
+    five = tuple(Option(x, x == "a") for x in "abcde")
+    assert "has 5 options, must be 2 to 4" in "".join(_choice(*five))
+
+
+def test_a_choice_question_needs_a_correct_option() -> None:
+    assert "has no correct option" in "".join(_choice(Option("a"), Option("b")))
+
+
+def test_empty_and_repeated_options_are_named() -> None:
+    joined = "".join(_choice(Option("a", True), Option(" ")))
+    assert "has an empty option" in joined
+    assert "repeats the option 'a'" in "".join(_choice(Option("a", True), Option("a ")))
+
+
+def test_a_choice_question_without_text_is_named() -> None:
+    course = good_course()
+    blank = Question("a", " ", options=(Option("x", True), Option("y")))
+    bad = replace(course.quizzes[0], questions=(blank,))
+    assert "has no text" in "".join(check_course(replace(course, quizzes=(bad, course.quizzes[1]))))
