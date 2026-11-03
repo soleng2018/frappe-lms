@@ -116,7 +116,7 @@ Members of `NileWorkshopNAdmin` groups (N is 1, 2, 3…) become students, and `h
 ### 8. Content sync, one course · in-progress
 Push one course from git to Frappe through its API: a YouTube video lesson, a lab guide lesson, and a quiz for each. The thinnest real version of the authoring path.
 **Done when:** the sync script creates the course in Frappe from files in git, and running it again updates it without duplicates.
-spec [0005](../specs/0005-content-sync.md) · code in `tools/src/nile_tools/`, `content/`
+spec [0005](../specs/0005-content-sync/index.md) · code in `tools/src/nile_tools/`, `content/`
 - [x] Design it (spec): `/architect content sync`
 - [x] Build it: `/develop content sync`
   - [x] Probe the live site, extend the content model, and add the loader and the LMS client (AC-1, AC-3, AC-7)
