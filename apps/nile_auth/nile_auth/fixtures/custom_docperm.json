@@ -1,0 +1,13 @@
+[
+	{
+		"doctype": "Custom DocPerm",
+		"name": "nile-moderator-quiz-submission-delete",
+		"parent": "LMS Quiz Submission",
+		"parenttype": "DocType",
+		"parentfield": "permissions",
+		"role": "Moderator",
+		"permlevel": 0,
+		"read": 1,
+		"delete": 1
+	}
+]

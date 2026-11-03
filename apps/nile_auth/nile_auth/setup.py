@@ -5,7 +5,7 @@ import sys
 
 import frappe
 
-# Roles the content sync needs. Names are unconfirmed until the data model feature, so only roles that exist are added.
+# Roles the content sync needs (names confirmed against LMS v2.68.0 in spec 0004).
 LMS_ROLES = ("LMS Student", "Course Creator", "Moderator", "Batch Evaluator")
 
 

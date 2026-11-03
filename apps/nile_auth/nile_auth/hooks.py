@@ -5,3 +5,9 @@ app_description = "Group to role mapping and service user setup for the Nile LMS
 app_email = "noreply@example.com"
 app_license = "mit"
 required_apps = ["lms"]
+
+# Applied by `bench migrate`. Names are explicit so a re run updates the rows instead of adding more.
+fixtures = [
+	{"dt": "Custom Field", "filters": [["module", "=", "Nile Auth"]]},
+	{"dt": "Custom DocPerm", "filters": [["name", "like", "nile-%"]]},
+]

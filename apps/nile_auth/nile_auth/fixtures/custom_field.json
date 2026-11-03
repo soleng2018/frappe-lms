@@ -1,0 +1,74 @@
+[
+	{
+		"doctype": "Custom Field",
+		"name": "LMS Course-nile_key",
+		"dt": "LMS Course",
+		"fieldname": "nile_key",
+		"label": "Nile Key",
+		"fieldtype": "Data",
+		"unique": 1,
+		"read_only": 1,
+		"no_copy": 1,
+		"module": "Nile Auth"
+	},
+	{
+		"doctype": "Custom Field",
+		"name": "Course Chapter-nile_key",
+		"dt": "Course Chapter",
+		"fieldname": "nile_key",
+		"label": "Nile Key",
+		"fieldtype": "Data",
+		"unique": 1,
+		"read_only": 1,
+		"no_copy": 1,
+		"module": "Nile Auth"
+	},
+	{
+		"doctype": "Custom Field",
+		"name": "Course Lesson-nile_key",
+		"dt": "Course Lesson",
+		"fieldname": "nile_key",
+		"label": "Nile Key",
+		"fieldtype": "Data",
+		"unique": 1,
+		"read_only": 1,
+		"no_copy": 1,
+		"module": "Nile Auth"
+	},
+	{
+		"doctype": "Custom Field",
+		"name": "LMS Quiz-nile_key",
+		"dt": "LMS Quiz",
+		"fieldname": "nile_key",
+		"label": "Nile Key",
+		"fieldtype": "Data",
+		"unique": 1,
+		"read_only": 1,
+		"no_copy": 1,
+		"module": "Nile Auth"
+	},
+	{
+		"doctype": "Custom Field",
+		"name": "LMS Question-nile_key",
+		"dt": "LMS Question",
+		"fieldname": "nile_key",
+		"label": "Nile Key",
+		"fieldtype": "Data",
+		"unique": 1,
+		"read_only": 1,
+		"no_copy": 1,
+		"module": "Nile Auth"
+	},
+	{
+		"doctype": "Custom Field",
+		"name": "LMS Batch-nile_group",
+		"dt": "LMS Batch",
+		"fieldname": "nile_group",
+		"label": "Nile Group",
+		"fieldtype": "Data",
+		"unique": 1,
+		"read_only": 1,
+		"no_copy": 1,
+		"module": "Nile Auth"
+	}
+]
