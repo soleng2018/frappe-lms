@@ -26,7 +26,7 @@ _The Frappe links have not been read by `/scope`; `/architect` should read the o
 | 1 | Stack & architecture | Foundation | done |
 | 2 | Coding standards & tooling | Foundation | done |
 | 3 | Single config & secrets file | Foundation | done |
-| 4 | Data model (course, quiz, certificate, roles) | Foundation | planned |
+| 4 | Data model (course, quiz, certificate, roles) | Foundation | in-progress |
 | 5 | LMS running behind Traefik | Slice 1 | planned |
 | 6 | IDP login (OIDC) | Slice 1 | planned |
 | 7 | Group to role mapping | Slice 1 | planned |
@@ -77,10 +77,24 @@ spec [0002](../specs/0002-single-config-and-secrets-file.md) · code in `tools/s
 - [x] Review it (fresh model): `/check review single config & secrets file`
 - [x] Document it: `/document single config & secrets file`
 
-### 4. Data model (course, quiz, certificate, roles) · needs a decision
+### 4. Data model (course, quiz, certificate, roles) · in-progress
 Decide how courses, chapters, lessons, quizzes, attempts, and certificates map onto Frappe, and which Frappe roles the two IDP groups become.
 **Done when:** the mapping is written down and covers everything slices 1 to 3 need without a rework.
-- [ ] Design it (spec): `/architect data model`
+spec [0004](../specs/0004-data-model.md) · code in `apps/nile_auth/`, `tools/src/nile_tools/`
+- [x] Design it (spec): `/architect data model`
+- [x] Build it: `/develop data model`
+  - [x] Custom fields (`nile_key`, `nile_group`) and the Moderator delete permission fixture in `nile_auth` (AC-3, AC-4, AC-6)
+  - [x] Content model and pure content check in `tools` (AC-1, AC-2, AC-8)
+  - [x] Compare function for drift between git and the LMS (AC-9)
+  - [x] Model constants for roles, user types, and batch defaults in `nile_auth` (AC-4)
+  - [x] Live site integration test and recorded LMS names, once feature 5 is up (AC-2, AC-5, AC-6, AC-7)
+- [x] Rebuild for the body macros: `/develop data model`
+  - [x] `lesson_body` function and the video id check in `tools`, with unit tests (AC-8, AC-10)
+  - [x] Compare reports quiz and video lessons whose body is not the macro, and the live test also tries a lesson with the macro (AC-9, AC-10)
+- [ ] Verify it: `/check verify data model`
+- [x] Test it: `/test data model`
+- [x] Review it (fresh model): `/check review data model`
+- [ ] Document it: `/document data model`
 
 ## Slice 1: the thin certify thread
 
@@ -124,7 +138,11 @@ Apply the Nile brand colors and logos from the Nile design system in `brand/` to
 - Textures, patterns, and photography are optional extras, not needed for the LMS.
 - Design system to reuse: the Nile Hands On Labs design system from the reservations app (github.com/soleng2018/reservations, commit 401b199), which uses the same brand. A copy is in `brand/`: `design-reference.md` (tokens, type scale, radii, shadows, focus rules, component list) and `tokens.css` (the source of truth for values). Its main rules: pill buttons, 16px cards, Inter only, light theme only, Nile Blue for the main action, and text colors adjusted to pass WCAG AA (for example the learner button gradient is `#E91B31` to `#C95100`, and secondary text is `#5D7182`). Its components are React, so for Frappe only the tokens, type, shapes and logos carry over.
 - Logo files are in `brand/`: `nile-logo.png` (color), `nile-logo-white.png` (for dark backgrounds), `icon.png` (512 px shield), `apple-icon.png` (180 px), `nile-logo-email.png` (small, for email). They match the files in `/home/nova/lms/site/assets` exactly. Official SVG versions are still owed by the brand owner.
-**Done when:** the login page, the app, and the certificate use the brand colors, Inter font, and unaltered logos, set by script so they survive a rebuild, and text on every brand background is readable.
+**Approach (decided after research, keep the code small):**
+1. Logo, app name, favicon and banner are set through Frappe's Website Settings by a `tools` script. The certificate gets a branded Print Format shipped as a file in `nile_auth`.
+2. Colors and Inter for the main app come from one small CSS file that overrides the LMS CSS variables, loaded by a few lines of nginx config in the `frontend` container. This step depends on a live check that the LMS page loads it, and on which variables drive the main button color. Colors and font only.
+3. Out of scope: forking LMS or rebuilding its frontend, and the pill button and card shapes. The Authentik login page is branded in Authentik, not here.
+**Done when:** the app and the certificate use the brand colors, Inter font, and unaltered logos, set by script so they survive a rebuild, and text on every brand background is readable. The login page is covered only if Authentik branding is done by the same script.
 - [ ] Design it (spec): `/architect branding & theme`
 
 ### 11. Guide format & full authoring · needs a decision

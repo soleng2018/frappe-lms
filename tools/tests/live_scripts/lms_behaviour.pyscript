@@ -1,0 +1,189 @@
+# Runs inside `bench console` on the live site (see test_data_model_integration.py). It rolls
+# everything back and prints one RESULT line of JSON. Not imported, so it is not linted.
+import json
+import frappe
+from frappe.utils import random_string, nowdate, add_years
+from lms.lms.doctype.course_lesson.course_lesson import save_progress
+from lms.lms.api import mark_lesson_progress
+from lms.lms.doctype.lms_certificate.lms_certificate import create_certificate
+
+out = {}
+sfx = random_string(6)
+
+def step(name, fn):
+    try:
+        out[name] = fn()
+    except Exception as e:
+        out[name] = "RAISED " + type(e).__name__ + ": " + str(e)[:120]
+
+def make_user(roles, kind):
+    u = frappe.get_doc({"doctype": "User", "email": f"nile-it-{kind}-{sfx}@example.com", "first_name": kind,
+        "user_type": "System User" if kind == "admin" else "Website User", "send_welcome_email": 0})
+    for r in roles:
+        u.append("roles", {"role": r})
+    return u.insert(ignore_permissions=True).name
+
+def make_quiz(tag):
+    q = frappe.get_doc({"doctype": "LMS Question", "question": f"Q {tag}", "type": "Choices",
+        "option_1": "yes", "is_correct_1": 1, "option_2": "no", "is_correct_2": 0, "marks": 1}).insert(ignore_permissions=True)
+    quiz = frappe.get_doc({"doctype": "LMS Quiz", "title": f"quiz {tag}", "passing_percentage": 80, "max_attempts": 3,
+        "total_marks": 1, "questions": [{"question": q.name, "marks": 1}]}).insert(ignore_permissions=True)
+    return quiz.name
+
+def build_course(tag, admin, lessons):
+    """lessons: list of (title, fn(quiz_name)->fields, wants_quiz). Returns course, lesson names, quiz names."""
+    course = frappe.get_doc({"doctype": "LMS Course", "title": f"nile it {tag} {sfx}", "short_introduction": "x", "description": "x",
+        "published": 1, "status": "Approved", "enable_certification": 1, "enforce_lesson_completion": 0,
+        "instructors": [{"instructor": admin}]}).insert(ignore_permissions=True)
+    chapter = frappe.get_doc({"doctype": "Course Chapter", "course": course.name, "title": "ch"}).insert(ignore_permissions=True)
+    names, quizzes = [], []
+    for title, fn, wants_quiz in lessons:
+        quiz = make_quiz(f"{tag}{len(names)}") if wants_quiz else None
+        quizzes.append(quiz)
+        fields = fn(quiz)
+        lesson = frappe.get_doc({"doctype": "Course Lesson", "chapter": chapter.name, "title": title, **fields}).insert(ignore_permissions=True)
+        if quiz:
+            frappe.db.set_value("LMS Quiz", quiz, {"lesson": lesson.name, "course": course.name})
+        names.append(lesson.name)
+    chapter = frappe.get_doc("Course Chapter", chapter.name)
+    existing = [r.lesson for r in chapter.lessons]
+    for n in names:
+        if n not in existing:
+            chapter.append("lessons", {"lesson": n})
+    chapter.save(ignore_permissions=True)
+    course = frappe.get_doc("LMS Course", course.name)
+    if chapter.name not in [r.chapter for r in course.chapters]:
+        course.append("chapters", {"chapter": chapter.name})
+    course.save(ignore_permissions=True)
+    return course.name, names, quizzes
+
+def enroll(user, course):
+    return frappe.get_doc({"doctype": "LMS Enrollment", "member": user, "course": course}).insert(ignore_permissions=True).name
+
+def submit(user, quiz, pct):
+    return frappe.get_doc({"doctype": "LMS Quiz Submission", "quiz": quiz, "member": user, "score": pct // 100, "score_out_of": 1,
+        "percentage": pct, "passing_percentage": 80}).insert(ignore_permissions=True)
+
+def submit_real(user, quiz, answer):
+    from lms.lms.doctype.lms_quiz.lms_quiz import submit_quiz
+    before = frappe.session.user
+    frappe.set_user(user)
+    try:
+        qn = frappe.get_all("LMS Quiz Question", {"parent": quiz}, pluck="question")[0]
+        return submit_quiz(quiz, json.dumps([{"question_name": qn, "answer": [answer]}]))
+    finally:
+        frappe.set_user(before)
+
+def progress_rows(user, lesson):
+    return frappe.db.count("LMS Course Progress", {"member": user, "lesson": lesson, "status": "Complete"})
+
+def enrollment_progress(user, course):
+    return frappe.db.get_value("LMS Enrollment", {"member": user, "course": course}, "progress")
+
+try:
+    admin = make_user(["Moderator", "Course Creator"], "admin")
+    s1 = make_user(["LMS Student"], "s1")
+    s2 = make_user(["LMS Student"], "s2")
+    frappe.set_user(admin)
+
+    # --- A: lessons written the way spec 0004 says (quiz_id / youtube fields only, no body) ---
+    cA, lA, qA = build_course("A", admin, [
+        ("video", lambda q: {"youtube": "dQw4w9WgXcQ"}, False),
+        ("quiz", lambda q: {"quiz_id": q}, True)])
+    enroll(s1, cA)
+    frappe.set_user(s1)
+    step("A_quiz_lesson_completes_without_passing", lambda: (save_progress(lA[1], cA), progress_rows(s1, lA[1]))[1])
+    step("A_mark_lesson_progress_quiz_lesson", lambda: (mark_lesson_progress(cA, 1, 2), progress_rows(s1, lA[1]))[1])
+    out["A_lesson_body_is_empty"] = frappe.db.get_value("Course Lesson", lA[1], "body") in (None, "")
+    out["A_get_quiz_progress"] = __import__("lms.lms.doctype.course_lesson.course_lesson", fromlist=["x"]).get_quiz_progress(lA[1])
+    frappe.set_user("Administrator")
+
+    # --- B: lessons with the body macros LMS actually reads ---
+    cB, lB, qB = build_course("B", admin, [
+        ("video", lambda q: {"youtube": "dQw4w9WgXcQ", "body": '{{ YouTubeVideo("dQw4w9WgXcQ") }}'}, False),
+        ("lab", lambda q: {"body": "# Lab\n\nDo it."}, False),
+        ("quiz", lambda q: {"quiz_id": q, "body": '{{ Quiz("%s") }}' % q}, True)])
+    enroll(s1, cB)
+    frappe.set_user(s1)
+    step("B_certificate_refused_at_zero", lambda: create_certificate(cB))
+    step("B_video_completes_on_mark", lambda: (save_progress(lB[0], cB), progress_rows(s1, lB[0]))[1])
+    step("B_lab_completes_on_mark", lambda: (save_progress(lB[1], cB), progress_rows(s1, lB[1]))[1])
+    step("B_quiz_lesson_before_attempt", lambda: (save_progress(lB[2], cB), progress_rows(s1, lB[2]))[1])
+    out["B_failed_submit"] = submit_real(s1, qB[2], "no")
+    step("B_quiz_lesson_after_failed_attempt", lambda: (save_progress(lB[2], cB), progress_rows(s1, lB[2]))[1])
+    out["B_progress_before_pass"] = enrollment_progress(s1, cB)
+    step("B_certificate_refused_before_pass", lambda: create_certificate(cB))
+    out["B_passing_submit"] = submit_real(s1, qB[2], "yes")
+    out["B_lesson_complete_right_after_submit"] = progress_rows(s1, lB[2])
+    step("B_quiz_lesson_after_pass", lambda: (save_progress(lB[2], cB), progress_rows(s1, lB[2]))[1])
+    out["B_progress_after_pass"] = enrollment_progress(s1, cB)
+    step("B_certificate_issued", lambda: (lambda c: {"template": c.get("template") if isinstance(c, dict) else c.template})(create_certificate(cB)))
+    out["B_certificate_row"] = frappe.db.get_value("LMS Certificate", {"member": s1, "course": cB}, ["name", "published", "template"], as_dict=True)
+    cert_name = out["B_certificate_row"] and out["B_certificate_row"]["name"]
+
+    # --- AC-7: a second student sees only their own ---
+    frappe.set_user("Administrator")
+    enroll(s2, cB)
+    submit_real(s2, qB[2], "no")
+    frappe.set_user("Administrator")
+    sub1 = frappe.get_all("LMS Quiz Submission", {"member": s1}, pluck="name")[0]
+    sub2 = frappe.get_all("LMS Quiz Submission", {"member": s2}, pluck="name")[0]
+    frappe.set_user(s2)
+    def own_only(doctype, owner_field):
+        rows = frappe.get_list(doctype, fields=["name", owner_field], limit_page_length=0)
+        return sorted({r[owner_field] for r in rows})
+    step("AC7_s2_reads_own_submission", lambda: frappe.has_permission("LMS Quiz Submission", "read", doc=sub2, user=s2))
+    step("AC7_s2_reads_s1_submission", lambda: frappe.has_permission("LMS Quiz Submission", "read", doc=sub1, user=s2))
+    step("AC7_s2_lists_submissions_of", lambda: own_only("LMS Quiz Submission", "member"))
+    step("AC7_s2_sees_enrollments_of", lambda: own_only("LMS Enrollment", "member"))
+    step("AC7_s2_sees_progress_of", lambda: own_only("LMS Course Progress", "member"))
+    step("AC7_s2_sees_certificates_of", lambda: own_only("LMS Certificate", "member"))
+    step("AC7_s2_reads_s1_certificate", lambda: frappe.has_permission("LMS Certificate", "read", doc=cert_name, user=s2))
+    frappe.set_user(s1)
+    step("AC7_s1_reads_own_certificate", lambda: frappe.has_permission("LMS Certificate", "read", doc=cert_name, user=s1))
+    frappe.set_user("Administrator")
+
+    # --- batch: required fields, enrollment from a batch enrollment, course added later ---
+    s3 = make_user(["LMS Student"], "s3")
+    def make_batch():
+        b = frappe.get_doc({"doctype": "LMS Batch", "title": "NileWorkshopTestAdmin", "nile_group": f"NileWorkshopTest{sfx}Admin",
+            "start_date": nowdate(), "end_date": add_years(nowdate(), 10), "start_time": "00:00:00", "end_time": "23:59:59",
+            "timezone": frappe.db.get_single_value("System Settings", "time_zone") or "UTC",
+            "description": "Students of x", "batch_details": "Students of x", "published": 1, "allow_self_enrollment": 0,
+            "instructors": [{"instructor": admin}], "courses": [{"course": cB}]})
+        return b.insert(ignore_permissions=True).name
+    batch = None
+    try:
+        batch = make_batch(); out["batch_created_with_spec_values"] = True
+    except Exception as e:
+        out["batch_created_with_spec_values"] = "RAISED " + type(e).__name__ + ": " + str(e)[:200]
+    if batch:
+        step("batch_enrollment_as_admin_user", lambda: bool(frappe.get_doc({"doctype": "LMS Batch Enrollment", "batch": batch, "member": s3}).insert().name))
+        out["batch_enrollment_creates_course_enrollment"] = bool(frappe.db.exists("LMS Enrollment", {"member": s3, "course": cB}))
+        step("duplicate_nile_group_refused", lambda: frappe.get_doc({"doctype": "LMS Batch", "title": "dup", "nile_group": f"NileWorkshopTest{sfx}Admin",
+            "start_date": nowdate(), "end_date": add_years(nowdate(), 10), "start_time": "00:00:00", "end_time": "23:59:59", "timezone": "UTC",
+            "description": "x", "batch_details": "x", "instructors": [{"instructor": admin}]}).insert(ignore_permissions=True).name)
+        cC, lC, qC = build_course("C", admin, [("lab", lambda q: {"body": "x"}, False)])
+        b = frappe.get_doc("LMS Batch", batch)
+        b.append("courses", {"course": cC})
+        b.save(ignore_permissions=True)
+        out["course_added_to_batch_enrolls_existing_members"] = bool(frappe.db.exists("LMS Enrollment", {"member": s3, "course": cC}))
+
+    # --- keys: unique nile_key refused when repeated; empty ones allowed many times ---
+    k = f"k-{sfx}"
+    def two_courses_same_key():
+        for i in range(2):
+            frappe.get_doc({"doctype": "Course Chapter", "course": cB, "title": f"dupkey{i}", "nile_key": k}).insert(ignore_permissions=True)
+    step("repeated_nile_key_refused", two_courses_same_key)
+    def many_without_key():
+        for i in range(3):
+            frappe.get_doc({"doctype": "Course Chapter", "course": cB, "title": f"nokey{i}"}).insert(ignore_permissions=True)
+        return "ok"
+    step("many_records_without_key_allowed", many_without_key)
+except Exception as e:
+    import traceback
+    out["error"] = traceback.format_exc()[-800:]
+finally:
+    frappe.set_user("Administrator")
+    frappe.db.rollback()
+print("RESULT:" + json.dumps(out, default=str))
