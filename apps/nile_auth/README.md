@@ -21,7 +21,24 @@ group to role mapping at login. The design is in [spec 0004](../../docs/specs/00
 - `nile_auth/fixtures/`: the custom fields and the Moderator delete permission on LMS Quiz Submission.
   Applied by `bench migrate`.
 
-## Not yet verified on the live site
+## What the live site showed (pinned by `tools/tests/test_data_model_integration.py`)
 
-The certificate request, progress at 100, and a student's view of their own records (AC-5, AC-7), plus
-the other open checks in the spec's Follow-up.
+- **Quiz lessons are gated by the body, not by `quiz_id`.** LMS finds a lesson's quizzes from a
+  `{{ Quiz("<quiz name>") }}` macro in `body` (or from `content` blocks). A quiz lesson with only
+  `quiz_id` can be marked complete without passing. Video lessons show only when `body` has a
+  `{{ YouTubeVideo("<id>") }}` macro (from reading the source, not run). The spec needs updating.
+- A passing `submit_quiz` completes the quiz lesson by itself, when `quiz.lesson` and `quiz.course` are set.
+- Video and lab lessons complete when the student marks them (`save_progress`).
+- `create_certificate` works for a Website User with only LMS Student, no evaluator needed. It is refused
+  under 100% progress. The certificate is created unpublished, and only its owner can read it.
+- A student cannot read even their own Quiz Submission through the generic API (the doctype gives LMS
+  Student no read). They read their own Enrollment, and see no one else's progress or certificates.
+- An LMS Batch with the spec values saves. Inserting a Batch Enrollment as Administrator creates the
+  course enrollments. Run the login hook as Administrator: a Batch Enrollment by anyone else needs
+  Moderator, Batch Evaluator, or self enrollment switched on.
+- Adding a course to a batch later does not enroll its existing members, so `nile_auth` fills the gap at login.
+- A repeated `nile_key` or `nile_group` is refused. Records with no key are fine (they are NULL).
+
+## Not checked
+
+That a System User with Moderator and Course Creator opens the Desk in a browser.

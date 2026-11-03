@@ -5,6 +5,7 @@ import json
 import shutil
 import subprocess
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -77,6 +78,20 @@ finally:
     frappe.db.rollback()
 print("RESULT:" + json.dumps(out, default=str))
 """
+
+
+LIVE_SCRIPTS = Path(__file__).parent / "live_scripts"
+
+
+def _run_script(source: str) -> dict[str, Any]:
+    encoded = base64.b64encode(source.encode()).decode()
+    stdin = f"exec(__import__('base64').b64decode('{encoded}').decode(), {{}})\n"
+    done = _exec("bench", "--site", _site(), "console", stdin=stdin)
+    lines = [x for x in done.stdout.splitlines() if "RESULT:" in x]
+    assert lines, done.stdout[-500:] + done.stderr[-500:]
+    result: dict[str, Any] = json.loads(lines[-1].split("RESULT:", 1)[1])
+    assert "error" not in result, result["error"]
+    return result
 
 
 def _site() -> str:
@@ -162,13 +177,7 @@ def test_moderator_delete_permission_is_one_row() -> None:
 
 
 def test_attempts_are_limited_and_only_a_moderator_may_reset_them() -> None:
-    encoded = base64.b64encode(BEHAVIOUR_SCRIPT.encode()).decode()
-    stdin = f"exec(__import__('base64').b64decode('{encoded}').decode(), {{}})\n"
-    done = _exec("bench", "--site", _site(), "console", stdin=stdin)
-    lines = [x for x in done.stdout.splitlines() if "RESULT:" in x]
-    assert lines, done.stdout[-500:] + done.stderr[-500:]
-    result = json.loads(lines[-1].split("RESULT:", 1)[1])
-    assert "error" not in result, result
+    result = _run_script(BEHAVIOUR_SCRIPT)
     assert result["percentages"] == [70, 70, 70]  # 70 is under the pass mark of 80
     assert result["fourth"] == "MaximumAttemptsExceededError"
     assert result["moderator_read"] is True
@@ -176,3 +185,71 @@ def test_attempts_are_limited_and_only_a_moderator_may_reset_them() -> None:
     assert result["student_delete"] is False
     left = _sql("select count(*) from tabUser where name like 'nile-it-%'")
     assert left == [["0"]]  # the rollback left nothing behind
+
+
+@pytest.fixture(scope="module")
+def lms() -> dict[str, Any]:
+    """One rolled back run of the student, quiz, certificate and batch flows."""
+    result = _run_script((LIVE_SCRIPTS / "lms_behaviour.pyscript").read_text())
+    assert _sql("select count(*) from tabUser where name like 'nile-it-%'") == [["0"]]
+    return result
+
+
+def test_a_quiz_lesson_with_only_quiz_id_can_be_skipped(lms: dict[str, Any]) -> None:
+    """LMS reads the quiz from a macro in the body, so `quiz_id` alone does not gate the lesson.
+
+    If this starts failing, LMS changed: re check the sync's quiz lesson body in spec 0004.
+    """
+    assert lms["A_quiz_lesson_completes_without_passing"] == 1
+    assert lms["A_mark_lesson_progress_quiz_lesson"] == 1
+
+
+def test_a_quiz_lesson_with_the_body_macro_needs_a_pass(lms: dict[str, Any]) -> None:
+    assert lms["B_quiz_lesson_before_attempt"] == 0
+    assert lms["B_failed_submit"]["pass"] is False
+    assert lms["B_quiz_lesson_after_failed_attempt"] == 0
+    assert lms["B_passing_submit"]["pass"] is True
+    assert (
+        lms["B_lesson_complete_right_after_submit"] == 1
+    )  # LMS completes it on the passing submit
+
+
+def test_video_and_lab_lessons_complete_when_marked(lms: dict[str, Any]) -> None:
+    assert lms["B_video_completes_on_mark"] == 1
+    assert lms["B_lab_completes_on_mark"] == 1
+
+
+def test_certificate_needs_every_quiz_passed(lms: dict[str, Any]) -> None:
+    assert "not completed the course" in lms["B_certificate_refused_at_zero"]
+    assert lms["B_progress_before_pass"] < 100
+    assert "not completed the course" in lms["B_certificate_refused_before_pass"]
+    assert lms["B_progress_after_pass"] == 100
+    assert lms["B_certificate_issued"] == {"template": "Certificate"}
+    assert lms["B_certificate_row"]["published"] == 0
+
+
+def test_a_student_sees_only_their_own_records(lms: dict[str, Any]) -> None:
+    assert len(lms["AC7_s2_sees_enrollments_of"]) == 1
+    assert lms["AC7_s2_sees_progress_of"] == []
+    assert lms["AC7_s2_sees_certificates_of"] == []
+    assert lms["AC7_s2_reads_s1_certificate"] is False
+    assert lms["AC7_s1_reads_own_certificate"] is True
+    assert lms["AC7_s2_reads_s1_submission"] is False
+
+
+def test_batch_with_the_spec_values_enrolls_members_in_its_courses(lms: dict[str, Any]) -> None:
+    assert lms["batch_created_with_spec_values"] is True
+    assert lms["batch_enrollment_as_admin_user"] is True
+    assert lms["batch_enrollment_creates_course_enrollment"] is True
+    assert "UniqueValidationError" in lms["duplicate_nile_group_refused"]
+
+
+def test_a_course_added_to_a_batch_later_does_not_enroll_existing_members(
+    lms: dict[str, Any],
+) -> None:
+    assert lms["course_added_to_batch_enrolls_existing_members"] is False
+
+
+def test_nile_key_is_unique_but_records_without_one_are_allowed(lms: dict[str, Any]) -> None:
+    assert "UniqueValidationError" in lms["repeated_nile_key_refused"]
+    assert lms["many_records_without_key_allowed"] == "ok"

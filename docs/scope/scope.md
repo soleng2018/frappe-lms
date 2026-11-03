@@ -87,7 +87,7 @@ spec [0004](../specs/0004-data-model.md) · code in `apps/nile_auth/`, `tools/sr
   - [x] Content model and pure content check in `tools` (AC-1, AC-2, AC-8)
   - [x] Compare function for drift between git and the LMS (AC-9)
   - [x] Model constants for roles, user types, and batch defaults in `nile_auth` (AC-4)
-  - [ ] Live site integration test and recorded LMS names, once feature 5 is up (AC-2, AC-5, AC-6, AC-7)
+  - [x] Live site integration test and recorded LMS names, once feature 5 is up (AC-2, AC-5, AC-6, AC-7)
 - [ ] Verify it: `/check verify data model`
 - [ ] Test it: `/test data model`
 - [ ] Review it (fresh model): `/check review data model`
