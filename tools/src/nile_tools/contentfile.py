@@ -186,7 +186,7 @@ def load_course(content_dir: Path) -> Course:
     except yaml.YAMLError as e:
         raise ContentError((f"{r.file.name} is not valid YAML: {e}",)) from e
     course = _build(r, raw)
-    problems = (*r.problems, *(() if r.problems else check_course(course)))
+    problems = (*r.problems, *check_course(course))
     if problems:
         raise ContentError(problems)
     return course

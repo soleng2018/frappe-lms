@@ -76,7 +76,9 @@ class FakeLms:
             return refused
         body = json.loads(request.content)
         for f in RICH & body.keys():
-            body[f] = str(body[f]).replace("&", "&amp;")
+            text = str(body[f])
+            # Frappe v16 sanitize_html leaves a value alone unless it holds an HTML tag.
+            body[f] = text.replace("&", "&amp;") if "<" in text or ">" in text else text
         if request.method == "POST":
             key = body.get("nile_key")
             if key and any(d.get("nile_key") == key for d in store.values()):

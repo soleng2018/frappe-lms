@@ -352,7 +352,10 @@ def plan_sync(course: Course, found: Found) -> tuple[Action, ...]:
         if rows is not None:
             chapter_fields["lessons"] = rows
         found_rows = tuple(r["lesson"] for r in doc.get("lessons") or ())
-        notes = _dropped_rows(found_rows, rows, detached_names) if rows is not None else ()
+        moved = detached_names | set(
+            lessons.values()
+        )  # a lesson wanted elsewhere moved, not unmanaged
+        notes = _dropped_rows(found_rows, rows, moved) if rows is not None else ()
         add(_diff(CHAPTER, chapter.key, chapter_fields, doc, notes))
 
     course_fields = _course_fields(course)
@@ -400,7 +403,12 @@ def plan_sync(course: Course, found: Found) -> tuple[Action, ...]:
 def _detached(found: Found, git: Mapping[str, set[str]]) -> list[Detach]:
     """List records git dropped that are still attached: in an outline, or holding their lesson."""
     in_chapters = {r["chapter"] for r in (found.course or {}).get("chapters") or ()}
-    in_lessons = {r["lesson"] for d in found.chapters for r in d.get("lessons") or ()}
+    in_lessons = {
+        r["lesson"]
+        for d in found.chapters
+        if d["name"] in in_chapters
+        for r in d.get("lessons") or ()
+    }
     attached = {
         CHAPTER: lambda d: d["name"] in in_chapters,
         LESSON: lambda d: d["name"] in in_lessons,

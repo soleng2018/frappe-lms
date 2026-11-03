@@ -128,6 +128,43 @@ def test_content_check_problems_come_back_too(tmp_path: Path) -> None:
     )
 
 
+def test_file_problems_and_quiz_problems_are_reported_in_one_run(tmp_path: Path) -> None:
+    # covers: AC-3. A bad video id (a file problem) must not hide a one option question.
+    text = GOOD.replace("dQw4w9WgXcQ", "12345678901").replace(
+        "options: [{text: A, correct: true}, {text: B}]", "options: [{text: A, correct: true}]"
+    )
+    out = problems(tmp_path, text)
+    assert "youtube must be text" in out
+    assert "has 1 options, must be 2 to 4" in out
+
+
+def test_a_key_that_is_not_text_does_not_hide_a_bad_question(tmp_path: Path) -> None:
+    # covers: AC-3. `key: no` reads as false in YAML.
+    text = GOOD.replace("  - key: ch\n", "  - key: no\n").replace(
+        "options: [{text: A, correct: true}, {text: B}]", "options: [{text: A}, {text: B}]"
+    )
+    out = problems(tmp_path, text)
+    assert "key must be text" in out
+    assert "has no correct option" in out
+
+
+def test_four_question_problems_in_one_file_are_all_named(tmp_path: Path) -> None:
+    # covers: AC-3
+    def q(key: str, options: str) -> str:
+        return f"      - key: {key}\n        text: T\n        options: {options}\n"
+
+    bad = (
+        q("a", "[{text: a, correct: true}, {text: b}, {text: c}, {text: d}, {text: e}]")
+        + q("b", "[{text: a}, {text: b}]")
+        + q("c", '[{text: a, correct: true}, {text: ""}]')
+        + q("d", "[{text: a, correct: true}, {text: a}]")
+    )
+    head = GOOD.split("      - key: q1")[0]
+    out = problems(tmp_path, head + bad)
+    for part in ("has 5 options", "has no correct option", "has an empty option", "repeats"):
+        assert part in out
+
+
 def test_a_top_level_list_is_refused(tmp_path: Path) -> None:
     assert "course: must be a mapping" in problems(tmp_path, "- a\n- b\n")
 
@@ -137,3 +174,30 @@ def test_a_non_utf8_body_file_is_not_a_traceback(tmp_path: Path) -> None:
     (tmp_path / "labs" / "a.md").write_bytes(b"\xff\xfe\x00bad")
     with pytest.raises(ContentError):
         load_course(tmp_path)
+
+
+def test_chapters_that_are_not_a_list_are_named(tmp_path: Path) -> None:
+    # covers: AC-3
+    head = GOOD.split("chapters:")[0]
+    assert "chapters: must be a list" in problems(tmp_path, head + "chapters: nope\n")
+
+
+def test_options_that_are_not_a_list_are_named(tmp_path: Path) -> None:
+    # covers: AC-3
+    text = GOOD.replace("options: [{text: A, correct: true}, {text: B}]", "options: nope")
+    out = problems(tmp_path, text)
+    assert "question 'q1': must be a list" in out
+    assert "has 0 options" in out
+
+
+@pytest.mark.parametrize("marks", ["two", "1.5", "true"])
+def test_marks_must_be_a_whole_number(tmp_path: Path, marks: str) -> None:
+    # covers: AC-3
+    text = GOOD.replace("        text: Which?\n", f"        text: Which?\n        marks: {marks}\n")
+    assert "marks must be a whole number" in problems(tmp_path, text)
+
+
+def test_a_lab_without_a_body_file_is_named(tmp_path: Path) -> None:
+    # covers: AC-3
+    text = GOOD.replace(", body_file: labs/a.md", "")
+    assert "body_file must be text, found NoneType None" in problems(tmp_path, text)

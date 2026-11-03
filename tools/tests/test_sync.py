@@ -341,7 +341,7 @@ def test_a_half_finished_run_is_completed_by_the_next() -> None:
 
 def test_escaped_rich_text_does_not_cause_a_write_on_the_next_run() -> None:
     fake = built()
-    assert fake.by_key("LMS Course", "c")["description"] == "A &amp; B"
+    assert fake.by_key("LMS Course", "c")["description"] == "A & B"
     assert run(fake)[1] == ["nothing to change"]
 
 
@@ -351,3 +351,51 @@ def test_the_output_never_holds_the_secret() -> None:
     with pytest.raises(LmsError) as e:
         run(fake)
     assert "token" not in str(e.value)
+
+
+def test_a_removed_chapter_settles_and_check_then_passes() -> None:
+    # covers: AC-2, AC-6. The lessons of a detached chapter must not stay "detached" forever.
+    fake = built()
+    c = course()
+    gone = replace(c, chapters=c.chapters[:1], quizzes=c.quizzes[:1])
+    assert run(fake, gone)[0] == 0
+    assert run(fake, gone) == (0, ["nothing to change"])
+    assert run(fake, gone, check=True) == (0, ["nothing to change"])
+
+
+def test_a_lesson_removed_from_a_kept_chapter_settles_after_one_run() -> None:
+    # covers: AC-2, AC-5
+    fake = built()
+    c = course()
+    first = c.chapters[0]
+    gone = replace(c, chapters=(replace(first, lessons=first.lessons[1:]), c.chapters[1]))
+    code, said = run(fake, gone)
+    assert code == 0
+    assert "detached Course Lesson v (kept in the LMS, out of the course)" in said
+    assert run(fake, gone) == (0, ["nothing to change"])
+
+
+def test_moving_a_lesson_between_chapters_is_not_called_unmanaged() -> None:
+    # covers: AC-5, AC-6
+    fake = built()
+    c = course()
+    one, two = c.chapters
+    moved = replace(
+        c,
+        chapters=(
+            replace(one, lessons=one.lessons[1:]),
+            replace(two, lessons=(*two.lessons, one.lessons[0])),
+        ),
+    )
+    code, said = run(fake, moved)
+    assert code == 0
+    assert not any("unmanaged" in line for line in said)
+
+
+def test_text_with_a_tag_is_escaped_by_the_lms_and_still_settles() -> None:
+    # covers: AC-2. Frappe escapes `&` only in values that hold an HTML tag.
+    fake = FakeLms()
+    c = replace(course(), description="<p>A & B</p>")
+    assert run(fake, c)[0] == 0
+    assert fake.by_key("LMS Course", "c")["description"] == "<p>A &amp; B</p>"
+    assert run(fake, c) == (0, ["nothing to change"])
