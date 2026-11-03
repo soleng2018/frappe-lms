@@ -72,7 +72,7 @@ The first `make up` builds the image, which takes a while. `configurator` and `c
 | `make down` | Stop the stack. Volumes (database, site files) are kept. |
 | `make ps` | Show all containers of the stack. |
 | `make logs` | Last 100 log lines per service. |
-| `make tools CMD=<command>` | Run a tools command in the tools container. Today: `init`, `whoami`, `config check [--for up\|tools-authentik]`, `config show` (secrets as `*****`), `config sample`. |
+| `make tools CMD=<command>` | Run a tools command in the tools container. Today: `init`, `whoami`, `sync [--check]`, `config check [--for up\|tools-authentik]`, `config show` (secrets as `*****`), `config sample`. |
 | `make hooks` | Install the pre-commit hook. Run once per clone. |
 | `make lint` | Scan the tree for secrets with gitleaks (in Docker), then run every hook on all files (hygiene, shellcheck, shfmt, hadolint, ruff, mypy, compose check). Hooks fix what they can and fail the run when they changed a file, so run it again. |
 | `make fmt` | Same as `make lint`. |
@@ -83,13 +83,32 @@ The stack tests need the stack running and a `.env`: run `cd tools && uv run pyt
 
 Style: `tools/` uses spaces and 100 columns, `apps/nile_auth/` follows Frappe (tabs, 110 columns). Details in [spec 0003](docs/specs/0003-coding-standards-and-tooling.md).
 
-## 5. Layout
+## 5. Course content
+
+You write the course in git and the `sync` command builds it in the LMS. It needs the stack running and the service user's key and secret in `.env` (`LMS_HOSTNAME`, `LMS_API_KEY`, `LMS_API_SECRET`, all created by `make init` and `make up`). No new keys.
+
+- `content/course.yaml` holds the course, its chapters and lessons (video, lab guide or quiz), and the quizzes with their multiple choice questions (two to four options, at least one correct).
+- `content/labs/*.md` holds one markdown lab guide per lab lesson. A lesson names its file with `body_file`, and the file must stay inside `content/`.
+- Every record has a `key`. The key is how the sync finds the record, so you can rename a title freely, but changing a key makes a new record and detaches the old one. Keep keys as text. In YAML write `"no"` and `"yes"` in quotes, and write a video id as text.
+
+```bash
+make tools CMD="sync --check"   # lists what would change; changes nothing; exits 1 if anything differs
+make tools CMD=sync             # checks the file first, then makes the LMS match git
+```
+
+- Run it again after you edit git: it updates the same records and creates no duplicates. With nothing to change it says `nothing to change`.
+- Git wins. If someone edited a synced record in the LMS, `sync` prints `LMS has X, git has Y` and overwrites it. Use `--check` first to see those edits.
+- Nothing is deleted. A lesson, chapter, quiz or question you remove from git leaves the course and stays in the LMS. The command names each one it detaches.
+- If a request fails, the command stops, prints the record, the URL, the status and the reason, and exits 1. Run it again: it carries on where it stopped.
+- Every existing batch gets the course added to it. Students keep their progress, and it is recalculated when the outline changes.
+
+## 6. Layout
 
 - `deploy/`: compose file, image build, version pins, container scripts.
 - `tools/`: Python package for setup scripts.
 - `apps/nile_auth/`: custom Frappe app (login rules from Authentik groups).
 - `content/`: courses. `brand/`: brand assets (do not edit). `docs/`: scope, specs, reviews.
 
-## 6. Keeping this file current
+## 7. Keeping this file current
 
 This README is updated at the end of every work turn that changes how the repo is set up or used. See the rules in [AGENTS.md](AGENTS.md).

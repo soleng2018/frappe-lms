@@ -123,9 +123,9 @@ The loader uses `yaml.safe_load`, reads `body_file` relative to `content/`, and 
 2. Fetch the LMS records, scoped to this course: the course by `nile_key`; its chapters, lessons, and quizzes by `course`; the questions of those quizzes (a question has no `course` field, so it follows its quiz); the records in the course with no `nile_key` (the unmanaged ones); and every LMS Batch with its Batch Course rows.
 3. Phase 1, ensure: create each missing record in dependency order with only its required fields: course, chapters, questions, quizzes (with their question rows, since the rows link to questions that must exist first), then lessons. Every LMS `name` comes from the create response, never from the title (LMS names a quiz from its title, so a second quiz with the same title gets a suffixed name).
 4. Phase 2, converge: re-fetch, then the pure `plan_sync(course, found, batches)` returns an ordered tuple of actions now that every name is known: `Update(differences)` for fields, lesson bodies (via `lesson_body`), `quiz_id`, `quiz.lesson` and `quiz.course`, the outline tables and quiz question rows; `Detach`; `AddToBatch`; and the unmanaged list. A quiz lesson's `quiz_id`, `body`, and the quiz's `lesson` and `course` are all compared fields, so a run that stopped halfway finishes on the next run. Differences come from `drift.compare` on normalised values (below).
-5. `--check`: print the phase 1 creates that would happen, then the phase 2 differences, detaches, and unmanaged records for the records that exist. Exit 1 if there is any.
-6. Normal run: print each field being overwritten, then apply phase 1 and phase 2 in order.
-7. If the outline changed, make stored progress correct for the course's enrollments (build task 1 finds how LMS recomputes it; if it does not, set `progress` to completed lessons still in the outline over lessons in the outline, as a whole number).
+5. [x] `--check`: print the phase 1 creates that would happen, then the phase 2 differences, detaches, and unmanaged records for the records that exist. Exit 1 if there is any.
+6. [x] Normal run: print each field being overwritten, then apply phase 1 and phase 2 in order.
+7. [x] If the outline changed, make stored progress correct for the course's enrollments (build task 1 finds how LMS recomputes it; if it does not, set `progress` to completed lessons still in the outline over lessons in the outline, as a whole number).
 
 **Compare rules**: a child table is compared as a tuple of linked names in row order (`chapters`, `lessons`, quiz `questions` with their `marks`, `instructors`), never as raw rows with `name`, `idx`, and `modified`. Rich text fields (`question`, `description`, lesson `body`) go through one pure normalise function on both sides (strip, unescape what Frappe escapes) so a round trip is equal; build task 1 settles its exact rules. A record that does not exist yet is a create, never drift.
 
@@ -201,13 +201,13 @@ Approach: Tracer Bullet. Prove one thin create path end to end on the live site 
 2. [x] Extend the content model (`Question.options` with at most 4, `Course.short_introduction` and `description`), add the `Option` type, and extend `check_course` for choice questions (fewer than two or more than four options, no correct option, empty or repeated option text), with unit tests, satisfies **AC-1**, **AC-3**
 3. [x] Add the loader `contentfile.py` (`yaml.safe_load`; text required for `key`, `title`, `youtube`, question and option text; `body_file` must exist and stay inside `content/`; errors naming the file and key) and a small sample `content/course.yaml` with a video, a lab guide, and a quiz for each, with unit tests, satisfies **AC-1**, **AC-3**
 4. [x] Add the LMS client `lms.py` with `httpx`: list, get, create, update, token header, read retries, a duplicate create treated as "fetch by key", errors that print status, `exc_type`, and the decoded message with the URL and never a traceback, header, or secret, with `httpx.MockTransport` unit tests, satisfies **AC-7**
-5. Thin thread: phase 1 and phase 2 for course, chapter, and a video lesson only, the `sync` command in `cli.py`, and a live run, satisfies **AC-1**
-6. Thicken the create path: questions and quizzes, lab lessons, quiz lessons (`quiz_id`, macro body, back link), and the outline tables, satisfies **AC-1**, **AC-4**
-7. Thicken to update: course scoped fetch, the normalised compare (child tables as ordered name tuples, rich text through one function), `Update` actions, the `LMS has X, git has Y` warning, and `nothing to change` on a rerun. Include a test for moving a lesson between chapters and for a run that stopped halfway, satisfies **AC-2**, **AC-4**, **AC-6**
-8. Add removals as in Key invariants, the `removed unmanaged row` lines, and the progress recompute step, satisfies **AC-5**
-9. Add batches: read each LMS Batch, send its existing Batch Course rows plus the missing one, satisfies **AC-8**
-10. Add `sync --check` with creates, detaches, differences, the unmanaged list, and exit codes, satisfies **AC-6**
-11. Add an `integration` test that runs sync twice on the live site and checks the invariants, then update `README.md` with the command and the content folder, satisfies **AC-2**, **AC-4**, **AC-5**, **AC-8**
+5. [x] Thin thread: phase 1 and phase 2 for course, chapter, and a video lesson only, the `sync` command in `cli.py`, and a live run, satisfies **AC-1**
+6. [x] Thicken the create path: questions and quizzes, lab lessons, quiz lessons (`quiz_id`, macro body, back link), and the outline tables, satisfies **AC-1**, **AC-4**
+7. [x] Thicken to update: course scoped fetch, the normalised compare (child tables as ordered name tuples, rich text through one function), `Update` actions, the `LMS has X, git has Y` warning, and `nothing to change` on a rerun. Include a test for moving a lesson between chapters and for a run that stopped halfway, satisfies **AC-2**, **AC-4**, **AC-6**
+8. [x] Add removals as in Key invariants, the `removed unmanaged row` lines, and the progress recompute step, satisfies **AC-5**
+9. [x] Add batches: read each LMS Batch, send its existing Batch Course rows plus the missing one, satisfies **AC-8**
+10. [x] Add `sync --check` with creates, detaches, differences, the unmanaged list, and exit codes, satisfies **AC-6**
+11. [x] Add an `integration` test that runs sync twice on the live site and checks the invariants, then update `README.md` with the command and the content folder, satisfies **AC-2**, **AC-4**, **AC-5**, **AC-8**
 
 ## Consequences
 
