@@ -177,3 +177,51 @@ def test_video_value_that_is_not_an_id(bad: str) -> None:
     chapter = replace(course.chapters[0], lessons=(VideoLesson("v1", "x", bad),))
     problems = check_course(replace(course, chapters=(chapter, course.chapters[1])))
     assert any("video lesson 'v1' youtube" in p for p in problems)
+
+
+def _with_video(youtube: str) -> tuple[str, ...]:
+    course = good_course()
+    chapter = replace(
+        course.chapters[0], lessons=(VideoLesson("v1", "x", youtube), course.chapters[0].lessons[1])
+    )
+    return check_course(replace(course, chapters=(chapter, course.chapters[1])))
+
+
+@pytest.mark.parametrize("bad", ["abcdefghij", "abcdefghijkl", "abcdefghi!k", "abcdefghi k"])
+def test_video_id_must_be_exactly_11_allowed_characters(bad: str) -> None:
+    assert any("video lesson 'v1'" in p for p in _with_video(bad))
+
+
+@pytest.mark.parametrize("ok", ["a-b_c1D2E3F", "-----------", "___________"])
+def test_video_id_with_dashes_and_underscores_is_allowed(ok: str) -> None:
+    assert _with_video(ok) == ()
+
+
+def test_every_bad_video_is_named() -> None:
+    course = good_course()
+    lessons = (VideoLesson("v1", "x", "short"), VideoLesson("v2", "y", "also bad"))
+    chapter = replace(course.chapters[0], lessons=lessons)
+    problems = check_course(
+        replace(course, chapters=(chapter, course.chapters[1]), quizzes=course.quizzes[1:])
+    )
+    assert [("'v1'" in p, "'v2'" in p) for p in problems] == [(True, False), (False, True)]
+
+
+def test_blank_course_chapter_and_lesson_keys_are_named() -> None:
+    course = good_course()
+    chapter = replace(course.chapters[1], key="  ", lessons=(LabLesson("", "Lab", "x"),))
+    problems = check_course(replace(course, key=" ", chapters=(course.chapters[0], chapter)))
+    assert any("course nile_key is empty" in p for p in problems)
+    assert any("chapter nile_key is empty" in p for p in problems)
+    assert any("lesson nile_key is empty" in p for p in problems)
+
+
+def test_quiz_body_with_an_empty_quiz_name_is_refused() -> None:
+    with pytest.raises(ValueError, match="needs the quiz name"):
+        lesson_body(QuizLesson("l", "t", "q"), "")
+
+
+def test_user_input_question_is_gradable() -> None:
+    course = good_course()
+    ok = replace(course.quizzes[0], questions=(Question("a", "?", type="User Input"),))
+    assert check_course(replace(course, quizzes=(ok, course.quizzes[1]))) == ()

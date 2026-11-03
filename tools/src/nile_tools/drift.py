@@ -47,6 +47,7 @@ def compare(wanted: Iterable[Record], found: Iterable[Record]) -> Drift:
     Only fields git writes are compared, so fields LMS fills itself never count as drift.
     A wanted record that does not exist yet is a create, not drift.
     """
+    found = tuple(found)  # read twice below, so a generator must not be spent by the first pass
     in_lms = {(r.doctype, r.key): r for r in found if r.key}
     differences = tuple(
         Difference(w.doctype, w.key, field, value, current.fields.get(field))

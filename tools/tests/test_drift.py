@@ -62,3 +62,23 @@ def test_stale_quiz_name_in_the_body_is_drift() -> None:
     wanted = [Record("Course Lesson", "l1", {"body": '{{ Quiz("QZ-2") }}'})]
     found = [Record("Course Lesson", "l1", {"body": '{{ Quiz("QZ-1") }}'}, "L1")]
     assert len(compare(wanted, found).differences) == 1
+
+
+def test_a_generator_of_found_records_still_lists_the_unmanaged_ones() -> None:
+    found = (r for r in [Record("Course Lesson", "v1", {}), Record("Course Lesson", "", {})])
+    drift = compare([], found)
+    assert drift.unmanaged == (Record("Course Lesson", "", {}),)
+
+
+def test_generators_for_both_sides_report_drift_and_unmanaged_together() -> None:
+    wanted = (r for r in [Record("Course Lesson", "v1", {"title": "New"})])
+    found = (
+        r
+        for r in [
+            Record("Course Lesson", "v1", {"title": "Old"}, "L1"),
+            Record("Course Lesson", None, {"title": "Hand made"}, "L9"),
+        ]
+    )
+    drift = compare(wanted, found)
+    assert [d.field for d in drift.differences] == ["title"]
+    assert [r.name for r in drift.unmanaged] == ["L9"]

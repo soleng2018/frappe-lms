@@ -168,12 +168,23 @@ def test_the_fields_the_spec_names_exist(doctype: str, columns: set[str]) -> Non
     assert columns <= have
 
 
-def test_moderator_delete_permission_is_one_row() -> None:
+def test_quiz_submission_permissions_keep_the_lms_rows_and_add_moderator_delete() -> None:
+    """One Custom DocPerm row makes Frappe drop the standard rows, so all five must be here."""
     rows = _sql(
-        "select role, `delete` from `tabCustom DocPerm` where parent = 'LMS Quiz Submission' "
-        "and name like 'nile-%'"
+        "select role, `read`, `write`, `delete`, if_owner from `tabCustom DocPerm` "
+        "where parent = 'LMS Quiz Submission' and name like 'nile-%' order by role"
     )
-    assert rows == [["Moderator", "1"]]
+    assert rows == [
+        ["Batch Evaluator", "1", "0", "0", "0"],
+        ["Course Creator", "1", "0", "0", "0"],
+        ["LMS Student", "1", "0", "0", "1"],
+        ["Moderator", "1", "0", "1", "0"],
+        ["System Manager", "1", "1", "1", "0"],
+    ]
+    every_row = _sql(
+        "select count(*) from `tabCustom DocPerm` where parent = 'LMS Quiz Submission'"
+    )
+    assert every_row == [["5"]]  # nothing else widens or narrows the access
 
 
 def test_attempts_are_limited_and_only_a_moderator_may_reset_them() -> None:
@@ -234,7 +245,9 @@ def test_a_student_sees_only_their_own_records(lms: dict[str, Any]) -> None:
     assert lms["AC7_s2_sees_certificates_of"] == []
     assert lms["AC7_s2_reads_s1_certificate"] is False
     assert lms["AC7_s1_reads_own_certificate"] is True
+    assert lms["AC7_s2_reads_own_submission"] is True
     assert lms["AC7_s2_reads_s1_submission"] is False
+    assert len(lms["AC7_s2_lists_submissions_of"]) == 1  # only their own member value
 
 
 def test_batch_with_the_spec_values_enrolls_members_in_its_courses(lms: dict[str, Any]) -> None:

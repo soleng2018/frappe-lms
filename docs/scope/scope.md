@@ -92,8 +92,8 @@ spec [0004](../specs/0004-data-model.md) · code in `apps/nile_auth/`, `tools/sr
   - [x] `lesson_body` function and the video id check in `tools`, with unit tests (AC-8, AC-10)
   - [x] Compare reports quiz and video lessons whose body is not the macro, and the live test also tries a lesson with the macro (AC-9, AC-10)
 - [ ] Verify it: `/check verify data model`
-- [ ] Test it: `/test data model`
-- [ ] Review it (fresh model): `/check review data model`
+- [x] Test it: `/test data model`
+- [x] Review it (fresh model): `/check review data model`
 - [ ] Document it: `/document data model`
 
 ## Slice 1: the thin certify thread

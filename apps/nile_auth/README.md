@@ -32,8 +32,10 @@ group to role mapping at login. The design is in [spec 0004](../../docs/specs/00
 - Video and lab lessons complete when the student marks them (`save_progress`).
 - `create_certificate` works for a Website User with only LMS Student, no evaluator needed. It is refused
   under 100% progress. The certificate is created unpublished, and only its owner can read it.
-- A student cannot read even their own Quiz Submission through the generic API (the doctype gives LMS
-  Student no read). They read their own Enrollment, and see no one else's progress or certificates.
+- A student reads only their own Quiz Submission (LMS gives LMS Student `read` with `if_owner`), their own
+  Enrollment, and no one else's progress or certificates. Once a doctype has any Custom DocPerm row, Frappe
+  ignores its standard permissions, so the Quiz Submission fixture restates all five LMS rows and adds
+  `delete` for Moderator.
 - An LMS Batch with the spec values saves. Inserting a Batch Enrollment as Administrator creates the
   course enrollments. Run the login hook as Administrator: a Batch Enrollment by anyone else needs
   Moderator, Batch Evaluator, or self enrollment switched on.
