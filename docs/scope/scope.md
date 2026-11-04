@@ -29,7 +29,7 @@ _The Frappe links have not been read by `/scope`; `/architect` should read the o
 | 4 | Data model (course, quiz, certificate, roles) | Foundation | in-progress |
 | 5 | LMS running behind Traefik | Slice 1 | planned |
 | 6 | IDP login (OIDC) | Slice 1 | planned |
-| 7 | Group to role mapping | Slice 1 | planned |
+| 7 | Group to role mapping | Slice 1 | in-progress |
 | 8 | Content sync, one course | Slice 1 | done |
 | 9 | Quiz pass rules & certificate | Slice 1 | planned |
 | 10 | Branding & theme | Slice 2 | planned |
@@ -108,10 +108,21 @@ A script creates the OIDC application in Authentik through its API (only items i
 **Done when:** running the script on a clean setup lets a student sign in through Authentik and land in the LMS, and running it twice changes nothing.
 - [ ] Design it (spec): `/architect IDP login`
 
-### 7. Group to role mapping · needs a decision
+### 7. Group to role mapping · in-progress
 Members of `NileWorkshopNAdmin` groups (N is 1, 2, 3…) become students, and `hol-admins` become admins. The groups already exist, so the LMS only reads them.
 **Done when:** a user in a NileWorkshop group gets the student role, a `hol-admins` user gets admin, and a user in neither is refused. Group changes apply at the next login.
-- [ ] Design it (spec): `/architect group to role mapping`
+spec [0006](../specs/0006-group-to-role-mapping/index.md) · code in `apps/nile_auth/`, `deploy/scripts/create-site.sh`
+- [x] Design it (spec): `/architect group to role mapping`
+- [ ] Build it: `/develop group to role mapping`
+  - [x] Probe the live site, add the `nile_service_user` site setting, and the pure group check with unit tests (AC-4, AC-7)
+  - [x] Thin thread: the callback override creates a student and refuses everyone else (AC-1, AC-3)
+  - [x] Batches, enrollments, `nile_groups`, admin and both paths, role reconcile (AC-1, AC-2, AC-5, AC-6, AC-11)
+  - [x] Safety: early state check, protected accounts, error handling, logs (AC-7, AC-8, AC-9, AC-10, AC-12)
+  - [ ] Live integration test and README, then the real Authentik sign in once feature 6 is up (AC-1 to AC-11)
+- [ ] Verify it: `/check verify group to role mapping`
+- [ ] Test it: `/test group to role mapping`
+- [ ] Review it (fresh model): `/check review group to role mapping`
+- [ ] Document it: `/document group to role mapping`
 
 ### 8. Content sync, one course · done
 Push one course from git to Frappe through its API: a YouTube video lesson, a lab guide lesson, and a quiz for each. The thinnest real version of the authoring path.

@@ -1,0 +1,27 @@
+# Runs inside `bench console`. Makes (action "make") or removes (action "drop") the throwaway key.
+import json
+import frappe
+
+action = "__ACTION__"
+if action == "make" and not frappe.db.exists("Social Login Key", "nileprobe"):
+    frappe.get_doc(
+        {
+            "doctype": "Social Login Key",
+            "provider_name": "nileprobe",
+            "social_login_provider": "Custom",
+            "enable_social_login": 1,
+            "client_id": "x",
+            "client_secret": "y",
+            "custom_base_url": 1,
+            "base_url": "http://127.0.0.1:9",
+            "authorize_url": "/a",
+            "access_token_url": "/t",
+            "redirect_url": "/api/method/frappe.integrations.oauth2_logins.custom/nileprobe",
+            "api_endpoint": "/u",
+            "sign_ups": "Allow",
+        }
+    ).insert(ignore_permissions=True)
+if action == "drop" and frappe.db.exists("Social Login Key", "nileprobe"):
+    frappe.delete_doc("Social Login Key", "nileprobe", force=True, ignore_permissions=True)
+frappe.db.commit()
+print("RESULT:" + json.dumps({"exists": bool(frappe.db.exists("Social Login Key", "nileprobe"))}))
