@@ -87,13 +87,22 @@ def test_first_run_creates_site_and_clears_the_pending_marker(bench_dir):
     assert not (sites / f".creating-{SITE}").exists()
 
 
-def test_the_site_timezone_is_set_after_the_service_user(bench_dir):
+def test_the_site_users_are_set_up_in_order(bench_dir):
     assert _run(bench_dir, LMS_TIMEZONE="America/Los_Angeles").returncode == 0
     executed = [c for c in _calls(bench_dir) if " execute " in c]
     assert [c.rsplit(" ", 1)[1] for c in executed] == [
         "nile_auth.setup.ensure_service_user",
         "nile_auth.setup.ensure_timezone",
+        "nile_auth.setup.ensure_mcp_user",
     ]
+
+
+def test_the_mcp_user_is_recorded_in_site_config_and_runs_on_a_rerun(bench_dir):
+    assert _run(bench_dir, LMS_MCP_USER="nile-mcp@example.com").returncode == 0
+    assert any("set-config nile_mcp_user nile-mcp@example.com" in c for c in _calls(bench_dir))
+    (bench_dir / "bench.log").unlink()
+    assert _run(bench_dir, LMS_MCP_USER="nile-mcp@example.com").returncode == 0
+    assert any(c.endswith("ensure_mcp_user") for c in _calls(bench_dir))
 
 
 def test_interrupted_run_is_dropped_then_recreated(bench_dir):

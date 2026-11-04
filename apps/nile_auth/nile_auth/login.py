@@ -134,10 +134,13 @@ def _login(provider: str, code: str, state: str, seen: dict) -> str:
 
 
 def _refuse_if_protected(name: str, info: dict, provider: str) -> None:
+	# The MCP user is optional here: a site without the setting still accepts logins.
 	service_user = (frappe.conf.get(c.CONF_SERVICE_USER) or "").lower()
+	mcp_user = (frappe.conf.get(c.CONF_MCP_USER) or "").lower()
 	if (
 		name in PROTECTED_USERS
 		or name.lower() == service_user
+		or (mcp_user and name.lower() == mcp_user)
 		or frappe.db.exists("Has Role", {"parent": name, "parenttype": "User", "role": "System Manager"})
 	):
 		raise Refused(c.OUTCOME_PROTECTED, c.PAGE_PROTECTED)

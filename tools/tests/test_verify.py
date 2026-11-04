@@ -11,6 +11,9 @@ from nile_tools.config import ConfigError
 
 REPO = Path(__file__).resolve().parents[2]
 HOST = "lms.example.com"
+MCP_URL = f"https://{HOST}/api/v2/mcp"
+SETTINGS = verify.Settings(HOST, "k" * 32, "s" * 32)
+RPC = {"jsonrpc": "2.0", "id": 1, "result": {"protocolVersion": "2025-06-18"}}
 HOME = (
     '<html><head><link rel="stylesheet" href="/assets/a.css?v=1">'
     '<link rel="modulepreload" href="/assets/m.js"></head>'
@@ -34,9 +37,21 @@ def _handler(overrides: dict[str, httpx.Response] | None = None):
     }
 
     def handle(request: httpx.Request) -> httpx.Response:
+        if str(request.url) == MCP_URL:
+            if "authorization" in request.headers:
+                return table.get("mcp-key", httpx.Response(200, json=RPC))
+            return table.get("mcp-guest", httpx.Response(401, text="AuthenticationError: no"))
         return table[str(request.url)]
 
     return httpx.MockTransport(handle)
+
+
+VALUES = {
+    "LMS_HOSTNAME": HOST,
+    "LMS_MCP_USER": "nile-mcp@example.com",
+    "LMS_MCP_API_KEY": "k" * 32,
+    "LMS_MCP_API_SECRET": "s" * 32,
+}
 
 
 def _levels(results: list[verify.Result]) -> dict[str, str]:
@@ -44,7 +59,7 @@ def _levels(results: list[verify.Result]) -> dict[str, str]:
 
 
 def test_everything_good_passes():
-    results = verify.probe(verify.Settings(HOST), transport=_handler())
+    results = verify.probe(SETTINGS, transport=_handler())
     assert {r.level for r in results} == {"PASS"}
     assert len([r for r in results if r.name == "asset"]) == 3
 
@@ -68,7 +83,7 @@ def test_everything_good_passes():
     ],
 )
 def test_bad_responses_fail(url, response, name):
-    results = verify.probe(verify.Settings(HOST), transport=_handler({url: response}))
+    results = verify.probe(SETTINGS, transport=_handler({url: response}))
     assert "FAIL" in [r.level for r in results if r.name == name]
 
 
@@ -80,9 +95,7 @@ def test_cloudflare_challenge_is_named():
 
 
 def test_http_200_is_a_warn_not_a_fail():
-    results = verify.probe(
-        verify.Settings(HOST), transport=_handler({f"http://{HOST}/": httpx.Response(200)})
-    )
+    results = verify.probe(SETTINGS, transport=_handler({f"http://{HOST}/": httpx.Response(200)}))
     assert _levels(results)["http redirect"] == "WARN"
     assert "Always Use HTTPS" in next(r for r in results if r.name == "http redirect").detail
 
@@ -96,7 +109,7 @@ def test_network_failure_names_the_url():
     def boom(request: httpx.Request) -> httpx.Response:
         raise httpx.ConnectError("no")
 
-    results = verify.probe(verify.Settings(HOST), transport=httpx.MockTransport(boom))
+    results = verify.probe(SETTINGS, transport=httpx.MockTransport(boom))
     ping = next(r for r in results if r.name == "ping")
     assert ping.level == "FAIL"
     assert f"https://{HOST}/api/method/ping" in ping.detail
@@ -168,7 +181,7 @@ def test_run_exit_codes_and_no_fail_on_warn(tmp_path):
     lines: list[str] = []
     code = verify.run(
         tmp_path,
-        {"LMS_HOSTNAME": HOST},
+        VALUES,
         say=lines.append,
         transport=_handler({f"http://{HOST}/": httpx.Response(200)}),
     )
@@ -176,8 +189,59 @@ def test_run_exit_codes_and_no_fail_on_warn(tmp_path):
     assert any(line.startswith("WARN http redirect") for line in lines)
     bad = verify.run(
         tmp_path,
-        {"LMS_HOSTNAME": HOST},
+        VALUES,
         say=lines.append,
         transport=_handler({f"https://{HOST}/api/method/ping": httpx.Response(500)}),
     )
     assert bad == 1
+
+
+# --- mcp ---
+
+
+def test_mcp_guest_must_be_401_authentication():
+    for response in (httpx.Response(200, json=RPC), httpx.Response(401, text="nope")):
+        results = verify.probe(SETTINGS, transport=_handler({"mcp-guest": response}))
+        assert _levels(results)["mcp without key"] == "FAIL"
+
+
+@pytest.mark.parametrize(
+    "response",
+    [
+        httpx.Response(403, text="Forbidden"),
+        httpx.Response(200, text="not json"),
+        httpx.Response(200, json={"jsonrpc": "2.0", "error": {}}),
+    ],
+)
+def test_mcp_with_key_failures(response):
+    results = verify.probe(SETTINGS, transport=_handler({"mcp-key": response}))
+    assert _levels(results)["mcp with key"] == "FAIL"
+
+
+def test_mcp_with_key_accepts_an_sse_data_line():
+    sse = httpx.Response(200, text='event: message\ndata: {"jsonrpc":"2.0","id":1,"result":{}}\n\n')
+    results = verify.probe(SETTINGS, transport=_handler({"mcp-key": sse}))
+    assert _levels(results)["mcp with key"] == "PASS"
+
+
+def test_output_never_holds_the_key_or_secret(tmp_path):
+    (tmp_path / "deploy").mkdir()
+    (tmp_path / "deploy/compose.yaml").write_text((REPO / "deploy/compose.yaml").read_text())
+    lines: list[str] = []
+    values = {
+        "LMS_HOSTNAME": HOST,
+        "LMS_MCP_USER": "nile-mcp@example.com",
+        "LMS_MCP_API_KEY": "k" * 32,
+        "LMS_MCP_API_SECRET": "s" * 32,
+    }
+    bad = _handler({"mcp-key": httpx.Response(403, text="k" * 32)})
+    verify.run(tmp_path, values, say=lines.append, transport=bad)
+    assert "k" * 32 not in "\n".join(lines)
+    assert "s" * 32 not in "\n".join(lines)
+
+
+def test_all_missing_mcp_keys_are_named_at_once():
+    with pytest.raises(ConfigError) as e:
+        verify.load_settings({"LMS_HOSTNAME": HOST})
+    for key in ("LMS_MCP_USER", "LMS_MCP_API_KEY", "LMS_MCP_API_SECRET"):
+        assert key in str(e.value)

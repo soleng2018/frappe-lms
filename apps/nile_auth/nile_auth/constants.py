@@ -33,6 +33,7 @@ CONF_ADMIN_GROUP = "nile_admin_group"
 CONF_STUDENT_PREFIX = "nile_student_group_prefix"
 CONF_STUDENT_SUFFIX = "nile_student_group_suffix"
 CONF_SERVICE_USER = "nile_service_user"
+CONF_MCP_USER = "nile_mcp_user"
 
 # Outcome words for the one log line per login (AC-12).
 OUTCOME_OK = "ok"

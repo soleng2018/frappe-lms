@@ -4,6 +4,7 @@ Every check is a pure function from a response or a parsed compose file to a `Re
 `probe` and `run` touch the network and the disk.
 """
 
+import json
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from html.parser import HTMLParser
@@ -24,6 +25,8 @@ __all__ = [
     "compose_results",
     "judge_asset",
     "judge_home",
+    "judge_mcp_authenticated",
+    "judge_mcp_guest",
     "judge_ping",
     "judge_redirect",
     "judge_socketio",
@@ -36,7 +39,7 @@ __all__ = [
 
 Level = Literal["PASS", "WARN", "FAIL"]
 
-REQUIRED_KEYS = ("LMS_HOSTNAME",)
+REQUIRED_KEYS = ("LMS_HOSTNAME", "LMS_MCP_USER", "LMS_MCP_API_KEY", "LMS_MCP_API_SECRET")
 TIMEOUT = 10.0
 USER_AGENT = "nile-tools-verify/1.0"
 MAX_ASSETS = 5  # per type
@@ -68,6 +71,8 @@ class Settings:
     """The values `verify deploy` needs from .env."""
 
     host: str
+    mcp_key: str = ""
+    mcp_secret: str = ""
 
 
 @dataclass(frozen=True)
@@ -85,7 +90,11 @@ def load_settings(values: Mapping[str, str]) -> Settings:
         raise ConfigError(
             f"verify deploy needs these keys in .env: {', '.join(missing)} (run make init)"
         )
-    return Settings(host=values["LMS_HOSTNAME"])
+    return Settings(
+        host=values["LMS_HOSTNAME"],
+        mcp_key=values["LMS_MCP_API_KEY"],
+        mcp_secret=values["LMS_MCP_API_SECRET"],
+    )
 
 
 # --- public checks: pure judges over a response ---
@@ -190,6 +199,79 @@ def judge_redirect(url: str, r: httpx.Response) -> Result:
         f"{url} gave HTTP {r.status_code} with no redirect to https. "
         "Turn on Always Use HTTPS in Cloudflare (see README)",
     )
+
+
+MCP_PATH = "/api/v2/mcp"
+MCP_HEADERS = {
+    "Content-Type": "application/json",
+    "Accept": "application/json, text/event-stream",
+}
+MCP_INITIALIZE = {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "initialize",
+    "params": {
+        "protocolVersion": "2025-06-18",
+        "capabilities": {},
+        "clientInfo": {"name": "nile-verify", "version": "1"},
+    },
+}
+
+
+def judge_mcp_guest(url: str, r: httpx.Response) -> Result:
+    """Pass when the MCP endpoint refuses a caller with no credentials (401, Authentication)."""
+    if r.status_code == 401 and "Authentication" in r.text:
+        return Result("PASS", "mcp without key", f"{url} gave 401 Authentication")
+    return Result(
+        "FAIL", "mcp without key", f"{url} gave {_status_note(r)}, expected 401 Authentication"
+    )
+
+
+def _rpc_result(r: httpx.Response) -> bool:
+    """True when the body is a JSON-RPC reply with a result, as JSON or as an SSE data line."""
+    candidates = [r.text]
+    candidates += [
+        ln.removeprefix("data:").strip() for ln in r.text.splitlines() if ln.startswith("data:")
+    ]
+    for text in candidates:
+        try:
+            body = json.loads(text)
+        except ValueError:
+            continue
+        if isinstance(body, dict) and "result" in body:
+            return True
+    return False
+
+
+def judge_mcp_authenticated(url: str, r: httpx.Response) -> Result:
+    """Pass when the MCP user's key gets 200 and a JSON-RPC result."""
+    if r.status_code != 200:
+        return Result(
+            "FAIL",
+            "mcp with key",
+            f"{url} gave {_status_note(r)}, expected 200 (key shown as ****)",
+        )
+    if not _rpc_result(r):
+        return Result("FAIL", "mcp with key", f"{url} gave 200 but no JSON-RPC result")
+    return Result("PASS", "mcp with key", f"{url} gave 200 with a JSON-RPC result")
+
+
+def mcp_results(client: httpx.Client, settings: Settings) -> list[Result]:
+    """POST an initialize request without and then with the MCP user's key."""
+    url = f"https://{settings.host}{MCP_PATH}"
+    token = f"token {settings.mcp_key}:{settings.mcp_secret}"
+    results: list[Result] = []
+    for name, headers, judge in (
+        ("mcp without key", MCP_HEADERS, judge_mcp_guest),
+        ("mcp with key", {**MCP_HEADERS, "Authorization": token}, judge_mcp_authenticated),
+    ):
+        try:
+            r = client.post(url, json=MCP_INITIALIZE, headers=headers)
+        except httpx.HTTPError as e:
+            results.append(_unreachable(name, url, type(e).__name__))
+            continue
+        results.append(judge(url, r))
+    return results
 
 
 # --- public checks: the network edge ---
@@ -421,7 +503,7 @@ def probe(settings: Settings, *, transport: httpx.BaseTransport | None = None) -
     with httpx.Client(
         timeout=TIMEOUT, headers={"User-Agent": USER_AGENT}, transport=transport
     ) as client:
-        return public_results(client, settings.host)
+        return [*public_results(client, settings.host), *mcp_results(client, settings)]
 
 
 def run(

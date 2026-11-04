@@ -70,6 +70,7 @@ bench --site "$SITE" set-config nile_admin_group "${AUTHENTIK_ADMIN_GROUP:-}"
 bench --site "$SITE" set-config nile_student_group_prefix "${AUTHENTIK_STUDENT_GROUP_PREFIX:-}"
 bench --site "$SITE" set-config nile_student_group_suffix "${AUTHENTIK_STUDENT_GROUP_SUFFIX:-}"
 bench --site "$SITE" set-config nile_service_user "${LMS_SERVICE_USER:-}"
+bench --site "$SITE" set-config nile_mcp_user "${LMS_MCP_USER:-}"
 
 INSTALLED=$(bench --site "$SITE" list-apps | awk '{print $1}')
 for APP in lms nile_auth; do
@@ -82,6 +83,7 @@ done
 bench --site "$SITE" migrate
 bench --site "$SITE" execute nile_auth.setup.ensure_service_user
 bench --site "$SITE" execute nile_auth.setup.ensure_timezone
+bench --site "$SITE" execute nile_auth.setup.ensure_mcp_user
 touch "$MARKER"
 rm -f "$PENDING"
 echo "create-site done"
