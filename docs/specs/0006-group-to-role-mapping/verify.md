@@ -12,8 +12,8 @@ _Steps derived from spec 0006 acceptance criteria. `/check verify` runs these; `
 - [ ] With a session already open, remove the group and sign in again in another browser → the first session loses access at once (Value sourcing: roles) → AC-5
 
 ## Commands
-- [ ] `make test` → groups unit tests pass (35 cases, every near miss, odd prefix and suffix) → AC-4, AC-7
-- [ ] `uv run --directory tools pytest -m integration tests/test_group_role_mapping_integration.py` → 14 pass → AC-1 to AC-11
+- [x] `make test` → groups unit tests pass (35 cases, every near miss, odd prefix and suffix) → AC-4, AC-7
+- [x] `uv run --directory tools pytest -m integration tests/test_group_role_mapping_integration.py` → 14 pass → AC-1 to AC-11
 - [ ] `curl -s -o /dev/null -w '%{http_code}' -H 'Host: <site>' 'http://127.0.0.1:8000/api/method/frappe.integrations.oauth2_logins.custom/<provider>?code=x&state=bogus'` from the backend container → `417` before any code exchange → AC-10
 - [ ] `tail sites/<site>/logs/nile_auth.log` after the logins above → one line per login with email, outcome word, and groups, and no code or token → AC-12
 - [ ] Vary the group names (`NileWorkshop03Admin`, `nileworkshop3admin`, `NileWorkshop3Admin2`) in the Authentik test group → counted for nothing (Value sourcing: Classify) → AC-4

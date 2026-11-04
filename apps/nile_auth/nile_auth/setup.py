@@ -2,11 +2,28 @@
 
 import os
 import sys
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import frappe
 
 # Roles the content sync needs (names confirmed against LMS v2.68.0 in spec 0004).
 LMS_ROLES = ("LMS Student", "Course Creator", "Moderator", "Batch Evaluator")
+
+
+def ensure_timezone():
+	"""Set the System Settings timezone from LMS_TIMEZONE (rerun safe). Without it Frappe uses Asia/Kolkata."""
+	name = os.environ["LMS_TIMEZONE"]
+	try:
+		ZoneInfo(name)
+	except ZoneInfoNotFoundError, ValueError:
+		# See ensure_service_user: exit directly, because raising hides the message.
+		sys.exit(f"ERROR: LMS_TIMEZONE '{name}' is not a known timezone. Nothing was changed.")
+	if frappe.db.get_single_value("System Settings", "time_zone") == name:
+		print(f"Timezone already {name}")
+		return
+	frappe.db.set_single_value("System Settings", "time_zone", name)
+	frappe.db.commit()
+	print(f"Timezone set to {name}")
 
 
 def ensure_service_user():

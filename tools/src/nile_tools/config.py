@@ -107,6 +107,16 @@ KEYS: tuple[Key, ...] = (
         services=(("create-site", "LMS_SERVICE_USER"),),
     ),
     Key(
+        "LMS_TIMEZONE",
+        "LMS",
+        "Site timezone (IANA name). New batches and the Desk use it",
+        "default",
+        required_for="up",
+        validator="timezone",
+        default="America/Los_Angeles",
+        services=(("create-site", "LMS_TIMEZONE"),),
+    ),
+    Key(
         "LMS_API_KEY",
         "LMS",
         "Service user API key",
@@ -299,6 +309,12 @@ def _fernet(value: str) -> str | None:
     return "must be 44 characters that urlsafe base64 decode to 32 bytes"
 
 
+def _timezone(value: str) -> str | None:
+    if value == "UTC" or re.match(r"^[A-Za-z_]+(/[A-Za-z0-9_+-]+)+$", value):
+        return None
+    return "must be an IANA timezone name such as America/Los_Angeles"
+
+
 def _letters(value: str) -> str | None:
     return None if value.isascii() and value.isalpha() else "must be letters only"
 
@@ -310,6 +326,7 @@ VALIDATORS: Mapping[str, Callable[[str], str | None]] = MappingProxyType(
         "hex32": _hex32,
         "fernet": _fernet,
         "letters": _letters,
+        "timezone": _timezone,
     }
 )
 

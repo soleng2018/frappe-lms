@@ -105,6 +105,9 @@ def test_authentik_scope_also_requires_the_token():
         ("hex32", "abcdef0123456789abcdef0123456789", "ABCDEF0123456789abcdef0123456789"),
         ("letters", "NileWorkshop", "Nile1"),
         ("letters", "Admin", "Admin-x"),
+        ("timezone", "America/Los_Angeles", "Los Angeles"),
+        ("timezone", "UTC", "America/"),
+        ("timezone", "America/Argentina/Buenos_Aires", "../etc/passwd"),
     ],
 )
 def test_validators(validator, good, bad):
@@ -428,6 +431,7 @@ def test_create_site_receives_exactly_the_variables_the_spec_lists():
         "LMS_ADMIN_PASSWORD",
         "LMS_ENCRYPTION_KEY",
         "LMS_SERVICE_USER",
+        "LMS_TIMEZONE",
         "LMS_API_KEY",
         "LMS_API_SECRET",
         "AUTHENTIK_ADMIN_GROUP",
