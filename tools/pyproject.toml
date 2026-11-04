@@ -20,6 +20,8 @@ packages = ["src/nile_tools"]
 
 [tool.pytest.ini_options]
 addopts = "-m 'not integration'"
+# nile_auth.groups is pure Python, so its tests run here without Frappe.
+pythonpath = ["../apps/nile_auth"]
 markers = ["integration: needs the running Docker stack (run with: pytest -m integration)"]
 
 [tool.coverage.run]
@@ -43,6 +45,7 @@ convention = "google"
 [tool.mypy]
 python_version = "3.12"
 files = ["src", "tests"]
+mypy_path = "../apps/nile_auth"
 check_untyped_defs = true
 warn_unused_ignores = true
 warn_redundant_casts = true

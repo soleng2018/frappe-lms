@@ -69,6 +69,7 @@ bench --site "$SITE" set-config host_name "https://$SITE"
 bench --site "$SITE" set-config nile_admin_group "${AUTHENTIK_ADMIN_GROUP:-}"
 bench --site "$SITE" set-config nile_student_group_prefix "${AUTHENTIK_STUDENT_GROUP_PREFIX:-}"
 bench --site "$SITE" set-config nile_student_group_suffix "${AUTHENTIK_STUDENT_GROUP_SUFFIX:-}"
+bench --site "$SITE" set-config nile_service_user "${LMS_SERVICE_USER:-}"
 
 INSTALLED=$(bench --site "$SITE" list-apps | awk '{print $1}')
 for APP in lms nile_auth; do
