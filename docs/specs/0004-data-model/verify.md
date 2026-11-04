@@ -8,7 +8,7 @@ Run the live steps from `tools/` with the stack up (`make up`). Steps marked **n
 - [x] As a student test user, open the course in the LMS, play a video lesson whose body is `{{ YouTubeVideo("<id>") }}` → the video plays   → AC-10
 - [x] As a student test user, open a quiz lesson with the `{{ Quiz("<name>") }}` body and try to mark it complete without passing → the lesson stays incomplete   → AC-10, AC-2
 - [x] As a student test user with every lesson and quiz done, press the certificate button → the certificate is issued; with one quiz unpassed → it is refused   → AC-5
-- [x] **Needs feature 7:** log in as a `NileWorkshop3Admin` member for the first time → a Website User with LMS Student, one LMS Batch with `nile_group` `NileWorkshop3Admin`, one Batch Enrollment, and an LMS Enrollment in each published course exist; log in again → nothing new is created   → AC-4
+- [ ] **Needs feature 7 as changed by spec 0009:** log in with a course group for the first time → a Website User with LMS Student and an LMS Enrollment in that course only exist; log in again → nothing new is created   → AC-4
 - [x] **Needs feature 7:** log in as a `hol-admins` member → a System User with Moderator and Course Creator and no System Manager   → AC-4
 - [x] **Needs feature 7:** two first logins for the same group at the same moment → exactly one batch exists   → AC-4
 

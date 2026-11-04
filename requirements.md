@@ -23,7 +23,7 @@ Following are the requirements
 1. The frappe installation on this server can be considered as dev
 2. You can delete things you create but cannot delete other running containers
 3. In Authentik, you can delete what you create but cannot delete other items
-4. Students in the app will be identified by a group name called NileWorkshopNAdmin (where N can be 1,2,3..) and admins will be identified by a group called hol-admins. this groups already exist so Frappe just needs to use them
+4. Admins in the app will be identified by a group called hol-admins, which already exists, so Frappe just needs to use it. A student gets one course: the reservation app puts the learner in a group named exactly like the course they booked, and Frappe matches that name to the course title (spec 0009). No other group decides what a student can see.
 
 ## Resources
 * Frappe Repo - https://github.com/frappe/lms

@@ -2,16 +2,17 @@
 
 **Date**: 2026-11-03
 **Status**: Accepted
+**Superseded in part**: by [0009](../0009-course-access-from-groups/index.md): AC-4 (what a login enrolls a learner in), the LMS Batch rows of the data model, and `published` 1 in the course creation values.
 
 ## Summary
 
-The LMS already has records for courses, chapters, lessons, quizzes, attempts, progress, and certificates, and they already enforce most of your rules: a quiz lesson only counts when the student scores 80% or more, retakes stop at the limit, and a certificate is only issued at 100% progress. So this spec adds no new record types. It fixes how the content is shaped (one course, chapter 1 for concepts, one chapter per feature, a quiz after every video and after every lab guide), how students and admins are recorded (one LMS Batch per workshop group, two LMS roles for admins), and one small custom field (`nile_key`) so a re run of the content sync never makes duplicates. Slices 1 to 3 build on this without a rework. Updated 2026-11-03 after the live site checks: LMS only plays a video and only gates a quiz from a macro in the lesson `body`, so the sync writes `{{ YouTubeVideo("id") }}` and `{{ Quiz("name") }}` into the body, as well as `youtube` and `quiz_id`.
+The LMS already has records for courses, chapters, lessons, quizzes, attempts, progress, and certificates, and they already enforce most of your rules: a quiz lesson only counts when the student scores 80% or more, retakes stop at the limit, and a certificate is only issued at 100% progress. So this spec adds no new record types. It fixes how the content is shaped (one course, chapter 1 for concepts, one chapter per feature, a quiz after every video and after every lab guide), how students and admins are recorded (the LMS Student role and one course enrollment per learner, two LMS roles for admins, see spec 0009), and one small custom field (`nile_key`) so a re run of the content sync never makes duplicates. Slices 1 to 3 build on this without a rework. Updated 2026-11-03 after the live site checks: LMS only plays a video and only gates a quiz from a macro in the lesson `body`, so the sync writes `{{ YouTubeVideo("id") }}` and `{{ Quiz("name") }}` into the body, as well as `youtube` and `quiz_id`.
 
 ## Requirements
 
 **User stories**:
 - As a student, I want to watch each video, pass its quiz, do the lab, pass its quiz, and then request my certificate, so that I am certified for the hands on lab.
-- As a hol-admin, I want to see every student, workshop group, attempt, and certificate so that I can track progress and build the monthly report.
+- As a hol-admin, I want to see every student, course, attempt, and certificate so that I can track progress and build the monthly report.
 - As a hol-admin, I want to reset a student's attempts on one quiz so that a student locked out after three misses can try again.
 - As the operator, I want a re run of the content sync to update records in place so that renaming a lesson never leaves a duplicate.
 
@@ -19,7 +20,7 @@ The LMS already has records for courses, chapters, lessons, quizzes, attempts, p
 - **AC-1**: One LMS Course holds Chapter 1 (concept videos) and one chapter per feature. A chapter can hold any mix of video, lab guide, and quiz lessons (a lab need not have a video). Where a quiz follows a lesson, it is a quiz lesson of its own, and each quiz is linked both ways to its lesson (`lesson.quiz_id` names the quiz, and `quiz.lesson` and `quiz.course` name the lesson and course). The link is also written into the lesson body as a macro (AC-10), because LMS reads it from there.
 - **AC-2**: Every quiz has `passing_percentage` 80 and `max_attempts` 3 unless its content file sets another value. A score under the pass mark does not complete the quiz lesson. A fourth attempt is refused.
 - **AC-3**: Every record the sync creates (course, chapter, lesson, quiz, question) carries a unique `nile_key`. Running the sync twice creates nothing new. Changing a title in git updates the same record. A record whose `nile_key` is no longer in git is removed from the course outline (and unpublished), so progress can still reach 100.
-- **AC-4**: At login a member of a `NileWorkshopNAdmin` group is a Website User with the LMS Student role, is enrolled in the LMS Batch whose `nile_group` is that group name, and has an LMS Enrollment in every published course on that batch. A member of `hol-admins` is a System User with the Moderator and Course Creator roles. Two logins at the same moment never create two batches for one group.
+- **AC-4**: Superseded by [0009](../0009-course-access-from-groups/index.md) AC-1 and AC-2. At login a learner with a course group is a Website User with the LMS Student role and one LMS Enrollment in that course, and a member of `hol-admins` is a System User with the Moderator and Course Creator roles.
 - **AC-5**: The course has certification on and lesson order not enforced. A student with every lesson and quiz complete (progress 100) can request a certificate. A student with any quiz not yet passed has progress under 100 and is refused.
 - **AC-6**: A hol-admin can read every Enrollment, Course Progress, Quiz Submission, Batch, Batch Enrollment, and Certificate record, and can delete one student's Quiz Submissions for one quiz to reset their attempts. LMS gives that delete only to System Manager, so `nile_auth` ships a permission fixture that gives Moderator delete on Quiz Submission, and restates the five LMS rows with it.
 - **AC-7**: A student can read only their own enrollment, progress, and attempts. Certificates follow LMS's own rule (a published certificate is visible), which the integration test records.
@@ -30,7 +31,7 @@ The LMS already has records for courses, chapters, lessons, quizzes, attempts, p
 
 ## Decision
 
-**Chosen option**: Option 1: native LMS records, one course, one chapter per feature, one batch per workshop group.
+**Chosen option**: Option 1: native LMS records, one course, one chapter per feature.
 
 Model the content and progress on the native LMS records exactly as set out under Feature design, add the `nile_key` custom field, and let `nile_auth` own batches, enrollments, and roles.
 
@@ -67,7 +68,7 @@ People and progress:
 | Record | Written by | Relationship |
 |---|---|---|
 | User | `nile_auth` at login | type Website User for students, System User for admins |
-| LMS Batch, one per `NileWorkshopNAdmin` group | `nile_auth` | has Batch Course rows, one per published course. Carries a unique custom field `nile_group` holding the exact group name. |
+| LMS Batch | none written by the login (spec 0009) | Old batches stay in the LMS. The unique custom field `nile_group` on LMS Batch is unused. |
 | LMS Batch Enrollment | `nile_auth` | User to Batch, one per student and group |
 | LMS Enrollment | LMS, from the batch enrollment; `nile_auth` fills any gap at login | User to Course, holds `progress` |
 | LMS Course Progress | LMS | one row per completed lesson and student |
@@ -103,20 +104,18 @@ not started → attempted below the pass mark (attempts left) → passed (lesson
 | Sync creates a quiz lesson | whether the quiz is locked for a student | derived: attempts used (count of that student's Quiz Submissions for the quiz) is at least `max_attempts`, and none has `percentage` at or above `passing_percentage` |
 | Sync changes the outline | every student's stored progress | recomputed by the sync for each enrollment after any chapter, lesson, or quiz is added or removed (LMS only recomputes when a progress row is saved) |
 | Sync finds a record not in git | what happens to it | removed from the Chapter Reference or Lesson Reference table and unpublished, never deleted |
-| `nile_auth` creates a batch | `title`, `nile_group` | the Authentik group name, for example `NileWorkshop3Admin`; `nile_group` is the lookup key, `title` is for display |
+| `nile_auth` creates a batch | nothing | superseded by spec 0009: the login creates no batch |
 | `nile_auth` creates a batch | `start_date`, `end_date` | today, and today plus 10 years (the fields are required, and the values mean nothing for reports) |
 | `nile_auth` creates a batch | `start_time`, `end_time`, `timezone` | `00:00:00`, `23:59:59`, and the site's system timezone |
 | `nile_auth` creates a batch | `description`, `batch_details` | the text "Students of <group name>" |
-| `nile_auth` creates a batch | `instructors`, `published`, `allow_self_enrollment` | the service user, 1, 0 |
-| `nile_auth` creates a batch | Batch Course rows | every published LMS Course |
 | Certificate request | `template` (required) | the print format LMS names as its default, recorded by exact name after the first live check, until branding (feature 10) sets one |
 | Certificate request | issue date, member name, course title | LMS fills them (today, the user, the course) |
-| Manager views | workshop group of a student | the student's LMS Batch Enrollment |
+| Manager views | course of a student | the student's LMS Enrollment, and the `nile_groups` field for the current course |
 | Manager views | pass or fail of an attempt | `percentage` against the `passing_percentage` on the same Quiz Submission row |
 
 **Key invariants**:
 - `nile_key` is unique within each of its five records. The sync never matches on title.
-- A batch is looked up only by `nile_group` (unique), never by title or name, so concurrent first logins cannot create two.
+- The login creates no batch (spec 0009), so no batch lookup rule applies.
 - The sync never deletes a record that carries a `nile_key`. It removes it from the outline and unpublishes it.
 - Content flows one way, from git to the LMS. An edit made inside the LMS to a synced record is replaced at the next sync, and is reported first. A record created only in the LMS has no `nile_key`, is left alone by the sync, and is listed by the check.
 - Drift is found by comparing the fields git would write with the fields the LMS holds, so no hash or extra state is stored.
@@ -146,7 +145,7 @@ not started → attempted below the pass mark (attempts left) → passed (lesson
 - Failure case: the compare is given a quiz lesson with `quiz_id` set and an empty body, and reports it, verifies AC-10 and AC-9.
 - Failure case: the live test of a quiz lesson with only `quiz_id` completing without a pass stays in the suite as the reason the macro is needed, and a quiz lesson with the macro needs the pass, verifies AC-10 and AC-2.
 - Auth and permission: a student requesting another student's attempts or enrollment gets nothing back, verifies AC-7. A hol-admin reads them all, verifies AC-6.
-- Happy path: a first login by a `NileWorkshop3Admin` member creates the batch, the batch enrollment, and a course enrollment, and a second login creates nothing new, verifies AC-4.
+- Happy path: a first login with a course group creates the learner and one course enrollment, and a second login creates nothing new, verifies AC-4 (as replaced by spec 0009).
 
 ## Build plan
 
@@ -171,7 +170,7 @@ Tracer Bullet: land the thinnest real path first (a custom field and the content
 
 **Negative / tradeoffs**:
 - A student who misses a quiz three times is locked out until an admin resets them in the Desk. A `tools` reset command is left for later.
-- Batches are a stand in for workshop groups, and carry required date fields with placeholder values.
+- Batches made before spec 0009 stay in the LMS, unused, with placeholder date values.
 - The model depends on LMS record and field names. An LMS upgrade must re check the list under the integration test.
 - Lesson order is free, so a student can take a lab before its video. The certificate still needs everything complete.
 - A course added after students enrolled only reaches them at their next login (see Follow up).

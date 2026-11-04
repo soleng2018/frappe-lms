@@ -90,7 +90,7 @@ The engineer chose the recommended picks on file name (`.env`), key naming (area
 
 Decisions made while writing this spec (not asked):
 - **Hostname keys, not URL keys** (runner up: URL keys). Compose cannot parse a URL, and `extra_hosts` needs the bare hostname, so a URL key would create a second source for one fact. Both sites sit behind Traefik on HTTPS, so `https://` plus the hostname is derived in code.
-- **Student group match by prefix and suffix** (runner up: a regex key). The groups are `NileWorkshop<N>Admin`. A regex needs characters the strict syntax forbids, so the app matches prefix, digits, suffix.
+- **Student group match by prefix and suffix** (retired by spec 0009: a learner's course group is matched to a course title in code, so the two keys are gone).
 - **The sample is generated from the key list, and a test compares it** (runner up: a hand written sample plus a key set test). Same guarantee for less upkeep.
 - **`tools` mounts the repo root and reads `.env` itself** (runner up: pass keys through its environment). `init` has to create the file, and Compose cannot bind a file that does not exist yet. It also leaves no secrets in the tools container's environment. The mount must be the directory, because an atomic rename fails on a single file mount. The temp file is created in the repo root with mode 0600, synced, then renamed, and its name is in `.gitignore` and `.dockerignore`.
 - **A root `Makefile` wrapper does the preflight** (runner up: a `preflight` one shot service, rejected: the build runs before it, `up -d` hides its output, and Docker ignores `depends_on` after a reboot). Targets: `init`, `check`, `up` (runs `check`, then `build`, then `up -d`), `down`, `tools`. Compose expands the whole file on every command, so `:?` checks would make `tools init` fail on a clean clone; the wrapper checks instead. The tools image builds with no `.env`.
@@ -140,8 +140,6 @@ Generators: passwords and tokens use `secrets.token_urlsafe(24)`, regenerated un
 | `AUTHENTIK_API_TOKEN` | yes | operator | no | Authentik master API token |
 | `AUTHENTIK_APP_SLUG` | no | default `nile-lms` | yes | Slug of the Authentik application the script creates |
 | `AUTHENTIK_ADMIN_GROUP` | no | default `hol-admins` | no | Group that becomes admin (copied to site config by `create-site`) |
-| `AUTHENTIK_STUDENT_GROUP_PREFIX` | no | default `NileWorkshop` | no | Student group name starts with this |
-| `AUTHENTIK_STUDENT_GROUP_SUFFIX` | no | default `Admin` | no | Student group name ends with this, digits between |
 | `TRAEFIK_NETWORK` | no | default `traefik` | no | External Docker network |
 | `TRAEFIK_ENTRYPOINT` | no | default `websecure` | no | Traefik entrypoint |
 | `TRAEFIK_CERT_RESOLVER` | no | default `letsencrypt` | no | Traefik certificate resolver |
@@ -167,7 +165,7 @@ absent → `tools init` → created (generated keys filled, operator keys blank)
 | Service | Keys it receives |
 |---|---|
 | `db` | `DB_ROOT_PASSWORD` (as `MARIADB_ROOT_PASSWORD`) |
-| `create-site` | `LMS_HOSTNAME`, `DB_ROOT_PASSWORD`, `LMS_ADMIN_PASSWORD`, `LMS_ENCRYPTION_KEY`, `LMS_SERVICE_USER`, `LMS_TIMEZONE`, `LMS_API_KEY`, `LMS_API_SECRET`, `AUTHENTIK_ADMIN_GROUP`, `AUTHENTIK_STUDENT_GROUP_PREFIX`, `AUTHENTIK_STUDENT_GROUP_SUFFIX` (it writes the group keys into the site config). Commands reference them as `$$VAR` so Compose does not copy the value into the container command |
+| `create-site` | `LMS_HOSTNAME`, `DB_ROOT_PASSWORD`, `LMS_ADMIN_PASSWORD`, `LMS_ENCRYPTION_KEY`, `LMS_SERVICE_USER`, `LMS_TIMEZONE`, `LMS_API_KEY`, `LMS_API_SECRET`, `AUTHENTIK_ADMIN_GROUP` (it writes the admin group into the site config). Commands reference them as `$$VAR` so Compose does not copy the value into the container command |
 | `frontend` | `LMS_HOSTNAME` (as `FRAPPE_SITE_NAME_HEADER`) |
 | `tools` | None in its environment. It mounts the repo root (same absolute path as on the host) and reads `.env` itself (process environment wins over the file, for tests) |
 | `backend` and all other services, `configurator`, redis services, `websocket`, `queue-short`, `queue-long`, `scheduler` | None |

@@ -2,9 +2,9 @@
 
 ## Context
 
-The brief asks students to watch videos, follow a lab guide, pass a quiz after each at 80% or higher, and then get a certificate. Managers track progress and want a monthly report. Content lives in git and is pushed to Frappe by a script (scope features 8 and 11). Students and admins come from two kinds of Authentik groups, `NileWorkshopNAdmin` (N is 1, 2, 3, and so on) and `hol-admins` (scope feature 7).
+The brief asks students to watch videos, follow a lab guide, pass a quiz after each at 80% or higher, and then get a certificate. Managers track progress and want a monthly report. Content lives in git and is pushed to Frappe by a script (scope features 8 and 11). Students and admins come from Authentik groups: a group named like a course for a student, and `hol-admins` for an admin (scope feature 7, spec 0009).
 
-Four later features read or write the same records: the content sync (8), the login hook that maps groups to roles (7), the quiz and certificate rules (9), and the progress view and report (12, 13). If each invented its own shape for a course, an attempt, or a workshop group, they would clash. This spec is the single place that says which LMS record holds what, who writes it, and which role may touch it.
+Four later features read or write the same records: the content sync (8), the login hook that maps groups to roles (7), the quiz and certificate rules (9), and the progress view and report (12, 13). If each invented its own shape for a course, an attempt, or an enrollment, they would clash. This spec is the single place that says which LMS record holds what, who writes it, and which role may touch it.
 
 The course is larger than the scope first assumed. Chapter 1 holds a set of core concept videos (what Nile is, how the service is offered), each followed by its own quiz. After that, every feature gets its own chapter with small feature videos and quizzes, then a feature lab and a lab quiz. New features are added over time, so adding a feature must mean adding a chapter and nothing more.
 
@@ -16,7 +16,7 @@ The first version of this spec had the sync set only `youtube` on a video lesson
 
 ### Option 1: Native LMS records, one course, one chapter per feature, one batch per group
 
-Use LMS Course, Course Chapter, Course Lesson, LMS Quiz, LMS Quiz Submission, LMS Enrollment, LMS Course Progress, LMS Batch, and LMS Certificate as they are. Quizzes are lessons. Workshop groups are Batches. A custom field `nile_key` on four records gives the sync a stable match.
+Use LMS Course, Course Chapter, Course Lesson, LMS Quiz, LMS Quiz Submission, LMS Enrollment, LMS Course Progress, LMS Batch, and LMS Certificate as they are. Quizzes are lessons. Batches are no longer used by the login (spec 0009). A custom field `nile_key` on four records gives the sync a stable match.
 
 **Pros**:
 - The pass rule, the attempt limit, progress, and certificate checks already work and are maintained upstream.

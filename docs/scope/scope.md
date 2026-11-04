@@ -10,7 +10,7 @@ _These are recommendations to keep your build orderly, not requirements. Skip an
 ## Source material
 
 Read these before designing any feature. They are the original brief, not summaries.
-- Requirements and instructions: [requirements.md](../../requirements.md). Its Instructions hold hard limits: this Frappe install is dev, only delete containers and Authentik items you created, and the groups `NileWorkshopNAdmin` (N is 1, 2, 3…) and `hol-admins` already exist.
+- Requirements and instructions: [requirements.md](../../requirements.md). Its Instructions hold hard limits: this Frappe install is dev, only delete containers and Authentik items you created, and the group `hol-admins` already exists.
 - Logos and design system: [brand/](../../brand/) (pulled from github.com/soleng2018/reservations). Used by Branding & theme (#10) and Outbound email (#15, for the email logo).
 - Sample compose file for Traefik labels: `/home/nova/lms/docker-compose.yaml` (it runs a different app).
 - Frappe LMS repo: https://github.com/frappe/lms
@@ -28,7 +28,7 @@ _The Frappe links have not been read by `/scope`; `/architect` should read the o
 | 3 | Single config & secrets file | Foundation | done |
 | 4 | Data model (course, quiz, certificate, roles) | Foundation | done |
 | 5 | LMS running behind Traefik | Slice 1 | in-progress |
-| 6 | IDP login (OIDC) | Slice 1 | planned |
+| 6 | IDP login (OIDC) | Slice 1 | in-progress |
 | 7 | Group to role mapping | Slice 1 | in-progress |
 | 8 | Content sync, one course | Slice 1 | done |
 | 9 | Quiz pass rules & certificate | Slice 1 | planned |
@@ -39,6 +39,7 @@ _The Frappe links have not been read by `/scope`; `/architect` should read the o
 | 14 | Backup & restore | Slice 4 | planned |
 | 15 | Outbound email | Slice 4 | planned |
 | 16 | Health checks & error monitoring | Slice 4 | planned |
+| 17 | Course access from course groups | Slice 1 | in-progress |
 
 ## Foundations
 
@@ -113,15 +114,26 @@ spec [0007](../specs/0007-lms-behind-traefik/index.md) · code in `tools/src/nil
 - [ ] Review it (fresh model): `/check review LMS running behind Traefik`
 - [ ] Document it: `/document LMS running behind Traefik`
 
-### 6. IDP login (OIDC) · needs a decision
+### 6. IDP login (OIDC)
 A script creates the OIDC application in Authentik through its API (only items it creates), and configures Frappe through its API to sign users in with it. Students and teachers log in only this way.
 **Done when:** running the script on a clean setup lets a student sign in through Authentik and land in the LMS, and running it twice changes nothing.
-- [ ] Design it (spec): `/architect IDP login`
+spec [0008](../specs/0008-idp-login/index.md) · code in `tools/src/nile_tools/`, `apps/nile_auth/`
+- [x] Design it (spec): `/architect IDP login`
+- [ ] Build it: `/develop IDP login`
+  - [ ] Probe the live Authentik and Frappe, then the thin thread: `idp setup` creates the provider, application, and Frappe key (AC-1, AC-4, AC-6)
+  - [ ] Safe reruns: marker, diff and fix in place, secret rule, pre checks, retry and errors (AC-2, AC-4, AC-9)
+  - [ ] Close the bypasses: password form and email link off, `idp password-login on|off` (AC-5)
+  - [ ] `idp check` and `idp remove` (AC-7, AC-8)
+  - [ ] Landing on `/lms`, `idp selftest`, the manual admin sign in, and README with the break glass steps (AC-3, AC-10, AC-11, AC-12)
+- [ ] Verify it: `/check verify IDP login`
+- [ ] Test it: `/test IDP login`
+- [ ] Review it (fresh model): `/check review IDP login`
+- [ ] Document it: `/document IDP login`
 
 ### 7. Group to role mapping · in-progress
-Members of `NileWorkshopNAdmin` groups (N is 1, 2, 3…) become students, and `hol-admins` become admins. The groups already exist, so the LMS only reads them.
-**Done when:** a user in a NileWorkshop group gets the student role, a `hol-admins` user gets admin, and a user in neither is refused. Group changes apply at the next login.
-spec [0006](../specs/0006-group-to-role-mapping/index.md) · code in `apps/nile_auth/`, `deploy/scripts/create-site.sh`
+A learner in a group named exactly like a course gets that one course (spec 0009), and `hol-admins` become admins. The LMS only reads the groups.
+**Done when:** a user in a course group gets the student role and that one course, a `hol-admins` user gets admin, and a user in neither is refused. Group changes apply at the next login.
+spec [0006](../specs/0006-group-to-role-mapping/index.md), student rule replaced by spec [0009](../specs/0009-course-access-from-groups/index.md) (feature 17) · code in `apps/nile_auth/`, `deploy/scripts/create-site.sh`
 - [x] Design it (spec): `/architect group to role mapping`
 - [ ] Build it: `/develop group to role mapping`
   - [x] Probe the live site, add the `nile_service_user` site setting, and the pure group check with unit tests (AC-4, AC-7)
@@ -155,6 +167,22 @@ A student passes each quiz at 80% or higher, with a limited number of retakes, a
 **Done when:** a student who scores 80% or more on both quizzes gets a downloadable certificate, a lower score does not, and retakes stop at the limit. The retake limit is a number to settle in the spec.
 - [ ] Design it (spec): `/architect quiz pass rules & certificate`
 
+### 17. Course access from course groups · in-progress
+A learner gets only the course they booked. The reservation app puts the learner in an Authentik group named exactly like the course, and Frappe enrolls them in that course only and removes any other course enrollment. Courses stay unpublished, so other courses are hidden and cannot be self enrolled. After the slot a known learner can still sign in and sees only their certificate. Two course groups at once are refused with a clear message.
+**Done when:** a learner in the group for course A is enrolled in A only and cannot read or enroll in course B, a learner with no course group reaches only their certificate, two groups at once are refused, and content sync keeps courses unpublished and out of batches. The reservation app and Authentik parts are a contract, built in their own repositories.
+spec [0009](../specs/0009-course-access-from-groups/index.md) · code in `apps/nile_auth/`, `tools/src/nile_tools/`, `deploy/`
+- [x] Design it (spec): `/architect course access from groups`
+- [ ] Build it: `/develop course access from groups`
+  - [ ] Probe the live site, then the pure functions and the thin thread: one learner, one course, no batch (AC-1, AC-4, AC-5, AC-7)
+  - [ ] Results mode, pruning, admin roles, and the safe login order with the two courses refusal (AC-2, AC-3, AC-6, AC-8, AC-9, AC-10, AC-15)
+  - [ ] Landing on the course or the profile (AC-11)
+  - [ ] Content sync keeps courses unpublished and out of batches, and the two student group keys are retired (AC-12, AC-14)
+  - [ ] Live integration tests, then remove the batch code and the READ COMMITTED setting, then README, cleanup function, and version bump (AC-1 to AC-13)
+- [ ] Verify it: `/check verify course access from groups`
+- [ ] Test it: `/test course access from groups`
+- [ ] Review it (fresh model): `/check review course access from groups`
+- [ ] Document it: `/document course access from groups`
+
 ## Slice 2: look and authoring
 
 ### 10. Branding & theme · Beta
@@ -185,7 +213,7 @@ Settle the guide and quiz file format (markdown for text, structured files for q
 ## Slice 3: managers
 
 ### 12. Manager progress view · needs a decision
-Admins in `hol-admins` see each student's progress, quiz scores, and certificate status across all workshop groups.
+Admins in `hol-admins` see each student's progress, quiz scores, and certificate status across all courses.
 **Done when:** an admin can list students and see who is not started, in progress, or certified; a student cannot see this view.
 - [ ] Design it (spec): `/architect manager progress view`
 
@@ -217,7 +245,9 @@ Out of scope for the current build pass, kept so the plan stays honest.
 - **Accessibility pass**: WCAG AA check on the branded theme
 - **Privacy notice and data retention**: notice plus a retention rule for student data · needs a decision
 - **Production environment**: a second config, hostname, and secrets · needs a decision
-- **Per workshop managers**: managers who see only their own workshop group · needs a decision
+- **Per course managers**: managers who see only their own course · needs a decision
+- **Results page after the slot**: a list of a learner's quiz scores per course, beyond the certificate on their profile · needs a decision · from spec 0009
+- **Revoke LMS access only**: bind the Authentik LMS application to a group, so one person's LMS access can be removed without deactivating them in every app · needs a decision · from spec 0009
 
 ## Legend
 
