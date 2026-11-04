@@ -132,6 +132,7 @@ Generators: passwords and tokens use `secrets.token_urlsafe(24)`, regenerated un
 | `LMS_ADMIN_PASSWORD` | yes | generated | yes | Frappe `Administrator` password |
 | `LMS_ENCRYPTION_KEY` | yes | generated | yes | Frappe site `encryption_key` |
 | `LMS_SERVICE_USER` | no | default `nile-tools@example.com` | yes | Service user id (email shaped) |
+| `LMS_TIMEZONE` | no | default `America/Los_Angeles` | no | Site timezone, an IANA name. `create-site` writes it to System Settings at every start, so a batch gets this timezone and not Frappe's `Asia/Kolkata` fallback |
 | `LMS_API_KEY` | yes | generated | yes | Service user API key |
 | `LMS_API_SECRET` | yes | generated | yes | Service user API secret |
 | `DB_ROOT_PASSWORD` | yes | generated | yes | MariaDB root password |
@@ -166,7 +167,7 @@ absent → `tools init` → created (generated keys filled, operator keys blank)
 | Service | Keys it receives |
 |---|---|
 | `db` | `DB_ROOT_PASSWORD` (as `MARIADB_ROOT_PASSWORD`) |
-| `create-site` | `LMS_HOSTNAME`, `DB_ROOT_PASSWORD`, `LMS_ADMIN_PASSWORD`, `LMS_ENCRYPTION_KEY`, `LMS_SERVICE_USER`, `LMS_API_KEY`, `LMS_API_SECRET`, `AUTHENTIK_ADMIN_GROUP`, `AUTHENTIK_STUDENT_GROUP_PREFIX`, `AUTHENTIK_STUDENT_GROUP_SUFFIX` (it writes the group keys into the site config). Commands reference them as `$$VAR` so Compose does not copy the value into the container command |
+| `create-site` | `LMS_HOSTNAME`, `DB_ROOT_PASSWORD`, `LMS_ADMIN_PASSWORD`, `LMS_ENCRYPTION_KEY`, `LMS_SERVICE_USER`, `LMS_TIMEZONE`, `LMS_API_KEY`, `LMS_API_SECRET`, `AUTHENTIK_ADMIN_GROUP`, `AUTHENTIK_STUDENT_GROUP_PREFIX`, `AUTHENTIK_STUDENT_GROUP_SUFFIX` (it writes the group keys into the site config). Commands reference them as `$$VAR` so Compose does not copy the value into the container command |
 | `frontend` | `LMS_HOSTNAME` (as `FRAPPE_SITE_NAME_HEADER`) |
 | `tools` | None in its environment. It mounts the repo root (same absolute path as on the host) and reads `.env` itself (process environment wins over the file, for tests) |
 | `backend` and all other services, `configurator`, redis services, `websocket`, `queue-short`, `queue-long`, `scheduler` | None |
@@ -181,6 +182,7 @@ Keys also used by Compose itself for interpolation (image tags, Traefik labels a
 | `create-site` | Site name, `host_name` (`https://` + hostname) | `LMS_HOSTNAME` |
 | `create-site` | Administrator password | `LMS_ADMIN_PASSWORD` |
 | `create-site` | `encryption_key` in site config | `LMS_ENCRYPTION_KEY` |
+| `ensure_timezone` | Timezone name | `LMS_TIMEZONE` from the container environment |
 | `ensure_service_user` | User id, API key, API secret | `LMS_SERVICE_USER`, `LMS_API_KEY`, `LMS_API_SECRET` from the container environment |
 | `tools` API calls | Base URL and `Authorization: token key:secret` | `https://` + `LMS_HOSTNAME`, `LMS_API_KEY`, `LMS_API_SECRET` |
 | `tools` Authentik calls | Base URL and bearer token | `https://` + `AUTHENTIK_HOSTNAME`, `AUTHENTIK_API_TOKEN` |

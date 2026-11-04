@@ -81,6 +81,7 @@ done
 
 bench --site "$SITE" migrate
 bench --site "$SITE" execute nile_auth.setup.ensure_service_user
+bench --site "$SITE" execute nile_auth.setup.ensure_timezone
 touch "$MARKER"
 rm -f "$PENDING"
 echo "create-site done"
