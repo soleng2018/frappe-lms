@@ -414,6 +414,8 @@ def test_every_secret_the_spec_lists_is_marked_secret_and_nothing_else_is():
         "LMS_ENCRYPTION_KEY",
         "LMS_API_KEY",
         "LMS_API_SECRET",
+        "LMS_MCP_API_KEY",
+        "LMS_MCP_API_SECRET",
         "DB_ROOT_PASSWORD",
         "AUTHENTIK_API_TOKEN",
     }
@@ -434,6 +436,9 @@ def test_create_site_receives_exactly_the_variables_the_spec_lists():
         "LMS_TIMEZONE",
         "LMS_API_KEY",
         "LMS_API_SECRET",
+        "LMS_MCP_USER",
+        "LMS_MCP_API_KEY",
+        "LMS_MCP_API_SECRET",
         "AUTHENTIK_ADMIN_GROUP",
         "AUTHENTIK_STUDENT_GROUP_PREFIX",
         "AUTHENTIK_STUDENT_GROUP_SUFFIX",

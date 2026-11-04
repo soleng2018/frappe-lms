@@ -87,13 +87,22 @@ def test_first_run_creates_site_and_clears_the_pending_marker(bench_dir):
     assert not (sites / f".creating-{SITE}").exists()
 
 
-def test_the_site_timezone_is_set_after_the_service_user(bench_dir):
+def test_the_site_users_are_set_up_in_order(bench_dir):
     assert _run(bench_dir, LMS_TIMEZONE="America/Los_Angeles").returncode == 0
     executed = [c for c in _calls(bench_dir) if " execute " in c]
     assert [c.rsplit(" ", 1)[1] for c in executed] == [
         "nile_auth.setup.ensure_service_user",
         "nile_auth.setup.ensure_timezone",
+        "nile_auth.setup.ensure_mcp_user",
     ]
+
+
+def test_the_mcp_user_is_recorded_in_site_config_and_runs_on_a_rerun(bench_dir):
+    assert _run(bench_dir, LMS_MCP_USER="nile-mcp@example.com").returncode == 0
+    assert any("set-config nile_mcp_user nile-mcp@example.com" in c for c in _calls(bench_dir))
+    (bench_dir / "bench.log").unlink()
+    assert _run(bench_dir, LMS_MCP_USER="nile-mcp@example.com").returncode == 0
+    assert any(c.endswith("ensure_mcp_user") for c in _calls(bench_dir))
 
 
 def test_interrupted_run_is_dropped_then_recreated(bench_dir):
@@ -135,4 +144,31 @@ def test_changed_encryption_key_is_refused_without_changes(bench_dir):
     result = _run(bench_dir)
     assert result.returncode == 1
     assert "LMS_ENCRYPTION_KEY differs" in result.stderr
+    assert _calls(bench_dir) == []
+
+
+def test_matching_mcp_and_service_user_is_refused_before_anything_runs(bench_dir):
+    # covers: AC-5 (spec 0007), the refusal must leave the site settings untouched
+    same = "svc@example.com"
+    result = _run(bench_dir, LMS_MCP_USER=same, LMS_SERVICE_USER=same)
+    assert result.returncode == 1
+    assert "must differ" in result.stderr
+    assert _calls(bench_dir) == []
+    assert not (bench_dir / "bench/sites" / SITE).exists()
+
+
+def test_different_mcp_and_service_user_is_accepted(bench_dir):
+    result = _run(bench_dir, LMS_MCP_USER="mcp@example.com", LMS_SERVICE_USER="svc@example.com")
+    assert result.returncode == 0, result.stderr
+
+
+def test_blank_mcp_user_is_not_compared_with_a_blank_service_user(bench_dir):
+    result = _run(bench_dir, LMS_MCP_USER="", LMS_SERVICE_USER="")
+    assert result.returncode == 0, result.stderr
+
+
+def test_users_that_differ_only_in_case_are_refused_before_anything_runs(bench_dir):
+    result = _run(bench_dir, LMS_MCP_USER="Svc@Example.com", LMS_SERVICE_USER="svc@example.com")
+    assert result.returncode == 1
+    assert "must differ" in result.stderr
     assert _calls(bench_dir) == []

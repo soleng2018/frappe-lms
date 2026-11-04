@@ -14,10 +14,11 @@ The Docker side of the project: one compose file, the image build, version pins,
 | apps.json | Apps baked into the image (LMS by tag, `payments` by branch) |
 | fetch-upstream.sh | Checks out frappe_docker at the pinned tag into `deploy/.upstream/` (git ignored) |
 | scripts/create-site.sh | One shot site setup. Idempotent, and drops a half made site on rerun |
+| scripts/restart-test.sh | Host side restart and crash proof, run by `make restart-test`. Acts only on the `nile-lms` project |
 
 ## Commands
 
-Run from the repo root: `make build`, `make up`, `make down`, `make ps`, `make logs`.
+Run from the repo root: `make build`, `make up`, `make down`, `make ps`, `make logs`, `make restart-test`. Prove a deploy with `make tools CMD="verify deploy"`.
 
 ## Conventions
 
@@ -31,11 +32,13 @@ Run from the repo root: `make build`, `make up`, `make down`, `make ps`, `make l
 - `make` refuses to run if a config key is exported in your shell, because Compose would let the shell win over `.env`.
 - Changing `apps.json` changes the image hash, so the next build picks up new `payments` code.
 - Only the Authentik hostname is mapped to the host in `tools`. The LMS is reached through public DNS and Cloudflare.
+- `verify deploy` fails if a service publishes a port, loses log rotation, or a long running service loses `restart: unless-stopped`. Keep that true when editing the compose file.
 - Only `frontend` joins the external `traefik` network. No ports are published.
 
 ## Related specs
 
 - [0001 Stack and architecture](../docs/specs/0001-stack-and-architecture/index.md)
+- [0007 LMS behind Traefik](../docs/specs/0007-lms-behind-traefik/index.md)
 - [0002 Single config and secrets file](../docs/specs/0002-single-config-and-secrets-file.md)
 
 _Drafted by /audit from the repo, worth a quick human pass. Edit freely: once a line stops matching this draft, later runs treat it as curated and will flag rather than overwrite it._

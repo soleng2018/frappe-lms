@@ -2,6 +2,7 @@
 
 **Date**: 2026-11-03
 **Status**: Accepted
+**Superseded in part**: by [0009](../0009-course-access-from-groups/index.md): the course is now created and kept unpublished (AC-1), and AC-8 (every batch gets the course) no longer applies.
 
 ## Summary
 

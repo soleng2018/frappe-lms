@@ -10,13 +10,22 @@ from pathlib import Path
 
 import httpx
 
-from nile_tools import checks, config, lms
+from nile_tools import checks, config, lms, verify
 from nile_tools.config import ConfigError
 from nile_tools.contentfile import ContentError, load_course
 from nile_tools.lms import LmsError
 from nile_tools.sync import run_sync
 
-__all__ = ["ConfigError", "config_check", "config_show", "init", "main", "sync", "whoami"]
+__all__ = [
+    "ConfigError",
+    "config_check",
+    "config_show",
+    "init",
+    "main",
+    "sync",
+    "verify_deploy",
+    "whoami",
+]
 
 
 def init(root: Path) -> int:
@@ -120,6 +129,11 @@ def sync(root: Path, *, check: bool) -> int:
         return 1
 
 
+def verify_deploy(root: Path) -> int:
+    """Check the public site, the compose file and the MCP door; return 1 on any FAIL."""
+    return verify.run(root, config.load_env(root).values)
+
+
 def _secret_values(root: Path) -> list[str]:
     """Return the secret values in .env, or none if the file cannot be read."""
     try:
@@ -136,6 +150,10 @@ def _parser() -> argparse.ArgumentParser:
     commands.add_parser("whoami", help="prove the API path works")
     sync_cmd = commands.add_parser("sync", help="make the LMS course match content/course.yaml")
     sync_cmd.add_argument("--check", action="store_true", help="only list what would change")
+    ver = commands.add_parser("verify", help="prove the deployment is reachable and safe")
+    ver_actions = ver.add_subparsers(dest="action", required=True)
+    ver_actions.add_parser("deploy", help="run every check")
+    ver_actions.add_parser("services", help="list the long running services, one per line")
     cfg = commands.add_parser("config", help="check, show or print the sample of the config file")
     actions = cfg.add_subparsers(dest="action", required=True)
     check = actions.add_parser("check", help="validate .env and the repo")
@@ -155,6 +173,11 @@ def main(argv: Sequence[str] | None = None) -> int:
             return init(root)
         if args.command == "whoami":
             return whoami(root)
+        if args.command == "verify":
+            if args.action == "services":
+                print("\n".join(verify.long_running(verify.load_compose(root))))
+                return 0
+            return verify_deploy(root)
         if args.command == "sync":
             return sync(root, check=args.check)
         if args.action == "check":
