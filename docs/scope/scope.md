@@ -120,7 +120,7 @@ A script creates the OIDC application in Authentik through its API (only items i
 spec [0008](../specs/0008-idp-login/index.md) · code in `tools/src/nile_tools/`, `apps/nile_auth/`
 - [x] Design it (spec): `/architect IDP login`
 - [ ] Build it: `/develop IDP login`
-  - [ ] Probe the live Authentik and Frappe, then the thin thread: `idp setup` creates the provider, application, and Frappe key (AC-1, AC-4, AC-6)
+  - [x] Probe the live Authentik and Frappe, then the thin thread: `idp setup` creates the provider, application, and Frappe key (AC-1, AC-4, AC-6)
   - [ ] Safe reruns: marker, diff and fix in place, secret rule, pre checks, retry and errors (AC-2, AC-4, AC-9)
   - [ ] Close the bypasses: password form and email link off, `idp password-login on|off` (AC-5)
   - [ ] `idp check` and `idp remove` (AC-7, AC-8)
