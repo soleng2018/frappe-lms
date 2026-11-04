@@ -1,0 +1,15 @@
+# Runs inside `bench console` (see test_content_sync_edges_integration.py); __P__ is the test prefix.
+import json, frappe
+from frappe.utils.password import update_password
+out = {}
+try:
+    email = "__P__-student@example.com"
+    frappe.get_doc({"doctype": "User", "email": email, "first_name": "it", "user_type": "Website User",
+        "send_welcome_email": 0, "roles": [{"role": "LMS Student"}]}).insert(ignore_permissions=True)
+    update_password(email, "__PW__")
+    frappe.db.commit()
+    out["ok"] = True
+except Exception as e:
+    frappe.db.rollback()
+    out["error"] = type(e).__name__ + ": " + str(e)[:300]
+print("RESULT:" + json.dumps(out))

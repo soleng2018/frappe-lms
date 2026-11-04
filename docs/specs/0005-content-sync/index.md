@@ -1,7 +1,7 @@
 # 0005. Sync one course from git to the LMS with a planner that finds records by `nile_key`
 
 **Date**: 2026-11-03
-**Status**: In Progress
+**Status**: Accepted
 
 ## Summary
 

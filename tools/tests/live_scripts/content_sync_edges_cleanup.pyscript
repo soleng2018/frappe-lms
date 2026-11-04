@@ -1,0 +1,24 @@
+# Runs inside `bench console` (see test_content_sync_edges_integration.py); __P__ is the test prefix.
+import json, frappe
+p = "__P__"
+out = {}
+try:
+    course = frappe.db.get_value("LMS Course", {"nile_key": p + "-course"})
+    if course:
+        for dt in ("LMS Course Progress", "LMS Enrollment"):
+            for n in frappe.get_all(dt, filters={"course": course}, pluck="name"):
+                frappe.delete_doc(dt, n, force=True, ignore_permissions=True)
+        for dt in ("LMS Quiz", "Course Lesson", "Course Chapter"):
+            for n in frappe.get_all(dt, filters={"course": course}, pluck="name"):
+                frappe.delete_doc(dt, n, force=True, ignore_permissions=True)
+    for dt in ("LMS Quiz", "Course Lesson", "Course Chapter", "LMS Course", "LMS Question"):
+        for n in frappe.get_all(dt, filters={"nile_key": ["like", p + "-%"]}, pluck="name"):
+            frappe.delete_doc(dt, n, force=True, ignore_permissions=True)
+    if frappe.db.exists("User", p + "-student@example.com"):
+        frappe.delete_doc("User", p + "-student@example.com", force=True, ignore_permissions=True)
+    frappe.db.commit()
+    out["ok"] = True
+except Exception as e:
+    frappe.db.rollback()
+    out["error"] = type(e).__name__ + ": " + str(e)[:300]
+print("RESULT:" + json.dumps(out))

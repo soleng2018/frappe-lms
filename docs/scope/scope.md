@@ -30,7 +30,7 @@ _The Frappe links have not been read by `/scope`; `/architect` should read the o
 | 5 | LMS running behind Traefik | Slice 1 | planned |
 | 6 | IDP login (OIDC) | Slice 1 | planned |
 | 7 | Group to role mapping | Slice 1 | planned |
-| 8 | Content sync, one course | Slice 1 | in-progress |
+| 8 | Content sync, one course | Slice 1 | done |
 | 9 | Quiz pass rules & certificate | Slice 1 | planned |
 | 10 | Branding & theme | Slice 2 | planned |
 | 11 | Guide format & full authoring | Slice 2 | planned |
@@ -113,7 +113,7 @@ Members of `NileWorkshopNAdmin` groups (N is 1, 2, 3…) become students, and `h
 **Done when:** a user in a NileWorkshop group gets the student role, a `hol-admins` user gets admin, and a user in neither is refused. Group changes apply at the next login.
 - [ ] Design it (spec): `/architect group to role mapping`
 
-### 8. Content sync, one course · in-progress
+### 8. Content sync, one course · done
 Push one course from git to Frappe through its API: a YouTube video lesson, a lab guide lesson, and a quiz for each. The thinnest real version of the authoring path.
 **Done when:** the sync script creates the course in Frappe from files in git, and running it again updates it without duplicates.
 spec [0005](../specs/0005-content-sync/index.md) · code in `tools/src/nile_tools/`, `content/`
@@ -123,10 +123,10 @@ spec [0005](../specs/0005-content-sync/index.md) · code in `tools/src/nile_tool
   - [x] Thin thread, then the full create path with quizzes and outline tables (AC-1, AC-4)
   - [x] Update, removals, progress recompute, and batches (AC-2, AC-5, AC-6, AC-8)
   - [x] `sync --check`, the live integration test, and the README (AC-2, AC-4, AC-5, AC-6, AC-8)
-- [ ] Verify it: `/check verify content sync`
-- [ ] Test it: `/test content sync`
+- [x] Verify it: `/check verify content sync`
+- [x] Test it: `/test content sync`
 - [x] Review it (fresh model): `/check review content sync`
-- [ ] Document it: `/document content sync`
+- [x] Document it: `/document content sync`
 
 ### 9. Quiz pass rules & certificate · needs a decision
 A student passes each quiz at 80% or higher, with a limited number of retakes, and earns a certificate after passing both the video quiz and the lab quiz.
