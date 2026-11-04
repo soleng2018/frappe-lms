@@ -27,7 +27,7 @@ _The Frappe links have not been read by `/scope`; `/architect` should read the o
 | 2 | Coding standards & tooling | Foundation | done |
 | 3 | Single config & secrets file | Foundation | done |
 | 4 | Data model (course, quiz, certificate, roles) | Foundation | done |
-| 5 | LMS running behind Traefik | Slice 1 | planned |
+| 5 | LMS running behind Traefik | Slice 1 | in-progress |
 | 6 | IDP login (OIDC) | Slice 1 | planned |
 | 7 | Group to role mapping | Slice 1 | in-progress |
 | 8 | Content sync, one course | Slice 1 | done |
@@ -98,10 +98,20 @@ spec [0004](../specs/0004-data-model/index.md) · code in `apps/nile_auth/`, `to
 
 ## Slice 1: the thin certify thread
 
-### 5. LMS running behind Traefik · needs a decision
+### 5. LMS running behind Traefik
 Frappe LMS starts as Docker containers from one compose file, with Traefik labels for the app URL, following the sample in `/home/nova/lms`.
 **Done when:** the LMS opens over HTTPS at its hostname, survives a restart, and logs rotate.
-- [ ] Design it (spec): `/architect LMS running behind Traefik`
+spec [0007](../specs/0007-lms-behind-traefik.md) · code in `tools/src/nile_tools/`, `deploy/scripts/`, `apps/nile_auth/`
+- [x] Design it (spec): `/architect LMS running behind Traefik`
+- [ ] Build it: `/develop LMS running behind Traefik`
+  - [x] Thin thread: `verify deploy` with the ping check, then the public, HTTP redirect and compose checks (AC-1, AC-2, AC-3, AC-7, AC-8)
+  - [ ] Dedicated MCP user: config keys, `create-site`, `ensure_mcp_user`, login protection, and the MCP checks (AC-4, AC-5)
+  - [ ] `restart-test` script and Makefile target (AC-6, AC-7)
+  - [ ] Live integration test, README, and the Cloudflare Always Use HTTPS step (AC-1 to AC-8)
+- [ ] Verify it: `/check verify LMS running behind Traefik`
+- [ ] Test it: `/test LMS running behind Traefik`
+- [ ] Review it (fresh model): `/check review LMS running behind Traefik`
+- [ ] Document it: `/document LMS running behind Traefik`
 
 ### 6. IDP login (OIDC) · needs a decision
 A script creates the OIDC application in Authentik through its API (only items it creates), and configures Frappe through its API to sign users in with it. Students and teachers log in only this way.
