@@ -27,7 +27,7 @@ _The Frappe links have not been read by `/scope`; `/architect` should read the o
 | 2 | Coding standards & tooling | Foundation | done |
 | 3 | Single config & secrets file | Foundation | done |
 | 4 | Data model (course, quiz, certificate, roles) | Foundation | done |
-| 5 | LMS running behind Traefik | Slice 1 | in-progress |
+| 5 | LMS running behind Traefik | Slice 1 | done |
 | 6 | IDP login (OIDC) | Slice 1 | in-progress |
 | 7 | Group to role mapping | Slice 1 | in-progress |
 | 8 | Content sync, one course | Slice 1 | done |
@@ -110,9 +110,9 @@ spec [0007](../specs/0007-lms-behind-traefik/index.md) · code in `tools/src/nil
   - [x] `restart-test` script and Makefile target (AC-6, AC-7)
   - [x] Live integration test, README, and the Cloudflare Always Use HTTPS step (AC-1 to AC-8)
 - [x] Verify it: `/check verify LMS running behind Traefik`
-- [ ] Test it: `/test LMS running behind Traefik`
+- [x] Test it: `/test LMS running behind Traefik`
 - [x] Review it (fresh model): `/check review LMS running behind Traefik`
-- [ ] Document it: `/document LMS running behind Traefik`
+- [x] Document it: `/document LMS running behind Traefik`
 
 ### 6. IDP login (OIDC)
 A script creates the OIDC application in Authentik through its API (only items it creates), and configures Frappe through its API to sign users in with it. Students and teachers log in only this way.

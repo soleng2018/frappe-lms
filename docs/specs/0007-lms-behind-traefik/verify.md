@@ -7,7 +7,7 @@ _Steps derived from spec 0007 acceptance criteria. `/check verify` runs these; `
 - [x] Open `https://<LMS_HOSTNAME>/` in a browser → the LMS page and its styles load, no console errors   → AC-1
 - [ ] Reboot the host once in a quiet window → `make ps` shows every service healthy, and the result is noted in the README   → AC-6 (follow-up, not an AC)
 - [x] Connect an MCP client to `https://<LMS_HOSTNAME>/api/v2/mcp` with `Authorization: token <key>:<secret>` → it initializes; without the header it gets 401   → AC-4
-- [ ] Try an Authentik login whose email equals `LMS_MCP_USER` → the generic "cannot use this login" page (403), and the MCP user record is unchanged   → AC-5
+- [x] Try an Authentik login whose email equals `LMS_MCP_USER` → the generic "cannot use this login" page (403), and the MCP user record is unchanged   → AC-5
 
 ## Commands
 - [x] `make tools CMD="verify deploy"` → one PASS/WARN/FAIL line per check, naming the URL or compose key, exit 0 when no FAIL   → AC-1, AC-8

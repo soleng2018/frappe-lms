@@ -1,7 +1,7 @@
 # 0007. Prove the LMS runs behind Traefik and close the gaps
 
 **Date**: 2026-11-03
-**Status**: In Progress
+**Status**: Accepted
 
 ## Summary
 
