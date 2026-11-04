@@ -103,11 +103,11 @@ Frappe LMS starts as Docker containers from one compose file, with Traefik label
 **Done when:** the LMS opens over HTTPS at its hostname, survives a restart, and logs rotate.
 spec [0007](../specs/0007-lms-behind-traefik.md) · code in `tools/src/nile_tools/`, `deploy/scripts/`, `apps/nile_auth/`
 - [x] Design it (spec): `/architect LMS running behind Traefik`
-- [ ] Build it: `/develop LMS running behind Traefik`
+- [x] Build it: `/develop LMS running behind Traefik`
   - [x] Thin thread: `verify deploy` with the ping check, then the public, HTTP redirect and compose checks (AC-1, AC-2, AC-3, AC-7, AC-8)
-  - [ ] Dedicated MCP user: config keys, `create-site`, `ensure_mcp_user`, login protection, and the MCP checks (AC-4, AC-5)
-  - [ ] `restart-test` script and Makefile target (AC-6, AC-7)
-  - [ ] Live integration test, README, and the Cloudflare Always Use HTTPS step (AC-1 to AC-8)
+  - [x] Dedicated MCP user: config keys, `create-site`, `ensure_mcp_user`, login protection, and the MCP checks (AC-4, AC-5)
+  - [x] `restart-test` script and Makefile target (AC-6, AC-7)
+  - [x] Live integration test, README, and the Cloudflare Always Use HTTPS step (AC-1 to AC-8)
 - [ ] Verify it: `/check verify LMS running behind Traefik`
 - [ ] Test it: `/test LMS running behind Traefik`
 - [ ] Review it (fresh model): `/check review LMS running behind Traefik`

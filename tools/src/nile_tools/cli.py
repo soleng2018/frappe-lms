@@ -151,7 +151,9 @@ def _parser() -> argparse.ArgumentParser:
     sync_cmd = commands.add_parser("sync", help="make the LMS course match content/course.yaml")
     sync_cmd.add_argument("--check", action="store_true", help="only list what would change")
     ver = commands.add_parser("verify", help="prove the deployment is reachable and safe")
-    ver.add_subparsers(dest="action", required=True).add_parser("deploy", help="run every check")
+    ver_actions = ver.add_subparsers(dest="action", required=True)
+    ver_actions.add_parser("deploy", help="run every check")
+    ver_actions.add_parser("services", help="list the long running services, one per line")
     cfg = commands.add_parser("config", help="check, show or print the sample of the config file")
     actions = cfg.add_subparsers(dest="action", required=True)
     check = actions.add_parser("check", help="validate .env and the repo")
@@ -172,6 +174,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.command == "whoami":
             return whoami(root)
         if args.command == "verify":
+            if args.action == "services":
+                print("\n".join(verify.long_running(verify.load_compose(root))))
+                return 0
             return verify_deploy(root)
         if args.command == "sync":
             return sync(root, check=args.check)

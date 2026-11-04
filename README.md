@@ -14,6 +14,7 @@ You need all of these before you start.
 | A public DNS name for the LMS (for example `guide.nile.global`) pointing at the host that runs Traefik | It becomes the Frappe site name and the Traefik host rule. It cannot change after the first start. |
 | A running Authentik with admin access | Students and admins log in through it. |
 | Internet access during the first build | Pulls the base images and clones Frappe, LMS and payments at pinned tags. |
+| `sudo` on the host and access to the Cloudflare dashboard of your zone | `make restart-test` kills container processes with `sudo kill -9`. The Cloudflare step in section 6 makes plain HTTP redirect to HTTPS. |
 | `uv` and Python 3.12 (only if you run the `tools` code or tests on the host) | Lint and unit tests. Not needed to run the stack. |
 | Docker, `uv` and `git` on any machine that commits | The commit hook runs hadolint and gitleaks in Docker, and ruff, mypy and pre-commit through `uv`. |
 
@@ -39,10 +40,11 @@ Everything lives in one file, `.env`, at the repo root. It is never committed an
 | `DB_ROOT_PASSWORD` | MariaDB root password. MariaDB ignores a change after the first start. |
 | `LMS_ENCRYPTION_KEY` | Frappe `encryption_key`. It encrypts every password field, so a restore is impossible without it. Back it up. |
 | `LMS_API_KEY`, `LMS_API_SECRET` | API credentials of the service user that the tools container uses. |
+| `LMS_MCP_API_KEY`, `LMS_MCP_API_SECRET` | API credentials of a separate MCP user for your AI agent (section 6). Not fixed: to rotate, edit both in `.env`, then `make up`. |
 
-**Defaults you may change:** `LMS_SERVICE_USER`, `LMS_TIMEZONE` (default `America/Los_Angeles`, so Pacific time; use any IANA name), `AUTHENTIK_APP_SLUG`, `AUTHENTIK_ADMIN_GROUP`, `AUTHENTIK_STUDENT_GROUP_PREFIX`, `AUTHENTIK_STUDENT_GROUP_SUFFIX`, `TRAEFIK_NETWORK`, `TRAEFIK_ENTRYPOINT`, `TRAEFIK_CERT_RESOLVER`.
+**Defaults you may change:** `LMS_SERVICE_USER`, `LMS_MCP_USER` (default `nile-mcp@example.com`), `LMS_TIMEZONE` (default `America/Los_Angeles`, so Pacific time; use any IANA name), `AUTHENTIK_APP_SLUG`, `AUTHENTIK_ADMIN_GROUP`, `AUTHENTIK_STUDENT_GROUP_PREFIX`, `AUTHENTIK_STUDENT_GROUP_SUFFIX`, `TRAEFIK_NETWORK`, `TRAEFIK_ENTRYPOINT`, `TRAEFIK_CERT_RESOLVER`.
 
-**Fixed after the first start** (never edit once the stack has run): `LMS_HOSTNAME`, `LMS_ADMIN_PASSWORD`, `LMS_ENCRYPTION_KEY`, `LMS_SERVICE_USER`, `LMS_API_KEY`, `LMS_API_SECRET`, `DB_ROOT_PASSWORD`, `AUTHENTIK_APP_SLUG`. **Keep a private copy of `.env`**: if you lose it, the data in the volumes cannot be recovered, and `create-site` refuses to start with a different encryption key.
+**Fixed after the first start** (never edit once the stack has run): `LMS_HOSTNAME`, `LMS_ADMIN_PASSWORD`, `LMS_ENCRYPTION_KEY`, `LMS_SERVICE_USER`, `LMS_MCP_USER`, `LMS_API_KEY`, `LMS_API_SECRET`, `DB_ROOT_PASSWORD`, `AUTHENTIK_APP_SLUG`. **Keep a private copy of `.env`**: if you lose it, the data in the volumes cannot be recovered, and `create-site` refuses to start with a different encryption key.
 
 Version pins are not secrets. They live in the committed `deploy/versions.env`.
 
@@ -73,6 +75,8 @@ The first `make up` builds the image, which takes a while. `configurator` and `c
 | `make ps` | Show all containers of the stack. |
 | `make logs` | Last 100 log lines per service. |
 | `make tools CMD=<command>` | Run a tools command in the tools container. Today: `init`, `whoami`, `sync [--check]`, `config check [--for up\|tools-authentik]`, `config show` (secrets as `*****`), `config sample`. |
+| `make tools CMD="verify deploy"` | Prove the LMS over its public hostname: ping, home page, assets, socket.io, HTTP redirect, the MCP door, and the compose file (no published ports, log rotation, restart policy). One `PASS`, `WARN` or `FAIL` line per check. Exits 1 only on a FAIL. |
+| `make restart-test` | Restart the long running services, `kill -9` the `backend` and `frontend` processes, and check everything is healthy again within 180 seconds, then run `verify deploy`. Needs Docker and `sudo` on the host. Touches only the `nile-lms` project. |
 | `make hooks` | Install the pre-commit hook. Run once per clone. |
 | `make lint` | Scan the tree for secrets with gitleaks (in Docker), then run every hook on all files (hygiene, shellcheck, shfmt, hadolint, ruff, mypy, compose check). Hooks fix what they can and fail the run when they changed a file, so run it again. |
 | `make fmt` | Same as `make lint`. |
@@ -102,13 +106,29 @@ make tools CMD=sync             # checks the file first, then makes the LMS matc
 - If a request fails, the command stops, prints the record, the URL, the status and the reason, and exits 1. Run it again: it carries on where it stopped.
 - Every existing batch gets the course added to it. Students keep their progress, and it is recalculated when the outline changes.
 
-## 6. Layout
+## 6. Checking the deployment and connecting an agent
+
+Run `make tools CMD="verify deploy"` after every rebuild.
+
+**Always Use HTTPS (one time, in Cloudflare).** Cloudflare sends plain HTTP requests to Traefik over HTTPS, so Traefik never sees them and cannot redirect. In the Cloudflare dashboard open your zone, then SSL/TLS, then Edge Certificates, and turn on **Always Use HTTPS**. Run `verify deploy` again: the `http redirect` line changes from `WARN` to `PASS`.
+
+**Connect an AI agent over MCP.** The LMS has a built in MCP endpoint at `https://<LMS_HOSTNAME>/api/v2/mcp`. Without a key it answers 401. `create-site` makes a separate user (`LMS_MCP_USER`) with the Desk User role and the four LMS roles, and never System Manager, so it cannot change settings, users or roles. Give your agent this header, with the values of `LMS_MCP_API_KEY` and `LMS_MCP_API_SECRET` from `.env`:
+
+```
+Authorization: token <LMS_MCP_API_KEY>:<LMS_MCP_API_SECRET>
+```
+
+The agent can read and write LMS content. Git is the source of truth, so an agent edit shows up as drift in `sync --check` and the next `sync` overwrites it. To revoke the agent, disable the user in the Desk, or change both keys in `.env` and run `make up`. The tools key is never used for the agent.
+
+**Reboot test (once, by hand).** `restart-test` does not reboot the host. In a quiet window, reboot it and check `make ps` shows every service healthy. Other apps on the server go down too, so note the result here when you have done it.
+
+## 7. Layout
 
 - `deploy/`: compose file, image build, version pins, container scripts.
 - `tools/`: Python package for setup scripts.
 - `apps/nile_auth/`: custom Frappe app: Authentik groups become LMS roles at login (`hol-admins` admin, `NileWorkshopNAdmin` students).
 - `content/`: courses. `brand/`: brand assets (do not edit). `docs/`: scope, specs, reviews.
 
-## 7. Keeping this file current
+## 8. Keeping this file current
 
 This README is updated at the end of every work turn that changes how the repo is set up or used. See the rules in [AGENTS.md](AGENTS.md).
