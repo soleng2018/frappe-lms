@@ -1,7 +1,7 @@
 # 0008. Sign in through Authentik, set up by one script
 
 **Date**: 2026-11-04
-**Status**: Proposed
+**Status**: In Progress
 
 ## Summary
 
