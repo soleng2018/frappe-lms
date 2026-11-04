@@ -114,10 +114,10 @@ Members of `NileWorkshopNAdmin` groups (N is 1, 2, 3…) become students, and `h
 spec [0006](../specs/0006-group-to-role-mapping/index.md) · code in `apps/nile_auth/`, `deploy/scripts/create-site.sh`
 - [x] Design it (spec): `/architect group to role mapping`
 - [ ] Build it: `/develop group to role mapping`
-  - [ ] Probe the live site, add the `nile_service_user` site setting, and the pure group check with unit tests (AC-4, AC-7)
-  - [ ] Thin thread: the callback override creates a student and refuses everyone else (AC-1, AC-3)
-  - [ ] Batches, enrollments, `nile_groups`, admin and both paths, role reconcile (AC-1, AC-2, AC-5, AC-6, AC-11)
-  - [ ] Safety: early state check, protected accounts, error handling, logs (AC-7, AC-8, AC-9, AC-10, AC-12)
+  - [x] Probe the live site, add the `nile_service_user` site setting, and the pure group check with unit tests (AC-4, AC-7)
+  - [x] Thin thread: the callback override creates a student and refuses everyone else (AC-1, AC-3)
+  - [x] Batches, enrollments, `nile_groups`, admin and both paths, role reconcile (AC-1, AC-2, AC-5, AC-6, AC-11)
+  - [x] Safety: early state check, protected accounts, error handling, logs (AC-7, AC-8, AC-9, AC-10, AC-12)
   - [ ] Live integration test and README, then the real Authentik sign in once feature 6 is up (AC-1 to AC-11)
 - [ ] Verify it: `/check verify group to role mapping`
 - [ ] Test it: `/test group to role mapping`

@@ -65,14 +65,14 @@ The ordering inside the override follows from how Frappe commits. `login_oauth_u
 
 The engineer's answers fix the rest. Groups are testbeds, so nothing is deleted when a student leaves one, and the new `nile_groups` field is the only place that says which groups are current. Every student gets every published course, since a group does not imply a course. Admins who are also workshop members get the student role and enrollments, so they can test as students, and the cost is that the manager views must filter them. A missing `groups` claim is treated as a setup fault, not as "no groups", because the second reading would demote every admin at their next login after one wrong Authentik setting. Protecting `Administrator` and any System Manager is a generalization of the engineer's choice to protect the service user: `nile_auth` never grants System Manager, so holding it marks an account that must not be reachable by email match.
 
-Cross check (second model, 2026-11-03) changed the draft in these ways, all applied: admins get Desk User as a fourth managed role because the user type is derived from role desk access and the LMS roles have none; the `state` token is peeked at the start instead of consumed on the refusal path; batch creation uses a locking read because a plain read under REPEATABLE READ cannot see the other login's row; locks are taken in sorted order; the batch confirmation email and queued notification are switched off; the email takeover path is closed with a social id check; the whole flow sits in one error handler; outcome words, statuses, and the `decide` signature are fixed.
+Cross check (second model, 2026-11-03) changed the draft in these ways, all applied: admins get Desk User as a fourth managed role because the user type is derived from role desk access and the LMS roles have none; the `state` token is peeked at the start instead of consumed on the refusal path; batch creation used a locking read first (replaced on 2026-11-03, see the update below); locks are taken in sorted order; the batch confirmation email and queued notification are switched off; the email takeover path is closed with a social id check; the whole flow sits in one error handler; outcome words, statuses, and the `decide` signature are fixed.
 
 Decisions I made without asking the engineer:
 - Read the group names from site config, as spec 0002 already decided (`create-site` writes them from `.env`), instead of hardcoding `hol-admins` and `NileWorkshop`. One source of truth. The pure function takes the names as arguments. Runner up: constants in code, rejected because it would duplicate the `.env` keys.
 - Add one site config line, `nile_service_user`, for the batch instructors, since the `backend` container has no `LMS_SERVICE_USER` and spec 0002 keeps its environment empty.
 - Store only matching groups in `nile_groups`, not every group, so unrelated group names (possible personal data) are not copied into the LMS.
 - Record only matching group names, one per line, sorted, so a diff between logins is stable.
-- Lock the batch row while adding Batch Course rows, and use a savepoint around batch creation for the duplicate key case. Runner up: a global named lock, rejected as heavier.
+- Lock the batch row while adding Batch Course rows, and use a savepoint around batch creation for the duplicate key case. Runner up: a global named lock, rejected as heavier, and because a MariaDB named lock outlives Frappe's commit and so cannot be released at the right moment.
 - Refuse with generic wording that does not reveal which rule failed.
 - Log with the Frappe logger `nile_auth` and use Error Log for faults. Runner up: a new log table, rejected as unneeded for a dev site.
 - Run the writes as `Administrator` and restore the session user afterwards, as spec 0004's live findings require.
@@ -87,3 +87,22 @@ Decisions I made without asking the engineer:
 - `get_info_via_oauth` reads the userinfo from the provider's `api_endpoint`, so a `groups` claim in the userinfo response reaches the override.
 
 Not read or not proven yet (build task 1): that the override routes with the provider in the path, the GET rollback behaviour on this install, the required fields of LMS Enrollment, and the Authentik `profile` scope content on this Authentik version.
+
+## Update 2026-11-03: how a new batch is found and made
+
+The build ran the spec's batch step on the live site with two real processes logging in at the same moment, and it failed twice in two different ways. The first fix did not remove the second failure, so the decision needed a proper change.
+
+**What the live site showed**:
+1. The spec said to take a locking read on `nile_group` first, then insert if the row is missing. A locking read of a row that does not exist takes a gap lock (a lock on the empty space where the row would go). Both logins got that lock, then both tried to insert into it, and MariaDB ended one with a deadlock (error 1213). The loser got the retry page.
+2. After reading plainly first and inserting inside a savepoint, the loser still failed. Under the default REPEATABLE READ the loser's transaction has a fixed picture of the data from its first read. After the duplicate key error a locking read can see the winner's row, but LMS's own checks use plain reads, and those cannot. The Batch Enrollment link check said `Could not find Batch`.
+
+**Options for this sub decision**:
+- **A. Locking read first (the original spec)**: deadlocks, as shown.
+- **B. Plain read, savepoint insert, locking read after a duplicate, at REPEATABLE READ**: removes the deadlock but not the stale picture. Rejected, it failed live.
+- **C. B plus READ COMMITTED for the login transaction (chosen)**: at READ COMMITTED each read sees the latest committed data, so the loser sees the winner's batch everywhere, and locking reads take no gap locks. Passed three runs in a row, and the full scenario file.
+- **D. A named lock around batch creation**: serialises the logins, but a MariaDB named lock is not released by Frappe's commit, so it needs a release in a place the flow does not have. Rejected.
+- **E. Restart the whole login on a duplicate (retry page for the loser)**: simple, but a class of students logging in together at the start of a new testbed would hit it. Rejected as poor for the main use.
+
+**Why C**: it is the smallest change that makes both logins finish, and it removes the cause instead of the symptom. The cost is a session setting that `custom` sets and restores, and a database that allows READ COMMITTED writes (the live site has binary logging off and the format set to MIXED, so it does). The change is made by `SET SESSION TRANSACTION ISOLATION LEVEL`, because plain `SET TRANSACTION` is refused once Frappe has started its transaction, and Frappe starts the next one right after any commit.
+
+Evidence: the integration file `tools/tests/test_group_role_mapping_integration.py`, test `test_two_first_logins_at_once_leave_one_batch`. The same update added the `nile_service_user` finding to the build: the `backend` container has no `LMS_SERVICE_USER`, which the spec already assumed.
