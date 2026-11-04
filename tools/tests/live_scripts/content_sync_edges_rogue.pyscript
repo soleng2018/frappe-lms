@@ -1,0 +1,18 @@
+# Runs inside `bench console` (see test_content_sync_edges_integration.py); __P__ is the test prefix.
+# Adds a lesson by hand, the way someone in the Desk would: no nile_key, listed in the chapter.
+import json, frappe
+out = {}
+try:
+    chapter = frappe.db.get_value("Course Chapter", {"nile_key": "__P__-ch2"})
+    lesson = frappe.get_doc({"doctype": "Course Lesson", "title": "Rogue lesson", "chapter": chapter,
+        "body": "by hand"}).insert(ignore_permissions=True)
+    doc = frappe.get_doc("Course Chapter", chapter)
+    doc.append("lessons", {"lesson": lesson.name})
+    doc.save(ignore_permissions=True)
+    frappe.db.commit()
+    out["ok"] = True
+    out["lesson"] = lesson.name
+except Exception as e:
+    frappe.db.rollback()
+    out["error"] = type(e).__name__ + ": " + str(e)[:300]
+print("RESULT:" + json.dumps(out))

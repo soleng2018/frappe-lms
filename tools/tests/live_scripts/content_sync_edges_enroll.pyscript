@@ -1,0 +1,12 @@
+# Runs inside `bench console` (see test_content_sync_edges_integration.py); __P__ is the test prefix.
+import json, frappe
+out = {}
+try:
+    course = frappe.db.get_value("LMS Course", {"nile_key": "__P__-course"})
+    frappe.get_doc({"doctype": "LMS Enrollment", "member": "__P__-student@example.com", "course": course}).insert(ignore_permissions=True)
+    frappe.db.commit()
+    out["ok"] = True
+except Exception as e:
+    frappe.db.rollback()
+    out["error"] = type(e).__name__ + ": " + str(e)[:300]
+print("RESULT:" + json.dumps(out))
