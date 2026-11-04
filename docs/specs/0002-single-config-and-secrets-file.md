@@ -170,7 +170,7 @@ absent → `tools init` → created (generated keys filled, operator keys blank)
 | `tools` | None in its environment. It mounts the repo root (same absolute path as on the host) and reads `.env` itself (process environment wins over the file, for tests) |
 | `backend` and all other services, `configurator`, redis services, `websocket`, `queue-short`, `queue-long`, `scheduler` | None |
 
-Keys also used by Compose itself for interpolation (image tags, Traefik labels and network, `extra_hosts`): `LMS_HOSTNAME`, `AUTHENTIK_HOSTNAME`, `TRAEFIK_*`, and the pins from `deploy/versions.env`. Where Compose would fail to parse an empty value (such as `extra_hosts`), use `${KEY:-unset.invalid}`; this is a parse placeholder, not a default, and the wrapper's check blocks `up` anyway. Defaults live in the sample (or `versions.env`) only, never repeated in compose. The `db` healthcheck uses the image's `healthcheck.sh`, not a command that needs the password under another name.
+Keys also used by Compose itself for interpolation (image tags, Traefik labels and network): `LMS_HOSTNAME`, `TRAEFIK_*`, and the pins from `deploy/versions.env`. Where Compose would fail to parse an empty value (such as a label), use `${KEY:-unset.invalid}`; this is a parse placeholder, not a default, and the wrapper's check blocks `up` anyway. Defaults live in the sample (or `versions.env`) only, never repeated in compose. The `db` healthcheck uses the image's `healthcheck.sh`, not a command that needs the password under another name.
 
 **Value sourcing**:
 
@@ -184,7 +184,6 @@ Keys also used by Compose itself for interpolation (image tags, Traefik labels a
 | `ensure_service_user` | User id, API key, API secret | `LMS_SERVICE_USER`, `LMS_API_KEY`, `LMS_API_SECRET` from the container environment |
 | `tools` API calls | Base URL and `Authorization: token key:secret` | `https://` + `LMS_HOSTNAME`, `LMS_API_KEY`, `LMS_API_SECRET` |
 | `tools` Authentik calls | Base URL and bearer token | `https://` + `AUTHENTIK_HOSTNAME`, `AUTHENTIK_API_TOKEN` |
-| `tools` `extra_hosts` | Hostnames mapped to the host gateway | `LMS_HOSTNAME`, `AUTHENTIK_HOSTNAME` |
 | `nile_auth` | Which group means admin or student | Site config (`frappe.conf`), written by `create-site` from `AUTHENTIK_ADMIN_GROUP`, prefix and suffix keys |
 | Image build | Frappe, LMS, Containerfile, Python, Node pins, MariaDB image | `deploy/versions.env` |
 | `db` | Root password | `DB_ROOT_PASSWORD` |
