@@ -5,6 +5,11 @@ set -euo pipefail
 cd /home/frappe/frappe-bench
 
 SITE="${LMS_HOSTNAME:?LMS_HOSTNAME is blank}"
+# Refuse before anything is written, so the site settings below stay as they were (spec 0007, AC-5).
+if [ -n "${LMS_MCP_USER:-}" ] && [ "$LMS_MCP_USER" = "${LMS_SERVICE_USER:-}" ]; then
+  echo "ERROR: LMS_MCP_USER must differ from LMS_SERVICE_USER. Nothing was changed." >&2
+  exit 1
+fi
 CONFIG="sites/$SITE/site_config.json"
 # PENDING exists from the start of a first creation until all setup below has finished. A leftover
 # one means a first run was interrupted, so the site is ours and incomplete. MARKER records a

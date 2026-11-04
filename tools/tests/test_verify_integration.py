@@ -73,7 +73,24 @@ def test_mcp_user_rerun_changes_nothing_and_rotation_follows_env(values):
     assert verify.run(REPO, values, say=lambda _: None) == 0
 
 
+def _site_setting(values: dict[str, str], key: str) -> str:
+    site = values["LMS_HOSTNAME"]
+    out = subprocess.run(
+        [*COMPOSE, "exec", "-T", "backend", "bench", "--site", site, "show-config"],
+        check=True,
+        capture_output=True,
+        text=True,
+        env={**os.environ, "REPO_DIR": str(REPO), "APPS_HASH": "x"},
+        timeout=120,
+    ).stdout
+    row = next(ln for ln in out.splitlines() if ln.startswith(f"| {key} "))
+    return row.split("|")[2].strip()
+
+
 def test_mcp_user_must_differ_from_the_service_user(values):
+    """AC-5: the refusal comes before any write, so the protected user setting is untouched."""
+    before = _site_setting(values, "nile_mcp_user")
     result = _create_site(f"LMS_MCP_USER={values['LMS_SERVICE_USER']}")
     assert result.returncode != 0
     assert "must differ" in result.stderr + result.stdout
+    assert _site_setting(values, "nile_mcp_user") == before == values["LMS_MCP_USER"]

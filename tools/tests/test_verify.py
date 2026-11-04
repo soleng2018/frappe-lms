@@ -145,6 +145,40 @@ def test_long_running_excludes_one_shots_and_profiles():
     assert not {"configurator", "create-site", "tools"} & set(names)
 
 
+def test_long_running_skips_a_profile_service_and_a_one_shot_others_wait_on():
+    c = _compose()
+    c["services"]["extra"] = {"profiles": ["tools"]}
+    c["services"]["setup"] = {}
+    c["services"]["app"] = {
+        "depends_on": {"setup": {"condition": "service_completed_successfully"}}
+    }
+    names = verify.long_running(c)
+    assert "extra" not in names
+    assert "setup" not in names
+    assert "app" in names
+
+
+def test_home_page_without_assets_fails_for_css_and_js():
+    page = httpx.Response(
+        200,
+        text="<html><body>no files</body></html>",
+        headers={"content-type": "text/html"},
+        request=httpx.Request("GET", f"https://{HOST}/"),
+    )
+    with httpx.Client(transport=_handler()) as client:
+        results = verify._asset_results(client, page, f"https://{HOST}")
+    assert [r.level for r in results] == ["FAIL", "FAIL"]
+    assert all(HOST in r.line() for r in results)
+
+
+def test_only_the_first_five_assets_of_each_type_are_fetched():
+    page = "".join(f'<link rel="stylesheet" href="/assets/{i}.css">' for i in range(8))
+    page += "".join(f'<script src="/assets/{i}.js"></script>' for i in range(8))
+    assets = verify.parse_assets(page, f"https://{HOST}/")
+    assert assets.css == tuple(f"/assets/{i}.css" for i in range(5))
+    assert assets.js == tuple(f"/assets/{i}.js" for i in range(5))
+
+
 def test_published_port_fails():
     c = _compose()
     c["services"]["backend"]["ports"] = ["8000:8000"]
