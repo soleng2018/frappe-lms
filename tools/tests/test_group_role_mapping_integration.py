@@ -139,6 +139,8 @@ def test_protected_accounts_and_identity_changes_are_refused(run: dict[str, Any]
     for name in (
         "administrator",
         "service",
+        "mcp",
+        "mcp_upper",
         "system_manager",
         "system_manager_user",
         "identity",
@@ -146,6 +148,8 @@ def test_protected_accounts_and_identity_changes_are_refused(run: dict[str, Any]
     ):
         assert run[name] == {"status": 403, "signed_in": False}, name
     assert run["sm_unchanged"]
+    assert run["mcp_unchanged"]
+    assert run["mcp_blank_setting"]["signed_in"]
     assert run["admin_user_ok"]
     assert run["same_sub_ok"]
 

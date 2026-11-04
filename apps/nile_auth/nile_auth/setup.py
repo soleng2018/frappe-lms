@@ -82,7 +82,7 @@ def ensure_mcp_user():
 	api_key = os.environ["LMS_MCP_API_KEY"]
 	api_secret = os.environ["LMS_MCP_API_SECRET"]
 
-	if user_id == os.environ.get("LMS_SERVICE_USER"):
+	if user_id.lower() == os.environ.get("LMS_SERVICE_USER", "").lower():
 		sys.exit("ERROR: LMS_MCP_USER must differ from LMS_SERVICE_USER. Nothing was changed.")
 
 	if frappe.db.exists("User", user_id):
@@ -90,7 +90,7 @@ def ensure_mcp_user():
 		problems = _mcp_problems(user.user_type, {r.role for r in user.roles})
 		if problems:
 			_mcp_stop(user_id, problems)
-		if user.api_key == api_key and user.get_password("api_secret") == api_secret:
+		if user.api_key == api_key and user.get_password("api_secret", raise_exception=False) == api_secret:
 			print(f"MCP user {user_id} already set up")
 			return
 		user.api_key = api_key
@@ -101,9 +101,9 @@ def ensure_mcp_user():
 		print(f"MCP user {user_id} key and secret updated from .env")
 		return
 
-	missing = [r for r in MCP_ROLES if not frappe.db.exists("Role", r)]
-	if missing:
-		_mcp_stop(user_id, [f"the role {r} does not exist on this site" for r in missing])
+	problems = _mcp_problems("System User", {"Desk User"})
+	if problems:
+		_mcp_stop(user_id, problems)
 	user = frappe.get_doc(
 		{
 			"doctype": "User",

@@ -31,7 +31,7 @@ wait_healthy() {
         bad="$bad $svc(not running)"
         continue
       fi
-      state="$(docker inspect -f '{{.State.Health.Status}}' "$id")"
+      state="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}no healthcheck{{end}}' "$id")"
       [ "$state" = "healthy" ] || bad="$bad $svc($state)"
     done
     [ -z "$bad" ] && return 0

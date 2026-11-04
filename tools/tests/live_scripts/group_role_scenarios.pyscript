@@ -205,6 +205,21 @@ try:
     out["administrator"] = login("Administrator", [g1], sub="x")
     out["admin_user_ok"] = frappe.db.get_value("User", "Administrator", "nile_groups") in (None, "")
     out["service"] = login(frappe.conf.nile_service_user, [g1], sub="x")
+    # spec 0007 AC-5: the MCP user is refused too, and its record is not touched
+    mcp = frappe.conf.nile_mcp_user
+    mcp_before = (roles(mcp), frappe.db.get_value("User", mcp, ["api_key", "nile_groups"])) if mcp else None
+    out["mcp"] = login(mcp, [g1], sub="x") if mcp else None
+    out["mcp_upper"] = login(mcp.upper(), [g1], sub="x") if mcp else None
+    out["mcp_unchanged"] = (
+        (roles(mcp), frappe.db.get_value("User", mcp, ["api_key", "nile_groups"])) == mcp_before if mcp else None
+    )
+    # a blank setting must not make an empty id match anything: an ordinary login still passes
+    saved = frappe.conf.get("nile_mcp_user")
+    frappe.conf["nile_mcp_user"] = ""
+    try:
+        out["mcp_blank_setting"] = login(f"nile-it-nb-{sfx}@example.com", [g1], sub="sub-nb" + sfx)
+    finally:
+        frappe.conf["nile_mcp_user"] = saved
     out["system_manager"] = login("Administrator".lower(), ["hol-admins"], sub="x")
     other = f"nile-it-o-{sfx}@example.com"
     login(other, [g1], sub="sub-o" + sfx)

@@ -12,7 +12,7 @@ from nile_tools.config import ConfigError
 REPO = Path(__file__).resolve().parents[2]
 HOST = "lms.example.com"
 MCP_URL = f"https://{HOST}/api/v2/mcp"
-SETTINGS = verify.Settings(HOST, "k" * 32, "s" * 32)
+SETTINGS = verify.Settings(HOST, "a" * 32, "b" * 32)
 RPC = {"jsonrpc": "2.0", "id": 1, "result": {"protocolVersion": "2025-06-18"}}
 HOME = (
     '<html><head><link rel="stylesheet" href="/assets/a.css?v=1">'
@@ -49,8 +49,8 @@ def _handler(overrides: dict[str, httpx.Response] | None = None):
 VALUES = {
     "LMS_HOSTNAME": HOST,
     "LMS_MCP_USER": "nile-mcp@example.com",
-    "LMS_MCP_API_KEY": "k" * 32,
-    "LMS_MCP_API_SECRET": "s" * 32,
+    "LMS_MCP_API_KEY": "a" * 32,
+    "LMS_MCP_API_SECRET": "b" * 32,
 }
 
 
@@ -265,13 +265,13 @@ def test_output_never_holds_the_key_or_secret(tmp_path):
     values = {
         "LMS_HOSTNAME": HOST,
         "LMS_MCP_USER": "nile-mcp@example.com",
-        "LMS_MCP_API_KEY": "k" * 32,
-        "LMS_MCP_API_SECRET": "s" * 32,
+        "LMS_MCP_API_KEY": "a" * 32,
+        "LMS_MCP_API_SECRET": "b" * 32,
     }
-    bad = _handler({"mcp-key": httpx.Response(403, text="k" * 32)})
+    bad = _handler({"mcp-key": httpx.Response(403, text="a" * 32)})
     verify.run(tmp_path, values, say=lines.append, transport=bad)
-    assert "k" * 32 not in "\n".join(lines)
-    assert "s" * 32 not in "\n".join(lines)
+    assert "a" * 32 not in "\n".join(lines)
+    assert "b" * 32 not in "\n".join(lines)
 
 
 def test_all_missing_mcp_keys_are_named_at_once():
@@ -279,3 +279,11 @@ def test_all_missing_mcp_keys_are_named_at_once():
         verify.load_settings({"LMS_HOSTNAME": HOST})
     for key in ("LMS_MCP_USER", "LMS_MCP_API_KEY", "LMS_MCP_API_SECRET"):
         assert key in str(e.value)
+
+
+def test_badly_formed_values_are_named_before_any_request():
+    values = {**VALUES, "LMS_HOSTNAME": "not a host", "LMS_MCP_API_KEY": "short"}
+    with pytest.raises(ConfigError) as e:
+        verify.load_settings(values)
+    assert "LMS_HOSTNAME" in str(e.value)
+    assert "LMS_MCP_API_KEY" in str(e.value)

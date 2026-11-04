@@ -6,7 +6,9 @@ cd /home/frappe/frappe-bench
 
 SITE="${LMS_HOSTNAME:?LMS_HOSTNAME is blank}"
 # Refuse before anything is written, so the site settings below stay as they were (spec 0007, AC-5).
-if [ -n "${LMS_MCP_USER:-}" ] && [ "$LMS_MCP_USER" = "${LMS_SERVICE_USER:-}" ]; then
+# Compared without regard to case, as Frappe and MariaDB treat user ids.
+MCP="${LMS_MCP_USER:-}" SVC="${LMS_SERVICE_USER:-}"
+if [ -n "$MCP" ] && [ "${MCP,,}" = "${SVC,,}" ]; then
   echo "ERROR: LMS_MCP_USER must differ from LMS_SERVICE_USER. Nothing was changed." >&2
   exit 1
 fi

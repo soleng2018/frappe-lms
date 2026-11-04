@@ -15,7 +15,7 @@ from urllib.parse import urljoin, urlsplit
 import httpx
 import yaml
 
-from nile_tools.config import ConfigError
+from nile_tools.config import KEYS, VALIDATORS, ConfigError
 
 __all__ = [
     "REQUIRED_KEYS",
@@ -30,9 +30,12 @@ __all__ = [
     "judge_ping",
     "judge_redirect",
     "judge_socketio",
+    "load_compose",
     "load_settings",
     "long_running",
+    "mcp_results",
     "parse_assets",
+    "probe",
     "public_results",
     "run",
 ]
@@ -51,6 +54,21 @@ LOG_MAX_FILE = "5"
 RESTART_POLICY = "unless-stopped"
 TRAEFIK_NETWORK = "traefik"
 HOST_RULE = "Host(`${LMS_HOSTNAME}`)"
+MCP_PATH = "/api/v2/mcp"
+MCP_HEADERS = {
+    "Content-Type": "application/json",
+    "Accept": "application/json, text/event-stream",
+}
+MCP_INITIALIZE = {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "initialize",
+    "params": {
+        "protocolVersion": "2025-06-18",
+        "capabilities": {},
+        "clientInfo": {"name": "nile-verify", "version": "1"},
+    },
+}
 
 
 @dataclass(frozen=True)
@@ -90,6 +108,15 @@ def load_settings(values: Mapping[str, str]) -> Settings:
         raise ConfigError(
             f"verify deploy needs these keys in .env: {', '.join(missing)} (run make init)"
         )
+    bad = [
+        f"{key.name} {error}"
+        for key in KEYS
+        if key.name in REQUIRED_KEYS and key.validator
+        for error in [VALIDATORS[key.validator](values[key.name])]
+        if error
+    ]
+    if bad:
+        raise ConfigError("verify deploy found bad values in .env: " + "; ".join(bad))
     return Settings(
         host=values["LMS_HOSTNAME"],
         mcp_key=values["LMS_MCP_API_KEY"],
@@ -199,23 +226,6 @@ def judge_redirect(url: str, r: httpx.Response) -> Result:
         f"{url} gave HTTP {r.status_code} with no redirect to https. "
         "Turn on Always Use HTTPS in Cloudflare (see README)",
     )
-
-
-MCP_PATH = "/api/v2/mcp"
-MCP_HEADERS = {
-    "Content-Type": "application/json",
-    "Accept": "application/json, text/event-stream",
-}
-MCP_INITIALIZE = {
-    "jsonrpc": "2.0",
-    "id": 1,
-    "method": "initialize",
-    "params": {
-        "protocolVersion": "2025-06-18",
-        "capabilities": {},
-        "clientInfo": {"name": "nile-verify", "version": "1"},
-    },
-}
 
 
 def judge_mcp_guest(url: str, r: httpx.Response) -> Result:

@@ -111,7 +111,7 @@ spec [0007](../specs/0007-lms-behind-traefik/index.md) · code in `tools/src/nil
   - [x] Live integration test, README, and the Cloudflare Always Use HTTPS step (AC-1 to AC-8)
 - [x] Verify it: `/check verify LMS running behind Traefik`
 - [ ] Test it: `/test LMS running behind Traefik`
-- [ ] Review it (fresh model): `/check review LMS running behind Traefik`
+- [x] Review it (fresh model): `/check review LMS running behind Traefik`
 - [ ] Document it: `/document LMS running behind Traefik`
 
 ### 6. IDP login (OIDC)
