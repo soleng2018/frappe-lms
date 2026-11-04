@@ -36,7 +36,7 @@ make tools CMD="config sample"   # print the .env.sample generated from the key 
 ## Related specs
 
 - [0002 Single config and secrets file](../docs/specs/0002-single-config-and-secrets-file.md)
-- [0007 LMS behind Traefik](../docs/specs/0007-lms-behind-traefik.md)
+- [0007 LMS behind Traefik](../docs/specs/0007-lms-behind-traefik/index.md)
 - [0003 Coding standards and tooling](../docs/specs/0003-coding-standards-and-tooling.md)
 
 _Drafted by /audit from the repo, worth a quick human pass. Edit freely: once a line stops matching this draft, later runs treat it as curated and will flag rather than overwrite it._

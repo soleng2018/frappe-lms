@@ -38,7 +38,7 @@ Run from the repo root: `make build`, `make up`, `make down`, `make ps`, `make l
 ## Related specs
 
 - [0001 Stack and architecture](../docs/specs/0001-stack-and-architecture/index.md)
-- [0007 LMS behind Traefik](../docs/specs/0007-lms-behind-traefik.md)
+- [0007 LMS behind Traefik](../docs/specs/0007-lms-behind-traefik/index.md)
 - [0002 Single config and secrets file](../docs/specs/0002-single-config-and-secrets-file.md)
 
 _Drafted by /audit from the repo, worth a quick human pass. Edit freely: once a line stops matching this draft, later runs treat it as curated and will flag rather than overwrite it._

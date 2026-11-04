@@ -101,7 +101,7 @@ spec [0004](../specs/0004-data-model/index.md) · code in `apps/nile_auth/`, `to
 ### 5. LMS running behind Traefik
 Frappe LMS starts as Docker containers from one compose file, with Traefik labels for the app URL, following the sample in `/home/nova/lms`.
 **Done when:** the LMS opens over HTTPS at its hostname, survives a restart, and logs rotate.
-spec [0007](../specs/0007-lms-behind-traefik.md) · code in `tools/src/nile_tools/`, `deploy/scripts/`, `apps/nile_auth/`
+spec [0007](../specs/0007-lms-behind-traefik/index.md) · code in `tools/src/nile_tools/`, `deploy/scripts/`, `apps/nile_auth/`
 - [x] Design it (spec): `/architect LMS running behind Traefik`
 - [x] Build it: `/develop LMS running behind Traefik`
   - [x] Thin thread: `verify deploy` with the ping check, then the public, HTTP redirect and compose checks (AC-1, AC-2, AC-3, AC-7, AC-8)
