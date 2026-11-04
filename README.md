@@ -106,7 +106,7 @@ make tools CMD=sync             # checks the file first, then makes the LMS matc
 
 - `deploy/`: compose file, image build, version pins, container scripts.
 - `tools/`: Python package for setup scripts.
-- `apps/nile_auth/`: custom Frappe app (login rules from Authentik groups).
+- `apps/nile_auth/`: custom Frappe app: Authentik groups become LMS roles at login (`hol-admins` admin, `NileWorkshopNAdmin` students).
 - `content/`: courses. `brand/`: brand assets (do not edit). `docs/`: scope, specs, reviews.
 
 ## 7. Keeping this file current

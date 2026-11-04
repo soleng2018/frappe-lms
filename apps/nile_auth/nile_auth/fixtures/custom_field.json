@@ -70,5 +70,16 @@
 		"read_only": 1,
 		"no_copy": 1,
 		"module": "Nile Auth"
+	},
+	{
+		"doctype": "Custom Field",
+		"name": "User-nile_groups",
+		"dt": "User",
+		"fieldname": "nile_groups",
+		"label": "Nile Groups",
+		"fieldtype": "Small Text",
+		"read_only": 1,
+		"no_copy": 1,
+		"module": "Nile Auth"
 	}
 ]

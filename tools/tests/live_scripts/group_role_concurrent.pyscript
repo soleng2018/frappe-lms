@@ -1,0 +1,26 @@
+# Runs inside `bench console`, one copy per simultaneous login. Commits on purpose.
+import json
+import time
+import frappe
+from nile_auth.groups import decide
+from nile_auth.login import provision
+
+group = "NileWorkshop__N__Admin"
+email = "__EMAIL__"
+frappe.set_user("Administrator")
+frappe.db.sql("SET SESSION TRANSACTION ISOLATION LEVEL READ COMMITTED")  # as login.custom does
+frappe.db.commit()
+out = {}
+try:
+    while time.time() < __START__:
+        time.sleep(0.01)
+    info = {"email": email, "name": "Nile Race", "sub": email, "groups": [group]}
+    outcome = provision(info, decide(info["groups"], "hol-admins", "NileWorkshop", "Admin"), email)
+    frappe.db.commit()
+    out["batches_created"] = outcome.batches_created
+except Exception as e:
+    frappe.db.rollback()
+    import traceback
+
+    out["error"] = type(e).__name__ + ": " + str(e)[:200] + " | " + " <- ".join(l.strip() for l in traceback.format_exc().splitlines() if "nile_auth" in l or "lms/" in l)[-900:]
+print("RESULT:" + json.dumps(out))

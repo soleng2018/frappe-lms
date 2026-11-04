@@ -1,0 +1,263 @@
+# Runs inside `bench console` (see test_group_role_mapping_integration.py). Rolls everything back.
+# The IDP call and Frappe's final login step are replaced; everything else is the real code path.
+import json
+import types
+
+import frappe
+import nile_auth.login as L
+
+out = {}
+frappe.db.commit = lambda *a, **k: None  # nothing may be kept, not even the role strip
+logins = []
+current = {}
+
+
+def fake_info(provider, code, decoder=None):
+    return dict(current["info"])
+
+
+def fake_login(info, *, provider=None, state=None):
+    logins.append((info["email"], provider, state))
+    frappe.cache.delete_value(f"frappe_oauth_login:{state}")
+
+
+real_fault = L._log_fault
+
+
+def keep_fault(code, state):
+    out.setdefault("traces", []).append(frappe.get_traceback(with_context=False)[-1200:])
+    real_fault(code, state)
+
+
+L._log_fault = keep_fault
+L._read_committed = lambda: None  # the scenarios run in one transaction that is rolled back
+L.get_info_via_oauth = fake_info
+L.login_oauth_user = fake_login
+frappe.local.request = types.SimpleNamespace(
+    path="/api/method/frappe.integrations.oauth2_logins.custom/nileprobe"
+)
+sfx = frappe.generate_hash(length=6)
+N1, N2, N3 = 9101, 9102, 9103
+
+
+def login(email, groups, sub="sub-" + sfx, state=True, extra=None, code="CODE-SECRET-123"):
+    info = {"email": email, "sub": sub, "name": "Nile Test", "groups": groups}
+    info.update(extra or {})
+    if groups == "__absent__":
+        del info["groups"]
+    current["info"] = info
+    token = "STATE-" + frappe.generate_hash(length=8)
+    if state:
+        frappe.cache.set_value(f"frappe_oauth_login:{token}", "")
+    frappe.local.response = frappe._dict()
+    before = len(logins)
+    L.custom(code, token)
+    status = frappe.local.response.get("http_status_code")
+    return {"status": status, "signed_in": len(logins) > before}
+
+
+def roles(user):
+    return sorted(frappe.get_roles(user))
+
+
+def managed(user):
+    return sorted(set(frappe.get_roles(user)) & {"LMS Student", "Moderator", "Course Creator", "Desk User"})
+
+
+def count(dt, **flt):
+    return frappe.db.count(dt, flt)
+
+
+try:
+    # a published course of our own, so there is always something to enroll in
+    course = frappe.get_doc(
+        {
+            "doctype": "LMS Course",
+            "title": "nile it course " + sfx,
+            "short_introduction": "x",
+            "description": "x",
+            "published": 1,
+            "instructors": [{"instructor": frappe.conf.nile_service_user}],
+        }
+    ).insert(ignore_permissions=True)
+    published = sorted(frappe.get_all("LMS Course", {"published": 1}, pluck="name"))
+    out["published"] = len(published)
+
+    # AC-1: a first login by a workshop member
+    s = f"nile-it-s-{sfx}@example.com"
+    g3 = f"NileWorkshop{N3}Admin"
+    out["first"] = login(s, ["other", g3])
+    if not frappe.db.exists("User", s):
+        raise RuntimeError("first login failed")
+    u = frappe.get_doc("User", s)
+    out["student"] = {
+        "user_type": u.user_type,
+        "managed": managed(s),
+        "groups": u.nile_groups,
+        "enabled": u.enabled,
+        "batch": count("LMS Batch", nile_group=g3),
+        "batch_enrol": count("LMS Batch Enrollment", member=s),
+        "enrolments": count("LMS Enrollment", member=s),
+        "batch_courses": count("Batch Course", parenttype="LMS Batch", course=course.name),
+        "from_batch": frappe.db.get_value("LMS Enrollment", {"member": s, "course": course.name}, "enrollment_from_batch"),
+        "mail_flag": frappe.db.get_value("LMS Batch Enrollment", {"member": s}, "confirmation_email_sent"),
+    }
+
+    out["lms_notify_setting"] = frappe.db.get_single_value("LMS Settings", "send_notification_for_published_batches")
+    out["emails_queued"] = count("Email Queue", creation=[">", frappe.utils.add_to_date(None, minutes=-5)])
+
+    # Frappe's own step after ours must keep what we set (roles, user type)
+    from frappe.utils.oauth import update_oauth_user
+
+    update_oauth_user(s, dict(current["info"]), "nileprobe")
+    ud = frappe.get_doc("User", s)
+    out["after_frappe_student"] = {"managed": managed(s), "type": ud.user_type, "sub": ud.get_social_login_userid("nileprobe"), "all": roles(s)}
+
+    # AC-6: logging in again changes nothing
+    def snapshot(user):
+        return [count(dt, member=user) for dt in ("LMS Batch Enrollment", "LMS Enrollment")] + [
+            count("LMS Batch"),
+            count("Batch Course"),
+            count("Has Role", parent=user),
+        ]
+
+    before = snapshot(s)
+    login(s, ["other", g3])
+    out["repeat_same"] = before == snapshot(s)
+
+    # AC-5: a move to other groups keeps the old records and rewrites nile_groups
+    g2 = f"NileWorkshop{N2}Admin"
+    g1 = f"NileWorkshop{N1}Admin"
+    prog = frappe.get_doc(
+        {"doctype": "LMS Course Progress", "course": course.name, "member": s, "status": "Complete"}
+    ) if False else None
+    login(s, [g2, g1, "NileWorkshop09Admin"])
+    out["moved"] = {
+        "groups": frappe.db.get_value("User", s, "nile_groups"),
+        "batch_enrol": count("LMS Batch Enrollment", member=s),
+        "enrolments": count("LMS Enrollment", member=s),
+        "managed": managed(s),
+    }
+
+    # AC-11: a course published later reaches the student at the next login
+    late = frappe.get_doc(
+        {
+            "doctype": "LMS Course",
+            "title": "nile it late " + sfx,
+            "short_introduction": "x",
+            "description": "x",
+            "published": 1,
+            "instructors": [{"instructor": frappe.conf.nile_service_user}],
+        }
+    ).insert(ignore_permissions=True)
+    login(s, [g2, g1])
+    out["late"] = {
+        "enrolled": count("LMS Enrollment", member=s, course=late.name),
+        "batch_rows": count("Batch Course", course=late.name),
+        "batches": count("LMS Batch Enrollment", member=s),
+    }
+
+    # AC-2: admin only, then admin plus a workshop group
+    a = f"nile-it-a-{sfx}@example.com"
+    out["admin_login"] = login(a, ["hol-admins"], sub="sub-a" + sfx)
+    ua = frappe.get_doc("User", a)
+    out["admin"] = {
+        "user_type": ua.user_type,
+        "managed": managed(a),
+        "groups": ua.nile_groups,
+        "batch_enrol": count("LMS Batch Enrollment", member=a),
+        "enrolments": count("LMS Enrollment", member=a),
+    }
+    login(a, ["hol-admins", g1], sub="sub-a" + sfx)
+    out["admin_both"] = {
+        "managed": managed(a),
+        "groups": frappe.db.get_value("User", a, "nile_groups"),
+        "batch_enrol": count("LMS Batch Enrollment", member=a),
+        "user_type": frappe.db.get_value("User", a, "user_type"),
+    }
+    # an admin who loses hol-admins but keeps a group
+    login(a, [g1], sub="sub-a" + sfx)
+    out["admin_demoted"] = {
+        "managed": managed(a),
+        "user_type": frappe.db.get_value("User", a, "user_type"),
+    }
+
+    # AC-3: neither group. New user: refused, no record. Existing student: roles stripped, rest kept.
+    n = f"nile-it-n-{sfx}@example.com"
+    out["nogroup_new"] = login(n, ["staff"])
+    out["nogroup_new_user"] = bool(frappe.db.exists("User", n))
+    enr_before = count("LMS Enrollment", member=s)
+    out["nogroup_existing"] = login(s, ["staff"])
+    out["after_strip"] = {
+        "managed": managed(s),
+        "enabled": frappe.db.get_value("User", s, "enabled"),
+        "enrolments_kept": count("LMS Enrollment", member=s) == enr_before,
+        "batch_enrol_kept": count("LMS Batch Enrollment", member=s),
+    }
+    out["empty_list"] = login(n, [])
+
+    # AC-7: no groups key, or a bad one: refused, nothing changes for an admin
+    out["no_claim"] = login(a, "__absent__", sub="sub-a" + sfx)
+    out["bad_claim"] = login(a, "hol-admins", sub="sub-a" + sfx)
+    out["admin_unchanged"] = managed(a) == ["LMS Student"]
+
+    # AC-8: protected accounts and an identity mismatch
+    out["administrator"] = login("Administrator", [g1], sub="x")
+    out["admin_user_ok"] = frappe.db.get_value("User", "Administrator", "nile_groups") in (None, "")
+    out["service"] = login(frappe.conf.nile_service_user, [g1], sub="x")
+    out["system_manager"] = login("Administrator".lower(), ["hol-admins"], sub="x")
+    other = f"nile-it-o-{sfx}@example.com"
+    login(other, [g1], sub="sub-o" + sfx)
+    uo = frappe.get_doc("User", other)
+    uo.set_social_login_userid("nileprobe", userid="sub-o" + sfx)
+    uo.flags.ignore_permissions = True
+    uo.save()
+    out["same_sub_ok"] = login(other, [g1], sub="sub-o" + sfx)["signed_in"]
+    out["identity"] = login(other, [g1], sub="somebody-else")
+    out["no_email"] = login("", [g1])
+
+    sm = f"nile-it-m-{sfx}@example.com"
+    um = frappe.get_doc({"doctype": "User", "email": sm, "first_name": "m", "send_welcome_email": 0, "roles": [{"role": "System Manager"}]}).insert(ignore_permissions=True)
+    sm_before = roles(sm)
+    out["system_manager_user"] = login(sm, [g1], sub="x")
+    out["sm_unchanged"] = roles(sm) == sm_before and frappe.db.get_value("User", sm, "nile_groups") in (None, "")
+
+    # AC-9: a disabled user stays disabled and nothing is kept
+    d = f"nile-it-d-{sfx}@example.com"
+    login(d, [g1], sub="sub-d" + sfx)
+    frappe.db.set_value("User", d, "enabled", 0)
+    for r in ("LMS Student",):
+        frappe.db.delete("Has Role", {"parent": d, "role": r})
+    login(d, [g2], sub="sub-d" + sfx)
+    out["disabled"] = {
+        "enabled": frappe.db.get_value("User", d, "enabled"),
+        "managed": managed(d),
+        "batch_enrol": count("LMS Batch Enrollment", member=d),
+    }
+
+    # AC-10: a bad state is refused before anything is written
+    b = f"nile-it-b-{sfx}@example.com"
+    out["bad_state"] = login(b, [g1], state=False)
+    out["bad_state_user"] = bool(frappe.db.exists("User", b))
+
+    out["emails_after"] = count("Email Queue", creation=[">", frappe.utils.add_to_date(None, minutes=-5)])
+
+    # AC-12: the log lines
+    out["log_tail"] = [x for x in open(frappe.get_site_path("logs", "nile_auth.log")).read().splitlines() if sfx in x or "CODE-SECRET" in x or "STATE-" in x][-40:]
+
+    # AC-10: a fault halfway leaves nothing behind. This one rolls the whole run back, so it is last.
+    f = f"nile-it-f-{sfx}@example.com"
+    real = L._enroll_in_course
+    def boom(*a, **k):
+        raise RuntimeError("forced")
+    L._enroll_in_course = boom
+    out["fault"] = login(f, [g1], sub="sub-f" + sfx)
+    L._enroll_in_course = real
+    out["fault_user"] = bool(frappe.db.exists("User", f))
+    out["fault_batch_enrol"] = count("LMS Batch Enrollment", member=f)
+except Exception as e:
+    import traceback
+    out["error"] = traceback.format_exc()[-1500:]
+finally:
+    frappe.db.rollback()
+print("RESULT:" + json.dumps(out, default=str))
