@@ -220,9 +220,8 @@ services:
       - ${REPO_DIR}:${REPO_DIR}
     # The LMS is reached through public DNS (Cloudflare edge): Traefik serves a Cloudflare Origin
     # certificate (file provider) that only Cloudflare trusts. The certresolver label on
-    # frontend is kept as the spec says, and is redundant with the entrypoint wildcard resolver. Authentik routing is decided in feature 6.
-    extra_hosts:
-      - "${AUTHENTIK_HOSTNAME:-authentik-unset.invalid}=host-gateway"
+    # frontend is kept as the spec says, and is redundant with the entrypoint wildcard resolver.
+    # Authentik is reached through public DNS too: it does not run behind this host's Traefik.
     logging: *logging
 
 secrets:

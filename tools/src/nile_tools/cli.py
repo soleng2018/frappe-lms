@@ -10,7 +10,8 @@ from pathlib import Path
 
 import httpx
 
-from nile_tools import checks, config, lms, verify
+from nile_tools import authentik, checks, config, idp, idp_run, lms, verify
+from nile_tools.authentik import AuthentikError
 from nile_tools.config import ConfigError
 from nile_tools.contentfile import ContentError, load_course
 from nile_tools.lms import LmsError
@@ -20,6 +21,7 @@ __all__ = [
     "ConfigError",
     "config_check",
     "config_show",
+    "idp_setup",
     "init",
     "main",
     "sync",
@@ -134,6 +136,28 @@ def verify_deploy(root: Path) -> int:
     return verify.run(root, config.load_env(root).values)
 
 
+def idp_setup(root: Path) -> int:
+    """Create or finish the Authentik application, provider and Frappe key."""
+    values = config.load_env(root).values
+    host, key, secret, ak_host, token = (
+        _require(values, k)
+        for k in (
+            "LMS_HOSTNAME",
+            "LMS_API_KEY",
+            "LMS_API_SECRET",
+            "AUTHENTIK_HOSTNAME",
+            "AUTHENTIK_API_TOKEN",
+        )
+    )
+    try:
+        return idp_run.setup(
+            authentik.connect(ak_host, token), lms.connect(host, key, secret), values, print
+        )
+    except (AuthentikError, LmsError, idp.ConfigProblem) as e:
+        print(f"ERROR {e}", file=sys.stderr)
+        return 1
+
+
 def _secret_values(root: Path) -> list[str]:
     """Return the secret values in .env, or none if the file cannot be read."""
     try:
@@ -154,6 +178,9 @@ def _parser() -> argparse.ArgumentParser:
     ver_actions = ver.add_subparsers(dest="action", required=True)
     ver_actions.add_parser("deploy", help="run every check")
     ver_actions.add_parser("services", help="list the long running services, one per line")
+    idp_cmd = commands.add_parser("idp", help="set up the Authentik sign in")
+    idp_actions = idp_cmd.add_subparsers(dest="action", required=True)
+    idp_actions.add_parser("setup", help="create the Authentik application and the Frappe key")
     cfg = commands.add_parser("config", help="check, show or print the sample of the config file")
     actions = cfg.add_subparsers(dest="action", required=True)
     check = actions.add_parser("check", help="validate .env and the repo")
@@ -178,6 +205,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                 print("\n".join(verify.long_running(verify.load_compose(root))))
                 return 0
             return verify_deploy(root)
+        if args.command == "idp":
+            return idp_setup(root)
         if args.command == "sync":
             return sync(root, check=args.check)
         if args.action == "check":

@@ -31,7 +31,7 @@ Run from the repo root: `make build`, `make up`, `make down`, `make ps`, `make l
 
 - `make` refuses to run if a config key is exported in your shell, because Compose would let the shell win over `.env`.
 - Changing `apps.json` changes the image hash, so the next build picks up new `payments` code.
-- Only the Authentik hostname is mapped to the host in `tools`. The LMS is reached through public DNS and Cloudflare.
+- `tools` maps no hostname to the host. The LMS and Authentik are both reached through public DNS (Traefik here does not serve Authentik). Do not add an `extra_hosts` line for either.
 - `verify deploy` fails if a service publishes a port, loses log rotation, or a long running service loses `restart: unless-stopped`. Keep that true when editing the compose file.
 - Only `frontend` joins the external `traefik` network. No ports are published.
 
