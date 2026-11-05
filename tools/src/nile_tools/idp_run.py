@@ -24,6 +24,14 @@ def _need(found: Mapping[str, object] | None, what: str) -> str:
     return str(found["pk"])
 
 
+def _application(ak: Authentik, slug: str) -> Mapping[str, Any] | None:
+    """Find our application by slug. Without `superuser_full_list` Authentik lists only what the
+    token's user may open, and that list can come back empty after an application is made or
+    deleted, so a lookup would wrongly say the application is missing.
+    """
+    return authentik.get_one(ak, "/core/applications/", slug=slug, superuser_full_list="true")
+
+
 def lookup_refs(ak: Authentik) -> Refs:
     """Read the shared flows, signing key and scope mappings by slug or name; write nothing."""
     maps = authentik.find(ak, "/propertymappings/provider/scope/")
@@ -87,7 +95,7 @@ def setup(
     slug = str(wanted.application["slug"])
     provider_name = str(wanted.provider["name"])
     # Read everything first, so a refusal happens before the first write.
-    app = authentik.get_one(ak, "/core/applications/", slug=slug)
+    app = _application(ak, slug)
     provider = authentik.get_one(ak, "/providers/oauth2/", name=provider_name)
     if app is not None and app.get("meta_description") != idp.MARKER:
         raise AuthentikError(f"Authentik application '{slug}' exists without the ownership marker")
@@ -246,7 +254,7 @@ def check(
     slug, lms_host = values["AUTHENTIK_APP_SLUG"], values["LMS_HOSTNAME"]
     base = f"https://{values['AUTHENTIK_HOSTNAME']}"
     verdicts.append(idp.judge_version(authentik.get(ak, "/admin/version/").get("version_current")))
-    app = authentik.get_one(ak, "/core/applications/", slug=slug)
+    app = _application(ak, slug)
     verdicts.append(idp.judge_application(app, slug))
     provider = authentik.get_one(ak, "/providers/oauth2/", name=f"{slug} provider")
     try:
@@ -321,7 +329,7 @@ def remove(ak: Authentik, connection: Lms, values: Mapping[str, str], say: Say) 
     slug = values.get("AUTHENTIK_APP_SLUG", "")
     if not slug:
         raise idp.ConfigProblem("Config key AUTHENTIK_APP_SLUG is missing or blank in .env")
-    app = authentik.get_one(ak, "/core/applications/", slug=slug)
+    app = _application(ak, slug)
     if app is not None and app.get("meta_description") != idp.MARKER:
         raise AuthentikError(f"Authentik application '{slug}' exists without the ownership marker")
     name = idp.FRAPPE_KEY_NAME

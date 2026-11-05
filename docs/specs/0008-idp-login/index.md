@@ -53,6 +53,7 @@ Reasoning and options: see [rationale.md](rationale.md).
 | Authentik | Test user and test group (selftest only) | name, email, password, `attributes.managed_by` marker | Exist only during a selftest |
 | Frappe | Social Login Key, name `authentik` | `provider_name`, `social_login_provider` Custom, `enable_social_login`, `client_id`, `client_secret` (a password field), `base_url`, `custom_base_url`, `authorize_url`, `access_token_url`, `redirect_url`, `api_endpoint` (userinfo), `auth_url_data` (scope and response type), `sign_ups`, `user_id_property` `sub` | Exact field names and the record name are fixed by build task 1 |
 | Frappe | System Settings (single record) | `disable_user_pass_login`, `login_with_email_link` | Names fixed by build task 1. Set by setup and `password-login`. |
+| Frappe | LMS Settings (single record) | `allow_guest_access` | Set to 0 by `setup` so a signed out visitor cannot read site totals. `check` WARNs while it is 1. `remove` leaves it alone. Found after the first real sign ins (see `verify.md`). |
 
 **Module layout**:
 
@@ -117,6 +118,7 @@ No new guest endpoint is added. The route is the one spec 0006 already overrides
 | Selftest | Frappe cleanup | delete in this order: the LMS Enrollment rows, the throwaway course, the User's social login rows, then the User. The probe records any link that blocks a User delete, and the fallback is `bench execute`. |
 | Selftest | test course title and group name | one fixed text, such as `Nile Test Course 900`, used as both the throwaway course title and the group name (spec 0009), that no real group uses and the `hol-labs-access` policy cannot match (the probe reads that policy and confirms) |
 | Set the form state | `disable_user_pass_login`, `login_with_email_link` | the constants set by `setup` and `password-login` |
+| Turn off guest access | `allow_guest_access` | the constant 0, written by `setup` through `/api/resource/LMS Settings`. `check` WARNs only when the live value is 1. |
 | Landing page | where to redirect | `/lms`, unless the state's `redirect_to` is a path on this site (`safe_return_path`) |
 | Selftest | user name, email, password, course and group name | fixed names with a `nile-lms-test` prefix, the one test course and group text (spec 0009), a password generated in memory and never printed |
 | Check the email lock | `default_user_change_email` | Authentik `/admin/settings/` |

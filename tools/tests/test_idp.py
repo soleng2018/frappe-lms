@@ -52,7 +52,11 @@ class FakeAuthentik:
                 for s in (idp.IMPLICIT_CONSENT_SLUG, idp.INVALIDATION_SLUG)
             ],
             "crypto/certificatekeypairs/": [{"pk": "key-1", "name": idp.SIGNING_KEY_NAME}],
-            "core/applications/": list(self.apps.values()),
+            "core/applications/": (
+                list(self.apps.values())
+                if request.url.params.get("superuser_full_list") == "true"
+                else []  # the real default list can come back empty; only the full list is safe
+            ),
             "providers/oauth2/": list(self.providers.values()),
             "core/users/": [{"pk": 7, "username": "real-user"}],
         }

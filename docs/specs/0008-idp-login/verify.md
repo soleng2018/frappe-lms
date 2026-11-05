@@ -50,7 +50,7 @@ _Build task 1 findings from the live probe (Authentik 2026.8.3, Frappe version-1
 
 - LMS Settings `allow_guest_access` was 1 (the LMS default), so a signed out visitor could read the Statistics charts (site totals of signups, enrollments, courses) and open the page shells. The REST data endpoints were already refused.
 - `idp setup` now sets it to 0 and reports `lms-settings`; `idp check` WARNs while it is on. Live, signed out: the charts, chart details, sidebar and job list answer empty, the course and batch lists answer 403. The `/lms/*` page shells still answer 200 (they are the static app); whether the app then sends a guest to `/login` is shown only in a browser, so it is the operator's check.
-- The spec's data model table needs an `LMS Settings` row (`allow_guest_access`). `/architect` owns that edit.
+- The spec's data model table now has the `LMS Settings` row (`allow_guest_access`), added by `/architect`.
 
 ## Manual
 
