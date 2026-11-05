@@ -173,6 +173,44 @@ def test_the_question_fields_hold_options_in_file_order_and_blank_the_rest() -> 
     assert fields["type"] == "Choices"
 
 
+def test_option_explanations_fill_their_own_field_and_clear_the_rest() -> None:
+    question = Question("q1", "Which?", options=(Option("a", True, "Because"), Option("b")))
+    fields = plan._question_fields(question)
+    assert fields["explanation_1"] == "Because"
+    assert [fields[f"explanation_{i}"] for i in (2, 3, 4)] == ["", "", ""]
+
+
+def _with_explanation(text: str) -> Course:
+    c = course()
+    q = c.quizzes[0]
+    first = replace(q.questions[0], options=(Option("yes", True, text), Option("no")))
+    return replace(c, quizzes=(replace(q, questions=(first, *q.questions[1:])),))
+
+
+def test_adding_an_option_explanation_is_an_update_of_that_field() -> None:
+    # covers: AC-11
+    update = only_update(plan_sync(_with_explanation("Because"), synced(course())))
+    assert (update.key, [(x.field, x.wanted) for x in update.changes]) == (
+        "q1",
+        [("explanation_1", "Because")],
+    )
+
+
+def test_removing_an_option_explanation_clears_the_field() -> None:
+    # covers: AC-11
+    update = only_update(plan_sync(course(), synced(_with_explanation("Because"))))
+    assert [(x.field, x.found, x.wanted) for x in update.changes] == [
+        ("explanation_1", "Because", "")
+    ]
+
+
+def test_a_synced_explanation_or_a_null_one_needs_nothing() -> None:
+    # covers: AC-8, AC-11. A second run changes nothing; an empty LMS value may be null.
+    assert plan_sync(_with_explanation("Because"), synced(_with_explanation("Because"))) == ()
+    found = edit(synced(course()), plan.QUESTION, "q1", explanation_1=None, explanation_3=None)
+    assert plan_sync(course(), found) == ()
+
+
 def test_only_missing_records_are_created() -> None:
     found = synced(course())
     found = replace(found, lessons=tuple(d for d in found.lessons if d["nile_key"] != "lab"))
@@ -389,3 +427,26 @@ def test_a_record_already_out_of_the_outline_is_not_detached_again() -> None:
     found = edit(found, plan.CHAPTER, "ch2", lessons=[{"lesson": "N-lab"}])
     found = edit(found, plan.QUIZ, "q2", lesson="")
     assert plan_sync(slim, found) == ()
+
+
+def test_a_question_used_by_a_quiz_of_another_course_is_held_elsewhere() -> None:
+    # covers: AC-7. The LMS keeps one nile_key per record type for the whole site.
+    other = {"name": "N-other", "title": "Elsewhere", "nile_key": "other"}
+    have = synced(course())
+    quiz = {**have.quizzes[0], "name": "O-q", "nile_key": "o-q", "course": "N-other"}
+    found = Found(None, (), (), (quiz,), have.questions, (other,))
+    note = plan.held_elsewhere(course(), found)
+    assert note is not None and "Elsewhere" in note and "Course Question" not in note
+
+
+def test_a_question_used_only_by_this_course_is_not_held_elsewhere() -> None:
+    assert plan.held_elsewhere(course(), synced(course())) is None
+
+
+def test_no_cover_in_git_clears_the_cover_in_the_lms() -> None:
+    # covers: AC-4. Removing `image:` from course.yaml must not leave an old cover behind.
+    found = edit(synced(course()), "course", "c", image="/files/old.png")
+    update = only_update(plan_sync(course(), found))
+    assert [(x.field, x.found, x.wanted) for x in update.changes] == [
+        ("image", "/files/old.png", "")
+    ]

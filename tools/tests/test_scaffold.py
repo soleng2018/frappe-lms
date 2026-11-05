@@ -28,6 +28,15 @@ def test_a_title_with_a_colon_is_still_valid_yaml(tmp_path: Path) -> None:
     assert load_catalog(tmp_path).ready()["demo"].title == 'Intro: "Nile"'
 
 
+@pytest.mark.parametrize("key", ["2026", "yes", "no", "null", "true", "1e3"])
+def test_a_key_that_yaml_reads_as_a_number_or_flag_stays_text(tmp_path: Path, key: str) -> None:
+    # covers: AC-9. The scaffold must pass `content check` with no edit for any allowed key.
+    new_course(tmp_path, key)
+    catalog = load_catalog(tmp_path)
+    assert not catalog.problems
+    assert key in catalog.ready()
+
+
 @pytest.mark.parametrize("key", ["Demo", "-demo", "de mo", "de_mo", ""])
 def test_a_bad_key_is_refused_and_nothing_is_written(tmp_path: Path, key: str) -> None:
     with pytest.raises(ScaffoldError, match="course key"):

@@ -13,6 +13,7 @@ from nile_tools import images, markdown
 from nile_tools.content import (
     DEFAULT_MAX_ATTEMPTS,
     DEFAULT_PASSING_PERCENTAGE,
+    MAX_EXPLANATION,
     Block,
     Chapter,
     Course,
@@ -225,7 +226,26 @@ def _option(r: _Reader, node: object, where: str) -> Option:
     correct = node.get("correct", False)
     if not isinstance(correct, bool):
         r.problem(_join(where, "correct"), f"must be true or false, found {correct!r}")
-    return Option(r.text(node, "text", where), correct is True)
+    return Option(r.text(node, "text", where), correct is True, _explanation(r, node, where))
+
+
+def _explanation(r: _Reader, node: Mapping[str, Any], where: str) -> str:
+    """Read an option's optional explanation: plain text of 1 to MAX_EXPLANATION characters."""
+    if "explanation" not in node:
+        return ""
+    field = _join(where, "explanation")
+    value = node["explanation"]
+    if value is not None and not isinstance(value, str):
+        r.problem(field, f"must be text, found {type(value).__name__} {value!r}")
+        return ""
+    text = (value or "").strip()
+    if not text:
+        r.problem(field, "is empty, write the text or remove the line")
+    elif len(text) > MAX_EXPLANATION:
+        r.problem(
+            field, f"is {len(text)} characters, the most allowed is {MAX_EXPLANATION}, shorten it"
+        )
+    return text
 
 
 def _question(r: _Reader, node: object, where: str) -> Question:
@@ -233,7 +253,7 @@ def _question(r: _Reader, node: object, where: str) -> Question:
     if "explanation" in node:
         r.problem(
             _join(where, "explanation"),
-            "explanation is not supported yet (spec 0011 AC-11 is still open), remove it",
+            "explanation belongs on an option, move it to the option field explanation",
         )
     options = tuple(
         _option(r, o, f"{where}.options[{i}]")

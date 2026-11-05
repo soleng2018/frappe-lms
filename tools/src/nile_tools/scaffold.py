@@ -23,7 +23,7 @@ def default_title(key: str) -> str:
 
 def _course_yaml(key: str, title: str) -> str:
     return f"""format: 1
-key: {key}
+key: {json.dumps(key)}
 title: {json.dumps(title)}
 short_introduction: A short line that shows on the course card.
 description: Say what a learner will do and learn in this course.

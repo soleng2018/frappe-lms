@@ -10,6 +10,7 @@ from nile_tools.markdown import local_image_paths, rewrite_images
 __all__ = [
     "DEFAULT_MAX_ATTEMPTS",
     "DEFAULT_PASSING_PERCENTAGE",
+    "MAX_EXPLANATION",
     "MAX_OPTIONS",
     "MIN_PASSING_PERCENTAGE",
     "Block",
@@ -35,6 +36,7 @@ DEFAULT_PASSING_PERCENTAGE = 80
 DEFAULT_MAX_ATTEMPTS = 3
 MIN_PASSING_PERCENTAGE = 80  # a certificate means 80% or more on every quiz (spec 0010)
 MAX_OPTIONS = 4  # an LMS Question has option_1 to option_4
+MAX_EXPLANATION = 1000  # characters; a guard against a pasted page, not an LMS limit (AC-11)
 
 # The question types LMS knows. Only Open Ended is never graded automatically.
 QuestionType = Literal["Choices", "User Input", "Open Ended"]
@@ -46,6 +48,7 @@ class Option:
 
     text: str
     correct: bool = False
+    explanation: str = ""  # plain text shown under the option after an answer; "" means none
 
 
 @dataclass(frozen=True)

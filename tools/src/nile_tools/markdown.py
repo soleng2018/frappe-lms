@@ -18,15 +18,17 @@ __all__ = [
 
 Kind = Literal["image", "ref-image", "img-tag", "link"]
 
-# A path that starts with one of these is not a file in the course folder.
-_NOT_LOCAL = ("http:", "https:", "data:", "/", "#")
+# A target that starts with "/" or "#", or with a URL scheme such as https:, mailto: or tel:,
+# is not a file in the course folder. A single letter before ":" is a drive, so it stays local.
+_NOT_LOCAL = re.compile(r"^(?:[/#]|[a-z][a-z0-9+.-]+:)", re.IGNORECASE)
 
 _FENCE = re.compile(r"^ {0,3}(`{3,}|~{3,})")
 _INLINE_CODE = re.compile(r"(?<!`)(`+)(?!`)([^\n]+?)(?<!`)\1(?!`)")
 _TARGET = r"(?P<target><[^>\n]*>|[^\s)]*)"
 _IMAGE = re.compile(rf"!\[(?P<alt>[^\]]*)\]\(\s*{_TARGET}(?:\s+(?:\"[^\"]*\"|'[^']*'))?\s*\)")
 _REF_IMAGE = re.compile(r"!\[[^\]]*\]\[[^\]]*\]")
-_LINK = re.compile(rf"(?<!!)\[[^\]]*\]\(\s*{_TARGET}[^)]*\)")
+_LINK_TEXT = r"(?:[^\[\]!]|!(?!\[)|!\[[^\]]*\]\([^)]*\))*"  # text, or an image inside the text
+_LINK = re.compile(rf"(?<!!)\[{_LINK_TEXT}\]\(\s*{_TARGET}[^)]*\)")
 _IMG_TAG = re.compile(r"<img\b[^>]*?\bsrc\s*=\s*[\"']?(?P<target>[^\"'\s>]+)", re.IGNORECASE)
 
 
@@ -44,7 +46,7 @@ class Ref:
 
 def is_local(target: str) -> bool:
     """True when a link target points at a file in the course folder."""
-    return not target.lower().startswith(_NOT_LOCAL)
+    return _NOT_LOCAL.match(target) is None
 
 
 def _code_ranges(text: str) -> list[tuple[int, int]]:

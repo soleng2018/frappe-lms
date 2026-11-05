@@ -222,16 +222,16 @@ Settle the guide and quiz file format (markdown for text, structured files for q
 **Done when:** a documented format lets an author add a new course by committing files, the sync reports errors in bad files before pushing, and several courses sync cleanly.
 spec [0011](../specs/0011-guide-format-and-full-authoring/index.md) · code in `tools/src/nile_tools/`, `content/`, `docs/authoring.md`
 - [x] Design it (spec): `/architect guide format & full authoring`
-- [ ] Build it: `/develop guide format & full authoring`
+- [x] Build it: `/develop guide format & full authoring`
   - [x] Probe the live site: combined lesson body, public images, explanation field, key uniqueness (AC-2, AC-4, AC-11)
   - [x] Thin thread: lessons as blocks, one course in `content/nile-workshop/`, live `nothing to change` (AC-1, AC-2, AC-8)
-  - [ ] Quiz files, explanations, the catalog, cross course checks and `content check` (AC-1, AC-3, AC-5, AC-11)
+  - [x] Quiz files, explanations, the catalog, cross course checks and `content check` (AC-1, AC-3, AC-5, AC-11)
   - [x] Many course sync with isolation, and images with upload and link rewrite (AC-4, AC-7)
   - [x] `content new`, the commit hook, `docs/authoring.md`, README, and a two course live test (AC-6, AC-9, AC-10)
-- [ ] Verify it: `/check verify guide format & full authoring`
-- [ ] Test it: `/test guide format & full authoring`
-- [ ] Review it (fresh model): `/check review guide format & full authoring`
-- [ ] Document it: `/document guide format & full authoring`
+- [x] Verify it: `/check verify guide format & full authoring`
+- [x] Test it: `/test guide format & full authoring`
+- [x] Review it (fresh model): `/check review guide format & full authoring`
+- [x] Document it: `/document guide format & full authoring`
 
 ## Slice 3: managers
 

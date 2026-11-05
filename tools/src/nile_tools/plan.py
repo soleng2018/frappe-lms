@@ -144,6 +144,7 @@ def _option_fields(question: Question) -> dict[str, Any]:
         option = question.options[i - 1] if i <= len(question.options) else None
         fields[f"option_{i}"] = option.text if option else ""
         fields[f"is_correct_{i}"] = 1 if option and option.correct else 0
+        fields[f"explanation_{i}"] = option.explanation if option else ""
     return fields
 
 
@@ -153,7 +154,10 @@ def _question_fields(question: Question) -> dict[str, Any]:
 
 def _course_fields(course: Course, urls: Mapping[str, str] | None = None) -> dict[str, Any]:
     known = urls or {}
-    cover = {"image": known[course.image]} if course.image in known else {}
+    if not course.image:
+        cover = {"image": ""}  # no cover in git clears an old one
+    else:
+        cover = {"image": known[course.image]} if course.image in known else {}
     return {
         **cover,
         "title": course.title,
@@ -446,6 +450,26 @@ def held_elsewhere(course: Course, found: Found) -> str | None:
             if doc.get("nile_key") in wanted[doctype] and owner and owner != here:
                 return (
                     f"{doctype} {doc['nile_key']} is held by LMS course "
+                    f"{titles.get(owner, owner)}, not by this course"
+                )
+    return _question_held_elsewhere(course, found, here, titles)
+
+
+def _question_held_elsewhere(
+    course: Course, found: Found, here: str | None, titles: Mapping[Any, str]
+) -> str | None:
+    """Name a question of this course that a quiz of another LMS course already uses."""
+    wanted = {q.key for quiz in course.quizzes for q in quiz.questions}
+    keys = {d["name"]: d["nile_key"] for d in found.questions if d.get("nile_key")}
+    for quiz in found.quizzes:
+        owner = quiz.get("course")
+        if not owner or owner == here:
+            continue
+        for row in quiz.get("questions") or ():
+            key = keys.get(row.get("question", ""))
+            if key in wanted:
+                return (
+                    f"{QUESTION} {key} is used by a quiz of LMS course "
                     f"{titles.get(owner, owner)}, not by this course"
                 )
     return None

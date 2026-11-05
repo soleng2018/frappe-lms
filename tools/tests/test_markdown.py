@@ -99,3 +99,23 @@ def test_stored_name_uses_the_hash() -> None:
     assert (
         images.stored_name("c", data, "a.png") == f"c-{hashlib.sha256(data).hexdigest()[:12]}-a.png"
     )
+
+
+@pytest.mark.parametrize("target", ["mailto:a@b.c", "tel:+1555", "ftp://x/a", "MAILTO:a@b.c"])
+def test_any_url_scheme_is_not_a_local_target(target: str) -> None:
+    assert not markdown.is_local(target)
+
+
+def test_a_clickable_image_is_one_image_and_no_local_link() -> None:
+    text = "[![shot](img.png)](https://example.com)"
+    found = markdown.scan(text)
+    assert [r.target for r in found if r.kind == "image"] == ["img.png"]
+    assert [r.target for r in found if r.kind == "link" and markdown.is_local(r.target)] == []
+
+
+def test_a_clickable_image_with_a_local_link_target_still_counts_that_link() -> None:
+    assert ("link", "other.md") in kinds("[![shot](img.png)](other.md)")
+
+
+def test_a_run_of_bangs_does_not_hang() -> None:
+    assert kinds("[" + "!" * 5000 + "](x.md") == []

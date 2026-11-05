@@ -76,3 +76,13 @@ You asked for one markdown kind, so `text` covers both transcripts and lab intro
 You first chose private images. The cross check showed this cannot work as intended: a private Frappe file is readable only by its owner or by users who can read the document it is attached to, and learners cannot read the Course Lesson in the Desk. One image shared by several lessons also attaches to only one document. Images are therefore public, with a name built from a content hash so the URL cannot be guessed. The course is already hidden by enrollment (spec 0009). The cost is that anyone holding an URL can load the image, so authors must not put secrets in images. This is a change from your earlier pick and is written down here so you can reverse it.
 
 Two small rules were my own calls, not your answers: the folder name must equal the course key (so there is one name, not two), and a quiz that no lesson uses is a problem (it catches a mistyped path early, the same reason spec 0005 refused a quiz with no lesson). An unused guide is only a warning, so a draft can sit in git. The runner up for the image name rule was a random name; a name built from the course key and a hash was chosen because the same bytes then find the same file, which makes reruns safe without a custom field on the File record.
+
+## Decision note: explanation per option (AC-11, 2026-11-05)
+
+The build probe found that LMS stores an explanation per answer option (`explanation_1` to `explanation_10`), not per question, and shows it under that option after the learner answers. Three ways to author it were weighed.
+
+- **Per option (chosen).** It matches how LMS stores and shows it, needs no hidden rule, and lets an author say why a wrong answer is wrong. It costs a slightly longer quiz file.
+- **Per question, copied onto the correct option.** Easier to write, but it hides a mapping and is unclear when two options are correct. It would also make a later move to per option text a format change.
+- **Drop AC-11.** Safe, but quizzes would give no feedback text.
+
+Plain text only, because LMS renders it as text. The 1000 character limit is a guard against a pasted page, not an LMS limit (the field is a small text field).

@@ -191,12 +191,62 @@ def test_load_course_raises_with_every_problem(tmp_path: Path) -> None:
     assert "title: must be text" in str(e.value)
 
 
-def test_explanation_is_refused_until_ac_11_is_settled(tmp_path: Path) -> None:
+def _with_option_explanation(folder: Path, value: str) -> None:
+    option = "{text: A, correct: true, explanation: " + value + "}"
+    (folder / "quizzes" / "q.yaml").write_text(QUIZ.replace("{text: A, correct: true}", option))
+
+
+def test_an_option_explanation_is_read_and_trimmed(tmp_path: Path) -> None:
+    folder = course_dir(tmp_path)
+    _with_option_explanation(folder, '"  Because  "')
+    course = load_course(folder)
+    options = course.quizzes[0].questions[0].options
+    assert [o.explanation for o in options] == ["Because", ""]
+
+
+def test_a_question_level_explanation_names_the_option_field(tmp_path: Path) -> None:
     folder = course_dir(tmp_path)
     (folder / "quizzes" / "q.yaml").write_text(
         QUIZ.replace("    text: Which?", "    text: Which?\n    explanation: Because")
     )
-    assert "explanation is not supported yet" in lines(folder)
+    assert "belongs on an option" in lines(folder)
+
+
+@pytest.mark.parametrize(
+    ("value", "message"),
+    [
+        ("12", "must be text"),
+        ('""', "is empty"),
+        ('"   "', "is empty"),
+        ("null", "is empty"),
+        ('"' + "x" * 1001 + '"', "1001 characters"),
+    ],
+)
+def test_a_bad_option_explanation_is_refused(tmp_path: Path, value: str, message: str) -> None:
+    folder = course_dir(tmp_path)
+    _with_option_explanation(folder, value)
+    assert message in lines(folder)
+
+
+def test_an_explanation_of_1000_characters_is_allowed(tmp_path: Path) -> None:
+    folder = course_dir(tmp_path)
+    _with_option_explanation(folder, '"' + "x" * 1000 + '"')
+    assert lines(folder) == ""
+
+
+def test_the_explanation_limit_counts_after_trimming(tmp_path: Path) -> None:
+    # covers: AC-11. 1000 characters plus padding is allowed; 1001 once trimmed is not.
+    folder = course_dir(tmp_path)
+    _with_option_explanation(folder, '"  ' + "x" * 1000 + '  "')
+    assert lines(folder) == ""
+
+
+def test_an_explanation_keeps_markdown_and_html_as_typed(tmp_path: Path) -> None:
+    # covers: AC-11. It is plain text, so nothing is stripped or rewritten.
+    folder = course_dir(tmp_path)
+    _with_option_explanation(folder, '"**Bold** <b>x</b>"')
+    option = load_course(folder).quizzes[0].questions[0].options[0]
+    assert option.explanation == "**Bold** <b>x</b>"
 
 
 def test_an_unused_quiz_file(tmp_path: Path) -> None:

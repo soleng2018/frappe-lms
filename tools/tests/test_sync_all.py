@@ -167,6 +167,18 @@ def test_one_course_only_and_an_unknown_key(tmp_path: Path) -> None:
     assert code == 1 and err == ["ERROR unknown course 'zzz'; known courses: a, b"]
 
 
+def test_a_course_key_hides_other_courses_blocked_lines(tmp_path: Path) -> None:
+    # covers: AC-7. With a course key, only that course is shown and counted.
+    write_course(tmp_path, "a")
+    broken = write_course(tmp_path, "b")
+    (broken / "course.yaml").write_text("format: 7\nkey: b\n")
+    fake = FakeLms()
+    code, out, _ = run(fake, tmp_path, only="a")
+    assert code == 0 and all(line.startswith("[a] ") for line in out)
+    code, out, _ = run(fake, tmp_path)
+    assert code == 1 and any(line.startswith("[b] blocked") for line in out)
+
+
 def test_a_course_with_no_folder_is_listed_and_left_alone(tmp_path: Path) -> None:
     write_course(tmp_path, "a")
     fake = FakeLms()

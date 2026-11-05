@@ -111,11 +111,11 @@ Each file in `quizzes/` (any name ending in `.yaml`) is one quiz.
 | `max_attempts` | number | no | At least 1. Default 3. |
 | `questions` | list | yes | At least one question. |
 
-Question: `key` (text), `text` (text), `marks` (number, default 1), `options` (2 to 4 items). Option: `text` (text, not empty, not repeated) and `correct` (true or false). At least one option is correct. In YAML write `"yes"` and `"no"` in quotes, because bare `no` means false.
+Question: `key` (text), `text` (text), `marks` (number, default 1), `options` (2 to 4 items). Option: `text` (text, not empty, not repeated), `correct` (true or false) and `explanation` (optional text). At least one option is correct. In YAML write `"yes"` and `"no"` in quotes, because bare `no` means false.
 
 Every quiz must be used by exactly one quiz block in a lesson of the same course.
 
-A question `explanation` is not supported yet. The check refuses it so you do not think it works. This waits on a design decision (spec 0011, AC-11).
+An option may have an optional `explanation`: plain text of 1 to 1000 characters. The learner sees it under that option after answering. Markdown and HTML show as typed. Put it on the option, not on the question. Remove the line to clear it.
 
 ## Keys
 
@@ -149,6 +149,11 @@ The check refuses an image that: does not exist, has empty alt text, is not png,
 | `must start with format: 1` | Add `format: 1` as the first line of `course.yaml`. |
 | `the folder name ... must equal the course key` | Rename the folder or the `key` so they match, using only a-z, 0-9 and dashes. |
 | `must be text, found ...` | Quote the value. A number or `no` is not text. |
+| `must be a list` | Write the field as a YAML list, one `- item` per line. |
+| `must be a whole number, found ...` | Write a plain number such as `3`, with no quotes. |
+| `must be true or false, found ...` | Write `correct: true`, or leave the line out. |
+| `cannot be read as UTF-8 text` | Save the file again as UTF-8 text. |
+| `the question has no text` | Write the question in its `text` field. |
 | `a block needs exactly one of text, video or quiz` | Keep one key per block. |
 | `unknown block key` | Use `text`, `video` or `quiz`. |
 | `the file ... does not exist`, `points outside the course folder` | Fix the path. It must be a file inside the course folder. |
@@ -164,7 +169,8 @@ The check refuses an image that: does not exist, has empty alt text, is not png,
 | `passing_percentage`, `max_attempts`, `no questions` | Use 80 to 100, at least 1, and at least one question. |
 | `... options, must be 2 to 4`, `no correct option`, `an empty option`, `repeats the option` | Fix the options of that question. |
 | `open ended, so it is never graded` | Use choices. |
-| `explanation is not supported yet` | Remove the `explanation` line. |
+| `explanation belongs on an option` | Move the `explanation` line to the option it explains. |
+| `explanation ... is empty`, `must be text`, `characters, the most allowed is 1000` | Write 1 to 1000 characters of text, or remove the line. |
 | `... key ... is used more than once` | Make the key unique in the course. |
 | `... key ... is also used by <course>` | Prefix the key with its course key. |
 | `the title is also used by <course>` | Give the course a different title. |

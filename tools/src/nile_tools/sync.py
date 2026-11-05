@@ -310,7 +310,7 @@ def sync_all(
     shown = [p for p in catalog.problems if only is None or p.course == only]
     for p in shown:
         err(p.line())
-    blocked = {k: _reason(v) for k, v in catalog.blocked().items()}
+    blocked = {k: _reason(v) for k, v in catalog.blocked().items() if only is None or k == only}
     targets = [only] if only else list(catalog.courses)
     lms_courses = _lms_courses(lms)
     differs = False
