@@ -8,7 +8,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - Course access from groups (spec 0009): a learner in an Authentik group named exactly like a course is enrolled in that course only, with no batch. With no course group a known learner keeps their certificate and progress but loses the lessons. Two course groups are refused with a clear page.
+- A learner who is live in a course is sent to that course after signing in, and a learner with no course group (after the slot) is sent to their profile, where the certificate is. A real deep link still wins, and an admin goes to `/lms`.
+- A learner who comes back to a course they finished starts with their old progress, so they can still be certified. Their progress, quiz attempts and certificates are never deleted when a course group goes away.
 - `nile_auth.cleanup.clear_batch_courses` lists and removes the old batch course rows.
+- Group to role mapping (spec 0006): `nile_auth` replaces Frappe's Authentik callback and reads the `groups` list that comes with the login. A member of `hol-admins` gets the Moderator, Course Creator and Desk User roles, which makes Frappe treat them as a System User. The roles follow the group at every login, so a person removed from `hol-admins` loses them at their next sign in. A group change never applies before that.
+- A person in no course group and not in `hol-admins`, and not already known as a learner, is refused with a plain 403 page and no account is created. The page never says which rule failed.
+- Accounts that must not change are refused with the same generic 403 page, and nothing about them is touched: `Administrator`, the service user, the MCP user, any user who holds System Manager, and any user whose stored Authentik id differs from the one in the login. A disabled user stays disabled.
+- A login that has no `groups` list, or a site with no admin group setting, stops with a "sign in is not set up" page and changes nothing. Roles change only when a list is present, even an empty one.
+- A login is all or nothing. If any step fails, nothing is kept, nobody is signed in, and a retry page shows. A callback with a missing or expired `state` gets Frappe's 417 page before anything is written.
+- A new User field `nile_groups` records the groups that matched at the last login (one per line), so you can see a person's current course and admin status.
+- Every login writes one line on the `nile_auth` log with the email, the outcome (`ok`, `refused_no_group`, `refused_two_courses`, `refused_protected`, `disabled`, `bad_state`, `setup_fault_claim`, `error` and the rest), the mode and the course group. No token or code appears in it.
+- `create-site` writes the `nile_service_user` site setting from `LMS_SERVICE_USER`, so the login can refuse the service user.
 - `make tools CMD="verify deploy"` proves the LMS is reachable and safe over its public hostname. It checks the ping, the home page with its CSS and JS files, the socket.io endpoint, and that plain HTTP redirects to https. A missing redirect is a warning, never a failure. Each line says PASS, WARN or FAIL, names the URL or compose key, and never shows a secret (see spec 0007).
 - `verify deploy` also reads `deploy/compose.yaml` and fails if a service publishes a port, if any service other than `frontend` has Traefik labels or the Traefik network, if the router rule does not name `${LMS_HOSTNAME}`, or if log rotation or the restart policy is missing.
 - `make restart-test` restarts the long running services, kills `backend` and `frontend` hard, waits up to 180 seconds for every service to be healthy, and runs `verify deploy` again. It touches only the `nile-lms` project.
@@ -25,7 +35,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `idp check [--user NAME]` reports PASS, WARN or FAIL for the whole sign in setup and writes nothing. `idp remove` deletes only the key, provider and application that setup created.
 - `idp password-login on|off` is the break glass: `on` brings back the password form so `Administrator` can sign in while Authentik is down, and `off` closes it. `off` refuses to run unless the enabled Authentik key exists, so nobody is locked out.
 - `idp selftest` signs a throwaway student and a user in no course group in through the real Authentik and LMS, and judges both. It cleans up on pass, fail and interrupt, sweeps leftovers of a killed run first, and refuses to start if an item with a test name exists without our marker. Its errors name the URL (without the query) and never show a password.
-- Everyone lands on `/lms` after signing in. A deep link is kept only when it is a path on this site.
+- After signing in, an admin lands on `/lms`, and a learner lands on their course or profile (spec 0009). A deep link is kept only when it is a path on this site.
 
 ### Changed
 - `idp setup` also turns off LMS guest access, so a signed out visitor cannot read the site totals. `idp check` warns while it is on.
