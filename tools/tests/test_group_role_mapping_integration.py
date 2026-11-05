@@ -166,9 +166,18 @@ def test_faults_change_nothing(run: dict[str, Any]) -> None:
 
 def test_protected_accounts_and_identity_changes_are_refused(run: dict[str, Any]) -> None:
     """AC-8."""
-    for name in ("administrator", "service", "mcp", "system_manager", "identity", "no_email"):
+    for name in (
+        "administrator",
+        "administrator_email",
+        "service",
+        "mcp",
+        "system_manager",
+        "identity",
+        "no_email",
+    ):
         assert run[name] == 403, name
     assert run["sm_unchanged"]
+    assert run["administrator_email_unchanged"]
     assert run["same_sub_ok"]
     assert run["disabled_same"]
 

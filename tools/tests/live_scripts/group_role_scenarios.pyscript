@@ -313,6 +313,10 @@ try:
     # AC-8: protected accounts and an identity mismatch
     g = [ta]
     out["administrator"] = login("Administrator", g, sub="x")["status"]
+    admin_email = frappe.db.get_value("User", "Administrator", "email")
+    admin_before = state("Administrator")
+    out["administrator_email"] = login(admin_email, g, sub="x")["status"]
+    out["administrator_email_unchanged"] = admin_before == state("Administrator")
     out["service"] = login(frappe.conf.nile_service_user, g, sub="x")["status"]
     mcp = frappe.conf.nile_mcp_user
     out["mcp"] = login(mcp, g, sub="x")["status"] if mcp else None
