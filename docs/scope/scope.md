@@ -33,7 +33,7 @@ _The Frappe links have not been read by `/scope`; `/architect` should read the o
 | 8 | Content sync, one course | Slice 1 | done |
 | 9 | Quiz pass rules & certificate | Slice 1 | done |
 | 10 | Branding & theme | Slice 2 | planned |
-| 11 | Guide format & full authoring | Slice 2 | in-progress |
+| 11 | Guide format & full authoring | Slice 2 | done |
 | 12 | Manager progress view | Slice 3 | planned |
 | 13 | Monthly report | Slice 3 | planned |
 | 14 | Backup & restore | Slice 4 | planned |
@@ -217,7 +217,7 @@ Apply the Nile brand colors and logos from the Nile design system in `brand/` to
 **Done when:** the app and the certificate use the brand colors, Inter font, and unaltered logos, set by script so they survive a rebuild, and text on every brand background is readable. The login page is covered only if Authentik branding is done by the same script.
 - [ ] Design it (spec): `/architect branding & theme`
 
-### 11. Guide format & full authoring
+### 11. Guide format & full authoring · done
 Settle the guide and quiz file format (markdown for text, structured files for quizzes and ordering) and extend the sync to many courses, images, and checks.
 **Done when:** a documented format lets an author add a new course by committing files, the sync reports errors in bad files before pushing, and several courses sync cleanly.
 spec [0011](../specs/0011-guide-format-and-full-authoring/index.md) · code in `tools/src/nile_tools/`, `content/`, `docs/authoring.md`
