@@ -1,0 +1,146 @@
+/* Spec 0012. Written for wkhtmltopdf (old WebKit): no grid, no variables, no modern flexbox.
+   Colors are the brand tokens: Nile Blue #0E4EAF, Bright Nile Blue #2070E1, Solar Amber #FF6600,
+   Nile Ink #001E2D, Nile Slate #4D626C, ring #EEF2F8.
+   Frappe reads only the margin-*, page-size and orientation values of this first rule. */
+.print-format {
+	page-size: Letter;
+	orientation: Landscape;
+	margin-top: 0mm;
+	margin-bottom: 0mm;
+	margin-left: 0mm;
+	margin-right: 0mm;
+}
+
+/* Reset Frappe's print wrapper: no A4 width, no padding, no shadow. */
+html, body { margin: 0; padding: 0; background: #FFFFFF; }
+.print-format-gutter,
+.print-format {
+	margin: 0 !important;
+	padding: 0 !important;
+	width: auto !important;
+	max-width: none !important;
+	min-height: 0 !important;
+	border: 0 !important;
+	box-shadow: none !important;
+	background: #FFFFFF !important;
+}
+
+/* The page box is 11 inches wide and 8.45 inches high, a little under Letter, so no second page. */
+.nile-cert {
+	position: relative;
+	width: 11in;
+	height: 8.45in;
+	overflow: hidden;
+	border: 0.75pt solid #0E4EAF;
+	-webkit-box-sizing: border-box;
+	box-sizing: border-box;
+	background: #FFFFFF;
+	font-family: Inter, sans-serif;
+	font-weight: 400;
+	color: #001E2D;
+}
+.nile-cert .bar {
+	position: absolute;
+	left: 0;
+	top: 0;
+	width: 11in;
+	height: 0.22in;
+	background: #0E4EAF;
+	background-image: -webkit-linear-gradient(left, #0E4EAF, #2070E1, #FF6600);
+	background-image: linear-gradient(to right, #0E4EAF, #2070E1, #FF6600);
+}
+/* Decoration only. It sits at the top right, above the text block, and holds no text. */
+.nile-cert .ring {
+	position: absolute;
+	left: 8.7in;
+	top: 0.5in;
+	width: 1.15in;
+	height: 1.15in;
+	border: 0.3in solid #EEF2F8;
+	-webkit-border-radius: 1.5in;
+	border-radius: 1.5in;
+}
+/* Clear space around the logo is at least half its height (0.35 inch). */
+.nile-cert .logo {
+	position: absolute;
+	left: 1in;
+	top: 0.7in;
+	height: 0.7in;
+}
+
+.nile-cert .body {
+	position: absolute;
+	left: 1in;
+	top: 2.15in;
+	width: 8in;
+}
+.nile-cert .eyebrow {
+	font-size: 11pt;
+	font-weight: 600;
+	letter-spacing: 3pt;
+	color: #0E4EAF;
+}
+.nile-cert .title {
+	margin-top: 0.12in;
+	font-size: 36pt;
+	font-weight: 600;
+	line-height: 1.15;
+	color: #001E2D;
+}
+.nile-cert .presented {
+	margin-top: 0.3in;
+	font-size: 13pt;
+	color: #4D626C;
+}
+.nile-cert .name {
+	margin-top: 0.18in;
+	padding-bottom: 0.08in;
+	width: 7.4in;
+	border-bottom: 1.5pt solid #0E4EAF;
+	font-weight: 600;
+	line-height: 1.2;
+	color: #001E2D;
+}
+.nile-cert .name-l { font-size: 30pt; }
+.nile-cert .name-m { font-size: 24pt; }
+.nile-cert .name-s { font-size: 18pt; }
+.nile-cert .detail {
+	margin-top: 0.28in;
+	width: 7.4in;
+	font-size: 14pt;
+	line-height: 1.45;
+	color: #001E2D;
+}
+.nile-cert .detail b { font-weight: 700; }
+.nile-cert .course-l { font-size: 16pt; }
+.nile-cert .course-s { font-size: 13pt; }
+
+.nile-cert .signature {
+	position: absolute;
+	left: 1in;
+	top: 7.05in;
+	width: 3in;
+}
+.nile-cert .signature .line { border-top: 0.75pt solid #001E2D; height: 0; }
+.nile-cert .sig-label {
+	margin-top: 0.06in;
+	font-size: 10pt;
+	font-weight: 700;
+	color: #001E2D;
+}
+.nile-cert .sig-org { font-size: 10pt; color: #4D626C; }
+
+.nile-cert .issued {
+	position: absolute;
+	left: 5in;
+	top: 6.85in;
+	width: 4.8in;
+}
+.nile-cert .issued-by { font-size: 10pt; font-weight: 700; color: #001E2D; }
+.nile-cert .issued-line { font-size: 10pt; color: #4D626C; }
+.nile-cert .issued-link {
+	font-size: 8pt;
+	color: #0E4EAF;
+	word-wrap: break-word;
+	word-break: break-all;
+}
