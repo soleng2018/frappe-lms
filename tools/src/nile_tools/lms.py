@@ -20,6 +20,7 @@ __all__ = [
     "get_password",
     "get_record",
     "list_records",
+    "logged_user",
     "update_record",
 ]
 
@@ -198,3 +199,17 @@ def get_password(lms: Lms, doctype: str, name: str, field: str) -> str | None:
     except (LmsError, ValueError, AttributeError):
         return None
     return value if isinstance(value, str) and value else None
+
+
+def logged_user(lms: Lms) -> str:
+    """Return the name of the user the API token signs in as."""
+    label = "logged in user"
+    r = _send(lms, label, "GET", "/api/method/frappe.auth.get_logged_user")
+    return str(_message(label, r))
+
+
+def _message(label: str, r: httpx.Response) -> Any:
+    try:
+        return r.json()["message"]
+    except (ValueError, KeyError, TypeError):
+        raise LmsError(f"{label}: {r.request.method} {r.request.url} sent no message") from None

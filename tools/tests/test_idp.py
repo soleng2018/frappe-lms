@@ -600,3 +600,10 @@ def test_the_check_judges_are_pure_and_total():
     )
     assert idp.judge_bad_state(None).level == idp.FAIL
     assert idp.judge_frappe_key(None, {}, None).level == idp.FAIL
+
+
+def test_the_provider_grants_the_authorization_code_or_authentik_refuses_every_login():
+    wanted = idp.wanted_state(VALUES, REFS)
+    assert wanted.provider["grant_types"] == ["authorization_code"]
+    live = {**wanted.provider, "grant_types": []}  # what Authentik 2026.8 gives when none is sent
+    assert [c.field for c in idp.diff("provider", wanted.provider, live)] == ["grant_types"]

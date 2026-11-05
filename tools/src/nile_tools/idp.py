@@ -1,8 +1,11 @@
 """Pure rules for the Authentik sign in: the wanted state of each item, built from the config."""
 
+import html
+import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
+from urllib.parse import urlsplit
 
 __all__ = [
     "APP_NAME",
@@ -18,14 +21,22 @@ __all__ = [
     "SIGNING_KEY_NAME",
     "SYSTEM_SETTINGS",
     "TESTED_VERSION",
+    "TEST_COURSE_KEY",
+    "TEST_COURSE_TITLE",
+    "TEST_PREFIX",
+    "TEST_STRANGER",
+    "TEST_STUDENT",
     "WARN",
     "Change",
     "ConfigProblem",
+    "Observed",
     "Refs",
     "Refused",
     "Verdict",
     "Wanted",
+    "authorize_link",
     "diff",
+    "flow_target",
     "judge_application",
     "judge_bad_state",
     "judge_discovery",
@@ -36,9 +47,13 @@ __all__ = [
     "judge_login_page",
     "judge_provider",
     "judge_secret",
+    "judge_stranger",
+    "judge_student",
     "judge_version",
     "key_enabled",
     "login_form_state",
+    "sample_email",
+    "sample_user_body",
     "wanted_state",
 ]
 
@@ -59,6 +74,14 @@ DEFAULT_LANGUAGE = "en"
 # Both states keep the email link off; only the password form comes back for the break glass.
 FORM_OFF = {"disable_user_pass_login": 1, "login_with_email_link": 0}
 FORM_ON = {"disable_user_pass_login": 0, "login_with_email_link": 0}
+# Selftest items: fixed names so a killed run can be cleaned by the next one (AC-11).
+TEST_PREFIX = "nile-lms-test"
+TEST_DOMAIN = "nile-lms-test.example"
+TEST_STUDENT = f"{TEST_PREFIX}-student"
+TEST_STRANGER = f"{TEST_PREFIX}-stranger"
+TEST_COURSE_TITLE = "Nile Test Course 900"  # also the Authentik group name (spec 0009)
+TEST_COURSE_KEY = f"{TEST_PREFIX}-course"
+STUDENT_ROLE = "LMS Student"
 AUTH_URL_DATA = '{"response_type":"code","scope":"openid profile email groups"}'
 
 
@@ -133,6 +156,8 @@ def wanted_state(values: Mapping[str, str], refs: Refs) -> Wanted:
     provider = {
         "name": f"{slug} provider",
         "client_type": "confidential",
+        # Authentik 2026.8 refuses every authorize request for a provider with no grant types.
+        "grant_types": ["authorization_code"],
         "authorization_flow": refs.authorization_flow,
         "invalidation_flow": refs.invalidation_flow,
         "signing_key": refs.signing_key,
@@ -297,3 +322,74 @@ def judge_bad_state(status: int | None) -> Verdict:
     if status == 417:
         return Verdict(PASS, "a callback with a bad state is refused (417)")
     return Verdict(FAIL, f"a callback with a bad state answered {status or 'nothing'}, not 417")
+
+
+def sample_email(username: str) -> str:
+    """Return the email of a selftest user; it always starts with the test prefix."""
+    return f"{username}@{TEST_DOMAIN}"
+
+
+def sample_user_body(username: str) -> dict[str, Any]:
+    """Build the Authentik body of a selftest user: internal, active and carrying the marker."""
+    return {
+        "username": username,
+        "name": f"Nile Selftest {username.rsplit('-', 1)[-1].title()}",
+        "email": sample_email(username),
+        "is_active": True,
+        "type": "internal",
+        "attributes": {"managed_by": MARKER},
+    }
+
+
+def authorize_link(page: str, authentik_host: str) -> str | None:
+    """Find the Authentik authorize link on the LMS login page, with its HTML escapes undone."""
+    pattern = rf'href="(https://{re.escape(authentik_host)}/application/o/authorize/[^"]*)"'
+    found = re.search(pattern, page)
+    return html.unescape(found.group(1)) if found else None
+
+
+def flow_target(location: str) -> tuple[str, str] | None:
+    """Split an Authentik flow page URL into the flow slug and its query string, else None."""
+    parts = urlsplit(location)
+    found = re.fullmatch(r"/if/flow/([^/]+)/", parts.path)
+    return (found.group(1), parts.query) if found else None
+
+
+@dataclass(frozen=True)
+class Observed:
+    """What the LMS holds after a selftest login: the redirect, the session and the records."""
+
+    status: int | None
+    location: str | None
+    logged_in_as: str | None
+    user_exists: bool
+    roles: tuple[str, ...] = ()
+    enrolled: tuple[str, ...] = ()
+    groups_field: str = ""
+
+
+def judge_student(
+    seen: Observed, email: str, course: str, group: str, lms_host: str
+) -> list[Verdict]:
+    """Judge the student login: signed in, on the course page, one role, one enrollment, groups."""
+    expected = f"https://{lms_host}/lms/courses/{course}"
+    checks = [
+        (seen.location == expected, f"student lands on {expected} (got {seen.location})"),
+        (seen.logged_in_as == email, f"student is signed in as {email} (got {seen.logged_in_as})"),
+        (STUDENT_ROLE in seen.roles, f"student holds the {STUDENT_ROLE} role"),
+        (seen.enrolled == (course,), f"student is enrolled in only {course} (got {seen.enrolled})"),
+        (
+            group in seen.groups_field.splitlines(),
+            "the userinfo carried a groups list with the course group (Frappe stored it)",
+        ),
+    ]
+    return [Verdict(PASS if ok else FAIL, message) for ok, message in checks]
+
+
+def judge_stranger(seen: Observed) -> list[Verdict]:
+    """Judge the login of a user in no course group: the 403 page, and no Frappe user."""
+    checks = [
+        (seen.status == 403, f"a user in no course group gets the 403 page (got {seen.status})"),
+        (not seen.user_exists, "no Frappe user was created for that user"),
+    ]
+    return [Verdict(PASS if ok else FAIL, message) for ok, message in checks]

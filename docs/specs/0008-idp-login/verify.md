@@ -36,6 +36,16 @@ _Build task 1 findings from the live probe (Authentik 2026.8.3, Frappe version-1
 - **Live result**: `idp check` is all PASS, and with `--user akadmin` the groups line passes. Without `--user` the groups line is a WARN, because a real username is not in `.env`.
 - `idp remove` was proven on fakes only. It was not run live, so the working setup stays in place. Run it live when you next rebuild.
 
-## Still to probe
+## idp selftest (task 7, probed on the live site)
 
-- The authentication flow stages, the `hol-labs-access` policy against the test group name, and the links that block a Frappe User delete (task 7).
+- **Real bug found and fixed**: the provider `idp setup` made had `grant_types: []`, and Authentik 2026.8.3 answers every authorize request for such a provider with `error=invalid_request` ("The request is otherwise malformed"). No sign in could have worked, while `idp check` was all PASS. The wanted provider now holds `grant_types: ["authorization_code"]`, and `idp setup` printed `fixed provider: grant_types` on the live provider. `idp check` already compares every wanted field, so it now FAILs on a provider without it. The spec's provider field list did not name this field; it needs a line in the data model table.
+- **Authentication flow**: `default-authentication-flow` has four stages: identification, password, an MFA validation stage and the login stage. The MFA stage has `not_configured_action` `skip`, so a user with no device passes it. A flow whose stage the selftest cannot answer stops the run and names the stage.
+- **Flow API**: stage names are `ak-stage-identification` and `ak-stage-password`. A POST to `/api/v3/flows/executor/<slug>/?query=<the flow page query>` answers 302 back to the same URL, and a GET there gives the next challenge. A finished stage redirects once more, and the last answer is a `xak-flow-redirect` challenge whose `to` is the authorize URL. The authorize URL then redirects to the LMS callback with the code.
+- **Policies**: `hol-labs-access` passes any user whose path is not `hol/learners`; the selftest users have the default path, so it is not a factor. `hol-learner-isolation` denies only `hol/learners` users. Neither is bound to the default flows we use.
+- **Frappe delete**: the service user can delete the throwaway LMS Enrollment, LMS Course and User over REST in that order. No link blocked the User delete, so no `bench execute` fallback is needed.
+- **userinfo groups**: the selftest holds no token. It asserts that Frappe stored the course group in `nile_groups`, which `nile_auth` writes only from the real userinfo `groups` list.
+- **Live result**: `idp selftest` passes all seven checks, a second run starts with nothing to clean, and a run killed with `docker kill` mid way was cleaned by the next run (six leftover items). The `integration` test `test_idp_selftest_integration.py` runs `setup`, `check` and `selftest` and finds no secret in their output.
+
+## Manual (open)
+
+- [ ] Sign in with a real browser as a member of `hol-admins` → lands on `/lms`, and the Desk opens with Moderator, Course Creator and Desk User, no LMS Student → AC-3, AC-10. Not automated: a test account in `hol-admins` would also get Cloudflare Access.
