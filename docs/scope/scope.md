@@ -28,7 +28,7 @@ _The Frappe links have not been read by `/scope`; `/architect` should read the o
 | 3 | Single config & secrets file | Foundation | done |
 | 4 | Data model (course, quiz, certificate, roles) | Foundation | done |
 | 5 | LMS running behind Traefik | Slice 1 | done |
-| 6 | IDP login (OIDC) | Slice 1 | in-progress |
+| 6 | IDP login (OIDC) | Slice 1 | done |
 | 7 | Group to role mapping | Slice 1 | in-progress |
 | 8 | Content sync, one course | Slice 1 | done |
 | 9 | Quiz pass rules & certificate | Slice 1 | planned |
@@ -114,7 +114,7 @@ spec [0007](../specs/0007-lms-behind-traefik/index.md) · code in `tools/src/nil
 - [x] Review it (fresh model): `/check review LMS running behind Traefik`
 - [x] Document it: `/document LMS running behind Traefik`
 
-### 6. IDP login (OIDC)
+### 6. IDP login (OIDC) · done
 A script creates the OIDC application in Authentik through its API (only items it creates), and configures Frappe through its API to sign users in with it. Students and teachers log in only this way.
 **Done when:** running the script on a clean setup lets a student sign in through Authentik and land in the LMS, and running it twice changes nothing.
 spec [0008](../specs/0008-idp-login/index.md) · code in `tools/src/nile_tools/`, `apps/nile_auth/`
@@ -128,7 +128,7 @@ spec [0008](../specs/0008-idp-login/index.md) · code in `tools/src/nile_tools/`
 - [x] Verify it: `/check verify IDP login`
 - [x] Test it: `/test IDP login`
 - [x] Review it (fresh model): `/check review IDP login`
-- [ ] Document it: `/document IDP login`
+- [x] Document it: `/document IDP login`
 
 ### 7. Group to role mapping · in-progress
 A learner in a group named exactly like a course gets that one course (spec 0009), and `hol-admins` become admins. The LMS only reads the groups.
