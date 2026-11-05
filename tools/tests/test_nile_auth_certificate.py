@@ -1,12 +1,17 @@
 """Unit tests for nile_auth.certificate (spec 0010 AC-10) with a fake LMSCertificate base class."""
 
+import ast
 import importlib
+import re
 import sys
 import types
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any
 
 import pytest
+
+ROOT = Path(__file__).resolve().parents[2]
 
 BASE = "lms.lms.doctype.lms_certificate.lms_certificate"
 
@@ -89,3 +94,34 @@ def test_a_moved_saved_batch_certificate_runs_the_batch_checks(make: Callable[..
     doc = make(new=False, changed=("member",), batch="b1")
     doc.validate_criteria()
     assert doc.calls == ["role", "batch"]
+
+
+def test_the_hook_points_at_the_class_that_exists() -> None:
+    """AC-10: a typo in hooks.py would silently turn the override off."""
+    app = ROOT / "apps/nile_auth/nile_auth"
+    tree = ast.parse((app / "hooks.py").read_text())
+    value = next(
+        ast.literal_eval(node.value)
+        for node in tree.body
+        if isinstance(node, ast.Assign)
+        and any(getattr(t, "id", "") == "override_doctype_class" for t in node.targets)
+    )
+    assert list(value) == ["LMS Certificate"]
+    module, _, cls = value["LMS Certificate"].rpartition(".")
+    assert module == "nile_auth.certificate"
+    classes = {
+        n.name
+        for n in ast.parse((app / "certificate.py").read_text()).body
+        if isinstance(n, ast.ClassDef)
+    }
+    assert cls in classes
+
+
+def test_the_app_version_and_the_image_pin_move_together() -> None:
+    """AC-10: nile_auth is copied into the image, so both numbers must change in one commit."""
+    pyproject = (ROOT / "apps/nile_auth/pyproject.toml").read_text()
+    env = (ROOT / "deploy/versions.env").read_text()
+    app = re.search(r'^version = "([^"]+)"', pyproject, re.M)
+    pin = re.search(r"^BUILD_NILE_AUTH_VERSION=(\S+)", env, re.M)
+    assert app and pin
+    assert app.group(1) == pin.group(1)
