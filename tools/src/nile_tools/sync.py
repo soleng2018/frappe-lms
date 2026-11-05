@@ -1,10 +1,12 @@
 """Push the course from git to the LMS: read, plan, then apply (or only report with `--check`)."""
 
+import posixpath
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from typing import Any
 
-from nile_tools import plan
+from nile_tools import images, plan
 from nile_tools.content import Course
+from nile_tools.contentfile import Catalog
 from nile_tools.lms import (
     Lms,
     LmsError,
@@ -12,6 +14,7 @@ from nile_tools.lms import (
     get_record,
     list_records,
     update_record,
+    upload_file,
 )
 from nile_tools.plan import (
     Action,
@@ -23,7 +26,7 @@ from nile_tools.plan import (
     Update,
 )
 
-__all__ = ["read_state", "run_sync"]
+__all__ = ["read_state", "run_sync", "sync_all"]
 
 ENROLLMENT = "LMS Enrollment"
 PROGRESS = "LMS Course Progress"
@@ -51,25 +54,29 @@ def _in(keys: Sequence[str]) -> list[list[object]]:
     return [["nile_key", "in", list(keys)]]
 
 
-def read_state(lms: Lms, course: Course) -> Found:
+def _lms_courses(lms: Lms) -> tuple[Mapping[str, Any], ...]:
+    return tuple(list_records(lms, plan.COURSE, fields=["name", "title", "nile_key"]))
+
+
+def read_state(
+    lms: Lms, course: Course, courses: tuple[Mapping[str, Any], ...] | None = None
+) -> Found:
     """Read what the LMS holds for this course: by `nile_key`, and by `course` for strays."""
-    courses = tuple(list_records(lms, plan.COURSE, fields=["name", "title", "nile_key"]))
+    courses = _lms_courses(lms) if courses is None else courses
     found = list_records(lms, plan.COURSE, filters=[["nile_key", "=", course.key]])
-    if not found:
-        return Found(courses=courses)
-    doc = get_record(lms, plan.COURSE, found[0]["name"])
-    here = [["course", "=", doc["name"]]]
+    doc = get_record(lms, plan.COURSE, found[0]["name"]) if found else None
+    here = [["course", "=", doc["name"]]] if doc else None
     lesson_keys = [x.key for c in course.chapters for x in c.lessons]
     chapters = _merge(
-        list_records(lms, plan.CHAPTER, filters=here),
+        list_records(lms, plan.CHAPTER, filters=here) if here else (),
         list_records(lms, plan.CHAPTER, filters=_in([c.key for c in course.chapters])),
     )
     lessons = _merge(
-        list_records(lms, plan.LESSON, filters=here),
+        list_records(lms, plan.LESSON, filters=here) if here else (),
         list_records(lms, plan.LESSON, filters=_in(lesson_keys)),
     )
     quizzes = _merge(
-        list_records(lms, plan.QUIZ, filters=here),
+        list_records(lms, plan.QUIZ, filters=here) if here else (),
         list_records(lms, plan.QUIZ, filters=_in([q.key for q in course.quizzes])),
     )
     quizzes = [get_record(lms, plan.QUIZ, q["name"]) for q in quizzes]
@@ -205,30 +212,131 @@ def _counts(creates: int, updates: int, detached: int) -> str:
     return f"{creates} created, {updates} updated, {detached} detached"
 
 
-def run_sync(lms: Lms, course: Course, *, check: bool, say: Say, admin_group: str = "") -> int:
+def _image_urls(
+    lms: Lms, course: Course, *, check: bool, say: Say
+) -> tuple[dict[str, str], int, int]:
+    """Phase 0: give every image its LMS URL. Return the URLs, the uploads, and the differences.
+
+    With `check` nothing is uploaded: a missing file is reported and has no URL.
+    """
+    urls: dict[str, str] = {}
+    uploaded = missing = 0
+    for image in course.images:
+        name = images.stored_name(course.key, image.data, posixpath.basename(image.path))
+        found = list_records(
+            lms,
+            "File",
+            filters=[["file_name", "=", name], ["is_private", "=", 0]],
+            fields=["name", "file_url"],
+        )
+        if found and found[0].get("file_url"):
+            urls[image.path] = found[0]["file_url"]
+        elif check:
+            say(f"would upload image {image.path}")
+            missing += 1
+        else:
+            urls[image.path] = upload_file(lms, name, image.data)
+            uploaded += 1
+            say(f"uploaded image {image.path}")
+    return urls, uploaded, missing
+
+
+def run_sync(
+    lms: Lms,
+    course: Course,
+    *,
+    check: bool,
+    say: Say,
+    admin_group: str = "",
+    courses: tuple[Mapping[str, Any], ...] | None = None,
+) -> int:
     """Make the LMS match git (or, with `check`, only say what differs). Return the exit code."""
-    found = read_state(lms, course)
+    found = read_state(lms, course, courses)
     if clash := plan.title_clash(course, found, admin_group):
         raise LmsError(f"refusing to sync: {clash}")
-    creates = plan.plan_creates(course, found)
+    if other := plan.held_elsewhere(course, found):
+        raise LmsError(f"refusing to sync: {other}")
+    urls, uploaded, missing = _image_urls(lms, course, check=check, say=say)
+    creates = plan.plan_creates(course, found, urls)
     if check:
-        lines = _report(creates, plan.plan_sync(course, found))
+        lines = _report(creates, plan.plan_sync(course, found, urls))
         for line in lines:
             say(line)
-        say(f"{len(lines)} difference(s) found" if lines else "nothing to change")
-        return 1 if lines else 0
+        total = len(lines) + missing
+        say(f"{total} difference(s) found" if total else "nothing to change")
+        return 1 if total else 0
     names = _names(found)
     _create_all(lms, creates, names, say)
     if creates:
-        found = read_state(lms, course)
+        found = read_state(lms, course, found.courses)
         names = _names(found)
-    actions = plan.plan_sync(course, found)
+    actions = plan.plan_sync(course, found, urls)
     for a in actions:
         _apply(lms, a, say)
     if found.course and plan.outline_changed(creates, actions):
         _recompute_progress(lms, found.course["name"], _outline(course, names), say)
     updates = sum(isinstance(a, Update) for a in actions)
     detached = sum(isinstance(a, Detach) for a in actions)
-    changed = len(creates) + updates + detached
-    say(_counts(len(creates), updates, detached) if changed else "nothing to change")
+    changed = len(creates) + updates + detached + uploaded
+    counts = _counts(len(creates), updates, detached) + f", {uploaded} images uploaded"
+    say(counts if changed else "nothing to change")
     return 0
+
+
+def _prefixed(say: Say, key: str) -> Say:
+    return lambda line: say(f"[{key}] {line}")
+
+
+def _reason(problems: Sequence[Any]) -> str:
+    first = problems[0]
+    more = f" (and {len(problems) - 1} more)" if len(problems) > 1 else ""
+    return f"{first.file}: {first.where}: {first.message}{more}"
+
+
+def sync_all(
+    lms: Lms,
+    catalog: Catalog,
+    *,
+    only: str | None,
+    check: bool,
+    say: Say,
+    err: Say,
+    admin_group: str = "",
+) -> int:
+    """Sync every ready course (or just `only`); a course that fails never stops the others."""
+    if only is not None and only not in catalog.courses:
+        err(f"ERROR unknown course {only!r}; known courses: {', '.join(sorted(catalog.courses))}")
+        return 1
+    shown = [p for p in catalog.problems if only is None or p.course == only]
+    for p in shown:
+        err(p.line())
+    blocked = {k: _reason(v) for k, v in catalog.blocked().items() if only is None or k == only}
+    targets = [only] if only else list(catalog.courses)
+    lms_courses = _lms_courses(lms)
+    differs = False
+    for key in targets:
+        course = catalog.courses[key]
+        if key in blocked or course is None:
+            continue
+        try:
+            code = run_sync(
+                lms,
+                course,
+                check=check,
+                say=_prefixed(say, key),
+                admin_group=admin_group,
+                courses=lms_courses,
+            )
+        except LmsError as e:
+            blocked[key] = str(e)
+            continue
+        differs = differs or code != 0
+    if only is None:
+        for c in lms_courses:
+            if c.get("nile_key") and c["nile_key"] not in catalog.courses:
+                say(f"course {c['name']} ({c['nile_key']}) has no folder in content/, left alone")
+                differs = differs or check
+    for key in sorted(blocked):
+        say(f"[{key}] blocked: {blocked[key]}")
+    stray = only is None and any(not p.warning and p.course not in catalog.courses for p in shown)
+    return 1 if blocked or stray or (check and differs) else 0

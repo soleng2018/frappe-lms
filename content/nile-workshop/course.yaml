@@ -1,0 +1,30 @@
+# The Nile Workshop course. Guides are in guides/, one file per quiz in quizzes/.
+# Every key is the record's identity in the LMS: change a title freely, never change a key.
+format: 1
+key: nile-workshop
+title: Nile Certified Associate
+short_introduction: Learn the basics, then prove them in the hands on lab.
+description: A short video, a quiz on it, a lab guide, and a quiz on the lab. Pass both quizzes to earn the certificate.
+chapters:
+  - key: ch-concepts
+    title: Concepts
+    lessons:
+      - key: l-intro-video
+        title: Introduction video
+        blocks:
+          - video: dQw4w9WgXcQ
+      - key: l-intro-quiz
+        title: Introduction quiz
+        blocks:
+          - quiz: q-intro
+  - key: ch-lab
+    title: Hands on lab
+    lessons:
+      - key: l-lab-guide
+        title: Lab guide
+        blocks:
+          - text: guides/lab-guide.md
+      - key: l-lab-quiz
+        title: Lab quiz
+        blocks:
+          - quiz: q-lab

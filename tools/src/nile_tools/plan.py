@@ -9,13 +9,13 @@ from nile_tools import drift
 from nile_tools.content import (
     MAX_OPTIONS,
     Course,
-    LabLesson,
     Lesson,
     Question,
     Quiz,
-    QuizLesson,
-    VideoLesson,
     lesson_body,
+    lesson_image_paths,
+    lesson_quiz_key,
+    lesson_video,
 )
 
 __all__ = [
@@ -33,6 +33,7 @@ __all__ = [
     "Unmanaged",
     "Update",
     "course_progress",
+    "held_elsewhere",
     "outline_changed",
     "plan_creates",
     "plan_sync",
@@ -143,6 +144,7 @@ def _option_fields(question: Question) -> dict[str, Any]:
         option = question.options[i - 1] if i <= len(question.options) else None
         fields[f"option_{i}"] = option.text if option else ""
         fields[f"is_correct_{i}"] = 1 if option and option.correct else 0
+        fields[f"explanation_{i}"] = option.explanation if option else ""
     return fields
 
 
@@ -150,8 +152,14 @@ def _question_fields(question: Question) -> dict[str, Any]:
     return {"question": question.text, "type": question.type, **_option_fields(question)}
 
 
-def _course_fields(course: Course) -> dict[str, Any]:
+def _course_fields(course: Course, urls: Mapping[str, str] | None = None) -> dict[str, Any]:
+    known = urls or {}
+    if not course.image:
+        cover = {"image": ""}  # no cover in git clears an old one
+    else:
+        cover = {"image": known[course.image]} if course.image in known else {}
     return {
+        **cover,
         "title": course.title,
         "short_introduction": course.short_introduction,
         "description": course.description,
@@ -162,19 +170,27 @@ def _course_fields(course: Course) -> dict[str, Any]:
     }
 
 
-def _lesson_fields(lesson: Lesson, quiz_name: str | None) -> dict[str, Any]:
-    match lesson:
-        case VideoLesson(youtube=video_id):
-            return {"youtube": video_id, "body": lesson_body(lesson)}
-        case LabLesson():
-            return {"body": lesson_body(lesson)}
-        case QuizLesson():
-            if not quiz_name:
-                return {}
-            return {"quiz_id": quiz_name, "body": lesson_body(lesson, quiz_name)}
+def _lesson_fields(
+    lesson: Lesson, quiz_name: str | None, urls: Mapping[str, str] | None = None
+) -> dict[str, Any]:
+    """The fields git decides for a lesson. A part that is not known yet is left out.
+
+    The body waits for the quiz name (a quiz block) and for the URL of every local image.
+    """
+    urls = urls or {}
+    fields: dict[str, Any] = {"youtube": lesson_video(lesson)}
+    has_quiz = lesson_quiz_key(lesson) is not None
+    fields["quiz_id"] = (quiz_name or "") if has_quiz else ""
+    if has_quiz and not quiz_name:
+        del fields["quiz_id"]
+    elif all(p in urls for p in lesson_image_paths(lesson)):
+        fields["body"] = lesson_body(lesson, quiz_name, urls)
+    return fields
 
 
-def plan_creates(course: Course, found: Found) -> tuple[Create, ...]:
+def plan_creates(
+    course: Course, found: Found, urls: Mapping[str, str] | None = None
+) -> tuple[Create, ...]:
     """List the records git has that the LMS lacks, in an order that works.
 
     Each carries only what it needs to exist. Order: course, chapters, questions, quizzes
@@ -189,7 +205,7 @@ def plan_creates(course: Course, found: Found) -> tuple[Create, ...]:
         LESSON: _by_key(found.lessons),
     }
     course_ref = Ref(COURSE, course.key)
-    wanted: list[Create] = [Create(COURSE, course.key, _course_fields(course))]
+    wanted: list[Create] = [Create(COURSE, course.key, _course_fields(course, urls))]
     wanted += [
         Create(CHAPTER, c.key, {"title": c.title, "course": course_ref}) for c in course.chapters
     ]
@@ -207,7 +223,8 @@ def plan_creates(course: Course, found: Found) -> tuple[Create, ...]:
     for chapter in course.chapters:
         for lesson in chapter.lessons:
             fields = {"title": lesson.title, "chapter": Ref(CHAPTER, chapter.key)}
-            wanted.append(Create(LESSON, lesson.key, fields | _lesson_fields(lesson, None)))
+            made = {k: v for k, v in _lesson_fields(lesson, None, urls).items() if v != ""}
+            wanted.append(Create(LESSON, lesson.key, fields | made))
     return tuple(c for c in wanted if c.key not in have[c.doctype])
 
 
@@ -290,7 +307,9 @@ def _question_plan(
     return {"questions": rows}, tuple(notes), detached
 
 
-def plan_sync(course: Course, found: Found) -> tuple[Action, ...]:
+def plan_sync(
+    course: Course, found: Found, urls: Mapping[str, str] | None = None
+) -> tuple[Action, ...]:
     """Compare git with the LMS and list every update, detach and unmanaged record.
 
     Records the LMS does not have yet are left to `plan_creates`. A field that links to such a
@@ -321,7 +340,7 @@ def plan_sync(course: Course, found: Found) -> tuple[Action, ...]:
             if doc := keyed_questions.get(q.key):
                 add(_diff(QUESTION, q.key, _question_fields(q), doc))
 
-    quiz_of = {x.key: x.quiz_key for x in _lessons(course) if isinstance(x, QuizLesson)}
+    quiz_of = {x.key: k for x in _lessons(course) if (k := lesson_quiz_key(x))}
     for chapter in course.chapters:
         for lesson in chapter.lessons:
             doc = _by_key(found.lessons).get(lesson.key)
@@ -329,7 +348,7 @@ def plan_sync(course: Course, found: Found) -> tuple[Action, ...]:
                 continue
             quiz_name = quizzes.get(quiz_of.get(lesson.key, ""))
             fields = {"title": lesson.title, "chapter": chapters[chapter.key]}
-            fields |= _lesson_fields(lesson, quiz_name)
+            fields |= _lesson_fields(lesson, quiz_name, urls)
             add(_diff(LESSON, lesson.key, fields, doc))
 
     for chapter in course.chapters:
@@ -347,7 +366,7 @@ def plan_sync(course: Course, found: Found) -> tuple[Action, ...]:
         notes = _dropped_rows(found_rows, rows, moved) if rows is not None else ()
         add(_diff(CHAPTER, chapter.key, chapter_fields, doc, notes))
 
-    course_fields = _course_fields(course)
+    course_fields = _course_fields(course, urls)
     chapter_rows = _tuple_of((c.key for c in course.chapters), chapters)
     found_chapters = tuple(r["chapter"] for r in found.course.get("chapters") or ())
     if chapter_rows is not None:
@@ -412,6 +431,47 @@ def title_clash(course: Course, found: Found, admin_group: str) -> str | None:
             return (
                 f"another LMS Course ({other.get('name')}) already has the title {course.title!r}"
             )
+    return None
+
+
+def held_elsewhere(course: Course, found: Found) -> str | None:
+    """Name a chapter, lesson or quiz of this course that the LMS holds under another course."""
+    here = found.course["name"] if found.course else None
+    titles = {c.get("name"): f"{c.get('title')!r} ({c.get('name')})" for c in found.courses}
+    wanted = {
+        CHAPTER: {c.key for c in course.chapters},
+        LESSON: {x.key for x in _lessons(course)},
+        QUIZ: {q.key for q in course.quizzes},
+    }
+    kinds = ((CHAPTER, found.chapters), (LESSON, found.lessons), (QUIZ, found.quizzes))
+    for doctype, docs in kinds:
+        for doc in docs:
+            owner = doc.get("course")
+            if doc.get("nile_key") in wanted[doctype] and owner and owner != here:
+                return (
+                    f"{doctype} {doc['nile_key']} is held by LMS course "
+                    f"{titles.get(owner, owner)}, not by this course"
+                )
+    return _question_held_elsewhere(course, found, here, titles)
+
+
+def _question_held_elsewhere(
+    course: Course, found: Found, here: str | None, titles: Mapping[Any, str]
+) -> str | None:
+    """Name a question of this course that a quiz of another LMS course already uses."""
+    wanted = {q.key for quiz in course.quizzes for q in quiz.questions}
+    keys = {d["name"]: d["nile_key"] for d in found.questions if d.get("nile_key")}
+    for quiz in found.quizzes:
+        owner = quiz.get("course")
+        if not owner or owner == here:
+            continue
+        for row in quiz.get("questions") or ():
+            key = keys.get(row.get("question", ""))
+            if key in wanted:
+                return (
+                    f"{QUESTION} {key} is used by a quiz of LMS course "
+                    f"{titles.get(owner, owner)}, not by this course"
+                )
     return None
 
 

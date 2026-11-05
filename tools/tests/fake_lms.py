@@ -68,11 +68,31 @@ class FakeLms:
                 return False
         return True
 
+    def _upload(self, request: httpx.Request) -> httpx.Response:
+        found = re.search(rb'name="file_name"\r\n\r\n(.*?)\r\n', request.content)
+        if not found:
+            return httpx.Response(417, json={"exc_type": "ValidationError"})
+        file_name = found.group(1).decode()
+        self.counter += 1
+        name = f"File-{self.counter:04d}"
+        doc = {
+            "name": name,
+            "doctype": "File",
+            "file_name": file_name,
+            "file_url": f"/files/{file_name}",
+            "is_private": 0,
+        }
+        self.docs.setdefault("File", {})[name] = doc
+        self.writes.append(("UPLOAD", "File", name))
+        return httpx.Response(200, json={"message": doc})
+
     def handle(self, request: httpx.Request) -> httpx.Response:
         parts = [unquote(p) for p in request.url.raw_path.decode().split("?")[0].split("/")]
         doctype = parts[3]
         name = parts[4] if len(parts) > 4 else None
         store = self.docs.setdefault(doctype, {})
+        if parts[2] == "method" and doctype == "upload_file":
+            return self._upload(request)
         if parts[2] == "method" and doctype == "frappe.client.get_password":
             if self.password_denied:
                 return httpx.Response(403, json={"exc_type": "PermissionError"})

@@ -3,6 +3,7 @@
 **Date**: 2026-11-03
 **Status**: Accepted
 **Superseded in part**: by [0009](../0009-course-access-from-groups/index.md): AC-4 (what a login enrolls a learner in), the LMS Batch rows of the data model, and `published` 1 in the course creation values.
+**Superseded in part**: by [0011](../0011-guide-format-and-full-authoring/index.md) once built: AC-10's lesson body rule (a body is now built from blocks; a one block lesson keeps today's body).
 
 ## Summary
 

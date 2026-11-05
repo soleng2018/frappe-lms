@@ -15,15 +15,18 @@ from nile_tools import authentik, checks, config, idp, idp_run, lms, verify
 from nile_tools import idp_selftest as idp_selftest_run
 from nile_tools.authentik import AuthentikError
 from nile_tools.config import ConfigError
-from nile_tools.contentfile import ContentError, load_course
+from nile_tools.contentfile import load_catalog
 from nile_tools.idp_selftest import SelftestError
 from nile_tools.lms import LmsError
-from nile_tools.sync import run_sync
+from nile_tools.scaffold import ScaffoldError, new_course
+from nile_tools.sync import sync_all
 
 __all__ = [
     "ConfigError",
     "config_check",
     "config_show",
+    "content_check",
+    "content_new",
     "idp_check",
     "idp_password_login",
     "idp_remove",
@@ -118,25 +121,56 @@ def whoami(root: Path) -> int:
         time.sleep(5)
 
 
-def sync(root: Path, *, check: bool) -> int:
-    """Check `content/course.yaml`, then make the LMS match it (or only report with `check`)."""
-    try:
-        course = load_course(root / "content")
-    except ContentError as e:
-        for problem in e.problems:
-            print(f"ERROR {problem}", file=sys.stderr)
+def _eprint(line: str) -> None:
+    print(line, file=sys.stderr)
+
+
+def content_check(root: Path, only: str | None = None) -> int:
+    """Check every course under `content/` offline; print every problem, exit 1 on any."""
+    catalog = load_catalog(root / "content")
+    if only is not None and only not in catalog.courses:
+        _eprint(
+            f"ERROR unknown course {only!r}; known courses: {', '.join(sorted(catalog.courses))}"
+        )
         return 1
+    shown = [p for p in catalog.problems if only is None or p.course == only]
+    for p in shown:
+        _eprint(p.line())
+    blocked = catalog.blocked()
+    for key in sorted(catalog.courses):
+        if (only is None or key == only) and key not in blocked:
+            print(f"ok {key}")
+    stray = only is None and any(not p.warning and p.course not in catalog.courses for p in shown)
+    return 1 if blocked or stray else 0
+
+
+def content_new(root: Path, key: str, title: str | None) -> int:
+    """Create `content/<key>/` with a course that already passes `content check`."""
+    try:
+        path = new_course(root / "content", key, title)
+    except ScaffoldError as e:
+        print(f"ERROR {e}", file=sys.stderr)
+        return 1
+    print(f"Created {path}")
+    return 0
+
+
+def sync(root: Path, *, check: bool, only: str | None = None) -> int:
+    """Check every course in `content/`, then make the LMS match (or only report with `check`)."""
+    catalog = load_catalog(root / "content")
     values = config.load_env(root).values
     host, key, secret = (
         _require(values, k) for k in ("LMS_HOSTNAME", "LMS_API_KEY", "LMS_API_SECRET")
     )
     connection = lms.connect(host, key, secret)
     try:
-        return run_sync(
+        return sync_all(
             connection,
-            course,
+            catalog,
+            only=only,
             check=check,
             say=print,
+            err=_eprint,
             admin_group=values.get("AUTHENTIK_ADMIN_GROUP", ""),
         )
     except LmsError as e:
@@ -253,8 +287,16 @@ def _parser() -> argparse.ArgumentParser:
     commands = parser.add_subparsers(dest="command", required=True)
     commands.add_parser("init", help="create .env and generate missing secrets")
     commands.add_parser("whoami", help="prove the API path works")
-    sync_cmd = commands.add_parser("sync", help="make the LMS course match content/course.yaml")
+    sync_cmd = commands.add_parser("sync", help="make the LMS courses match content/")
+    sync_cmd.add_argument("course", nargs="?", help="sync only this course key")
     sync_cmd.add_argument("--check", action="store_true", help="only list what would change")
+    content_cmd = commands.add_parser("content", help="check or scaffold courses, offline")
+    content_actions = content_cmd.add_subparsers(dest="action", required=True)
+    content_check_cmd = content_actions.add_parser("check", help="find every problem in content/")
+    content_check_cmd.add_argument("course", nargs="?", help="only this course key")
+    content_new_cmd = content_actions.add_parser("new", help="create a course folder")
+    content_new_cmd.add_argument("course")
+    content_new_cmd.add_argument("--title", help="the course title")
     ver = commands.add_parser("verify", help="prove the deployment is reachable and safe")
     ver_actions = ver.add_subparsers(dest="action", required=True)
     ver_actions.add_parser("deploy", help="run every check")
@@ -314,7 +356,11 @@ def main(argv: Sequence[str] | None = None) -> int:
                 return idp_selftest(root)
             return idp_setup(root, resync_secret=args.resync_secret)
         if args.command == "sync":
-            return sync(root, check=args.check)
+            return sync(root, check=args.check, only=args.course)
+        if args.command == "content":
+            if args.action == "check":
+                return content_check(root, args.course)
+            return content_new(root, args.course, args.title)
         if args.action == "check":
             return config_check(root, args.scope)
         if args.action == "show":

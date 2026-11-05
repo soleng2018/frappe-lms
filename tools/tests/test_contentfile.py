@@ -1,13 +1,16 @@
-"""Unit tests for nile_tools.contentfile: the loader and its file errors (AC-1, AC-3)."""
+"""Unit tests for nile_tools.contentfile: the folder loader and the catalog (AC-1 to AC-5)."""
 
 from pathlib import Path
 
 import pytest
 
-from nile_tools.content import LabLesson, QuizLesson, VideoLesson
-from nile_tools.contentfile import ContentError, load_course
+from nile_tools.content import QuizBlock, TextBlock, VideoBlock
+from nile_tools.contentfile import ContentError, load_catalog, load_course, read_course
+
+PNG = b"\x89PNG\r\n\x1a\n" + b"0" * 20
 
 GOOD = """\
+format: 1
 key: c
 title: Course
 short_introduction: short
@@ -16,188 +19,289 @@ chapters:
   - key: ch
     title: Chapter
     lessons:
-      - {key: v, type: video, title: Video, youtube: dQw4w9WgXcQ}
-      - {key: lab, type: lab, title: Lab, body_file: labs/a.md}
-      - {key: ql, type: quiz, title: Quiz lesson, quiz: q}
-quizzes:
-  - key: q
-    title: Quiz
-    questions:
-      - key: q1
-        text: Which?
-        options: [{text: A, correct: true}, {text: B}]
+      - key: l1
+        title: Mixed
+        blocks:
+          - video: dQw4w9WgXcQ
+          - text: guides/a.md
+          - quiz: q
+"""
+QUIZ = """\
+key: q
+title: Quiz
+questions:
+  - key: q1
+    text: Which?
+    options: [{text: A, correct: true}, {text: B}]
 """
 
 
-def write(tmp_path: Path, text: str = GOOD) -> Path:
-    (tmp_path / "labs").mkdir(exist_ok=True)
-    (tmp_path / "labs" / "a.md").write_text("# Lab\n")
-    (tmp_path / "course.yaml").write_text(text)
-    return tmp_path
+def course_dir(root: Path, name: str = "c", yaml_text: str = GOOD, guide: str = "# A\n") -> Path:
+    folder = root / name
+    (folder / "guides").mkdir(parents=True, exist_ok=True)
+    (folder / "quizzes").mkdir(exist_ok=True)
+    (folder / "course.yaml").write_text(yaml_text)
+    (folder / "guides" / "a.md").write_text(guide)
+    (folder / "quizzes" / "q.yaml").write_text(QUIZ)
+    return folder
 
 
-def problems(tmp_path: Path, text: str) -> str:
-    with pytest.raises(ContentError) as e:
-        load_course(write(tmp_path, text))
-    return "\n".join(e.value.problems)
+def lines(folder: Path) -> str:
+    _, problems = read_course(folder)
+    return "\n".join(p.line() for p in problems)
 
 
-def test_a_good_file_loads_into_the_model(tmp_path: Path) -> None:
-    course = load_course(write(tmp_path))
-    video, lab, quiz_lesson = course.chapters[0].lessons
-    assert video == VideoLesson("v", "Video", "dQw4w9WgXcQ")
-    assert lab == LabLesson("lab", "Lab", "# Lab\n")
-    assert quiz_lesson == QuizLesson("ql", "Quiz lesson", "q")
+def test_a_good_folder_loads_with_blocks_and_the_quiz_file(tmp_path: Path) -> None:
+    course = load_course(course_dir(tmp_path))
+    lesson = course.chapters[0].lessons[0]
+    assert lesson.blocks == (
+        VideoBlock("dQw4w9WgXcQ"),
+        TextBlock("guides/a.md", "# A\n"),
+        QuizBlock("q"),
+    )
     quiz = course.quizzes[0]
-    assert (quiz.lesson_key, quiz.passing_percentage, quiz.max_attempts) == ("ql", 80, 3)
-    assert [(o.text, o.correct) for o in quiz.questions[0].options] == [("A", True), ("B", False)]
-    assert (course.short_introduction, course.description) == ("short", "long")
-
-
-def test_the_sample_course_in_the_repo_is_sound() -> None:
-    root = Path(__file__).resolve().parents[2] / "content"
-    course = load_course(root)
-    assert course.key == "nile-workshop"
-    assert len(course.quizzes) == 2
-
-
-def test_a_missing_file_names_the_path(tmp_path: Path) -> None:
-    with pytest.raises(ContentError, match=r"cannot read .*course\.yaml"):
-        load_course(tmp_path)
-
-
-def test_invalid_yaml_is_named(tmp_path: Path) -> None:
-    assert "not valid YAML" in problems(tmp_path, "key: [unclosed")
-
-
-def test_yaml_no_as_a_key_is_refused_and_named(tmp_path: Path) -> None:
-    text = GOOD.replace("key: ch\n", "key: no\n")
-    out = problems(tmp_path, text)
-    assert "course.yaml: chapter" in out
-    assert "key must be text, found bool False" in out
-
-
-def test_a_number_for_a_video_id_is_refused(tmp_path: Path) -> None:
-    out = problems(tmp_path, GOOD.replace("dQw4w9WgXcQ", "12345678901"))
-    assert "lesson 'v'" in out
-    assert "youtube must be text, found int" in out
-
-
-def test_a_number_for_question_or_option_text_is_refused(tmp_path: Path) -> None:
-    out = problems(
-        tmp_path, GOOD.replace("text: Which?", "text: 5").replace("{text: B}", "{text: 7}")
-    )
-    assert "question 'q1': text must be text" in out
-    assert "option 2: text must be text" in out
-
-
-@pytest.mark.parametrize("path", ["../secret.md", "/etc/passwd", "labs/../../x.md"])
-def test_a_body_file_outside_content_is_refused(tmp_path: Path, path: str) -> None:
-    out = problems(tmp_path, GOOD.replace("labs/a.md", path))
-    assert "points outside content/" in out
-
-
-def test_a_missing_body_file_is_named(tmp_path: Path) -> None:
-    out = problems(tmp_path, GOOD.replace("labs/a.md", "labs/none.md"))
-    assert "lesson 'lab'" in out
-    assert "'labs/none.md' does not exist" in out
-
-
-def test_an_unknown_lesson_type_is_named(tmp_path: Path) -> None:
-    assert "type must be video, lab or quiz, found 'slides'" in problems(
-        tmp_path, GOOD.replace("type: lab", "type: slides")
+    assert (quiz.lesson_key, quiz.passing_percentage, quiz.max_attempts, quiz.file) == (
+        "l1",
+        80,
+        3,
+        "quizzes/q.yaml",
     )
 
 
-def test_correct_must_be_true_or_false(tmp_path: Path) -> None:
-    assert "correct must be true or false" in problems(
-        tmp_path, GOOD.replace("correct: true", "correct: yes please")
+def test_the_course_in_the_repo_is_sound() -> None:
+    catalog = load_catalog(Path(__file__).resolve().parents[2] / "content")
+    assert not catalog.problems
+    assert "nile-workshop" in catalog.ready()
+
+
+def test_format_must_be_1(tmp_path: Path) -> None:
+    bad = GOOD.replace("format: 1\n", "format: 2\n")
+    assert "ERROR c/course.yaml: format:" in lines(course_dir(tmp_path, yaml_text=bad))
+    assert "format:" in lines(course_dir(tmp_path, yaml_text=GOOD.replace("format: 1\n", "")))
+
+
+def test_folder_name_must_equal_the_key_and_the_rule(tmp_path: Path) -> None:
+    assert "must equal the course key" in lines(course_dir(tmp_path, "other"))
+    folder = course_dir(tmp_path, "Bad_Name", GOOD.replace("key: c", "key: Bad_Name"))
+    assert "a-z, 0-9 and dashes" in lines(folder)
+
+
+def test_unparseable_yaml_skips_the_course(tmp_path: Path) -> None:
+    course, problems = read_course(course_dir(tmp_path, yaml_text="key: [\n"))
+    assert course is None
+    assert problems[0].line().startswith("ERROR c/course.yaml: -: is not valid YAML")
+
+
+def test_block_shapes(tmp_path: Path) -> None:
+    text = GOOD.replace(
+        "          - quiz: q\n",
+        "          - quiz: q\n          - {text: guides/a.md, video: dQw4w9WgXcQ}\n"
+        "          - {image: x.png}\n          - video: 12345678901\n          - plain\n",
+    )
+    found = lines(course_dir(tmp_path, yaml_text=text))
+    assert "blocks[3]: a block needs exactly one of text, video or quiz, found 2" in found
+    assert "blocks[4]: unknown block key 'image', use text, video or quiz" in found
+    assert "blocks[5]: video must be text, found int 12345678901" in found
+    assert "blocks[6]: a block must be a mapping" in found
+
+
+def test_a_missing_or_escaping_guide(tmp_path: Path) -> None:
+    text = GOOD.replace("guides/a.md", "guides/none.md")
+    assert "the file 'guides/none.md' does not exist" in lines(course_dir(tmp_path, yaml_text=text))
+    text = GOOD.replace("guides/a.md", "../x.md")
+    assert "points outside the course folder" in lines(course_dir(tmp_path / "t", yaml_text=text))
+
+
+def test_a_macro_in_a_guide_is_named_with_its_line(tmp_path: Path) -> None:
+    found = lines(course_dir(tmp_path, guide="one\n{{ Quiz('x') }}\n"))
+    assert "ERROR c/guides/a.md: line 2: {{ starts a macro" in found
+
+
+def test_images_are_checked_and_read_once(tmp_path: Path) -> None:
+    folder = course_dir(tmp_path, guide="![ok](../images/a.png)\n![](../images/a.png)\n")
+    (folder / "images").mkdir()
+    (folder / "images" / "a.png").write_bytes(PNG)
+    course, problems = read_course(folder)
+    assert [p.message for p in problems] == ["the image has no alt text"]
+    assert course is not None
+    assert [i.path for i in course.images] == ["images/a.png"]
+
+
+def test_image_problems_all_at_once(tmp_path: Path) -> None:
+    guide = (
+        "![a](../images/missing.png)\n![a](../images/x.svg)\n![a](../images/fake.png)\n"
+        '![a](<../images/Big Name.png>)\n![a][r]\n[go](other.md)\n<img src="p.png">\n'
+        "![a](../../out.png)\n![a](a.png?x)\n```\n![a](skip.png)\n```\n"
+    )
+    folder = course_dir(tmp_path, guide=guide)
+    (folder / "images").mkdir()
+    (folder / "images" / "x.svg").write_text("<svg/>")
+    (folder / "images" / "fake.png").write_bytes(b"MZ")
+    (folder / "images" / "Big Name.png").write_bytes(PNG)
+    found = lines(folder)
+    for part in (
+        "line 1: the image 'images/missing.png' does not exist",
+        "line 2: image 'x.svg' must be",
+        "line 3: image 'fake.png' is not really a png",
+        "line 4: image file name 'Big Name.png'",
+        "line 5: reference style images",
+        "line 6: a local link to 'other.md'",
+        "line 7: a local <img>",
+        "line 8: image path '../../out.png' leaves the course folder",
+        "line 9: image path 'a.png?x' must not contain '?'",
+    ):
+        assert part in found
+    assert "skip.png" not in found
+
+
+def test_a_symlink_that_leaves_the_folder_is_refused(tmp_path: Path) -> None:
+    folder = course_dir(tmp_path, guide="![a](../images/a.png)\n")
+    (folder / "images").mkdir()
+    outside = tmp_path / "secret.png"
+    outside.write_bytes(PNG)
+    (folder / "images" / "a.png").symlink_to(outside)
+    assert "points outside the course folder" in lines(folder)
+
+
+def test_the_cover_image(tmp_path: Path) -> None:
+    folder = course_dir(
+        tmp_path, yaml_text=GOOD.replace("chapters:", "image: images/cover.png\nchapters:")
+    )
+    (folder / "images").mkdir()
+    (folder / "images" / "cover.png").write_bytes(PNG)
+    course, problems = read_course(folder)
+    assert not problems and course is not None
+    assert course.image == "images/cover.png"
+    assert [i.path for i in course.images] == ["images/cover.png"]
+
+
+def test_an_unused_guide_is_only_a_warning(tmp_path: Path) -> None:
+    folder = course_dir(tmp_path)
+    (folder / "guides" / "draft.md").write_text("draft")
+    _, problems = read_course(folder)
+    assert [p.line() for p in problems] == [
+        "WARN c/guides/draft.md: -: no text block uses this guide"
+    ]
+    load_course(folder)  # a warning does not stop a load
+
+
+def test_load_course_raises_with_every_problem(tmp_path: Path) -> None:
+    with pytest.raises(ContentError) as e:
+        load_course(course_dir(tmp_path, yaml_text=GOOD.replace("title: Course\n", "")))
+    assert "title: must be text" in str(e.value)
+
+
+def _with_option_explanation(folder: Path, value: str) -> None:
+    option = "{text: A, correct: true, explanation: " + value + "}"
+    (folder / "quizzes" / "q.yaml").write_text(QUIZ.replace("{text: A, correct: true}", option))
+
+
+def test_an_option_explanation_is_read_and_trimmed(tmp_path: Path) -> None:
+    folder = course_dir(tmp_path)
+    _with_option_explanation(folder, '"  Because  "')
+    course = load_course(folder)
+    options = course.quizzes[0].questions[0].options
+    assert [o.explanation for o in options] == ["Because", ""]
+
+
+def test_a_question_level_explanation_names_the_option_field(tmp_path: Path) -> None:
+    folder = course_dir(tmp_path)
+    (folder / "quizzes" / "q.yaml").write_text(
+        QUIZ.replace("    text: Which?", "    text: Which?\n    explanation: Because")
+    )
+    assert "belongs on an option" in lines(folder)
+
+
+@pytest.mark.parametrize(
+    ("value", "message"),
+    [
+        ("12", "must be text"),
+        ('""', "is empty"),
+        ('"   "', "is empty"),
+        ("null", "is empty"),
+        ('"' + "x" * 1001 + '"', "1001 characters"),
+    ],
+)
+def test_a_bad_option_explanation_is_refused(tmp_path: Path, value: str, message: str) -> None:
+    folder = course_dir(tmp_path)
+    _with_option_explanation(folder, value)
+    assert message in lines(folder)
+
+
+def test_an_explanation_of_1000_characters_is_allowed(tmp_path: Path) -> None:
+    folder = course_dir(tmp_path)
+    _with_option_explanation(folder, '"' + "x" * 1000 + '"')
+    assert lines(folder) == ""
+
+
+def test_the_explanation_limit_counts_after_trimming(tmp_path: Path) -> None:
+    # covers: AC-11. 1000 characters plus padding is allowed; 1001 once trimmed is not.
+    folder = course_dir(tmp_path)
+    _with_option_explanation(folder, '"  ' + "x" * 1000 + '  "')
+    assert lines(folder) == ""
+
+
+def test_an_explanation_keeps_markdown_and_html_as_typed(tmp_path: Path) -> None:
+    # covers: AC-11. It is plain text, so nothing is stripped or rewritten.
+    folder = course_dir(tmp_path)
+    _with_option_explanation(folder, '"**Bold** <b>x</b>"')
+    option = load_course(folder).quizzes[0].questions[0].options[0]
+    assert option.explanation == "**Bold** <b>x</b>"
+
+
+def test_an_unused_quiz_file(tmp_path: Path) -> None:
+    folder = course_dir(tmp_path)
+    (folder / "quizzes" / "extra.yaml").write_text(
+        QUIZ.replace("key: q\n", "key: extra\n").replace("q1", "e1")
+    )
+    assert "quizzes/extra.yaml: key: quiz 'extra' is not used by any quiz block" in lines(folder)
+
+
+# ---- the catalog
+
+
+def test_the_catalog_finds_every_folder_and_ignores_dot_names(tmp_path: Path) -> None:
+    course_dir(tmp_path, "c")
+    (tmp_path / ".hidden").mkdir()
+    catalog = load_catalog(tmp_path)
+    assert list(catalog.courses) == ["c"] and not catalog.problems
+
+
+def test_legacy_files_and_a_folder_without_yaml(tmp_path: Path) -> None:
+    (tmp_path / "course.yaml").write_text("x")
+    (tmp_path / "labs").mkdir()
+    (tmp_path / "stray").mkdir()
+    found = [p.line() for p in load_catalog(tmp_path).problems]
+    assert "ERROR content/course.yaml: -: move this file into content/<key>/" in found
+    assert "ERROR content/labs/: -: move these guides into content/<key>/guides/" in found
+    assert any(
+        x.startswith("ERROR stray/course.yaml: -: this folder has no course.yaml") for x in found
     )
 
 
-def test_every_loader_problem_is_reported_at_once(tmp_path: Path) -> None:
-    text = GOOD.replace("dQw4w9WgXcQ", "12345678901").replace("labs/a.md", "../x.md")
-    out = problems(tmp_path, text)
-    assert "youtube must be text" in out
-    assert "outside content/" in out
-
-
-def test_content_check_problems_come_back_too(tmp_path: Path) -> None:
-    assert "has no correct option" in problems(
-        tmp_path, GOOD.replace("correct: true", "correct: false")
+def test_cross_course_clashes_block_both_but_not_a_third(tmp_path: Path) -> None:
+    course_dir(tmp_path, "c")
+    course_dir(tmp_path, "d", GOOD.replace("key: c", "key: d"))
+    third = (
+        GOOD.replace("key: c\n", "key: e\n")
+        .replace("title: Course", "title: Other")
+        .replace("key: l1", "key: l9")
+        .replace("key: ch\n", "key: ch9\n")
     )
-
-
-def test_file_problems_and_quiz_problems_are_reported_in_one_run(tmp_path: Path) -> None:
-    # covers: AC-3. A bad video id (a file problem) must not hide a one option question.
-    text = GOOD.replace("dQw4w9WgXcQ", "12345678901").replace(
-        "options: [{text: A, correct: true}, {text: B}]", "options: [{text: A, correct: true}]"
+    folder = course_dir(tmp_path, "e", third)
+    (folder / "quizzes" / "q.yaml").write_text(
+        QUIZ.replace("key: q\n", "key: q9\n").replace("q1", "q91")
     )
-    out = problems(tmp_path, text)
-    assert "youtube must be text" in out
-    assert "has 1 options, must be 2 to 4" in out
+    folder.joinpath("course.yaml").write_text(third.replace("quiz: q", "quiz: q9"))
+    catalog = load_catalog(tmp_path)
+    assert sorted(catalog.blocked()) == ["c", "d"]
+    assert list(catalog.ready()) == ["e"]
+    found = [p.line() for p in catalog.problems]
+    assert "ERROR c/course.yaml: title: the title is also used by d (case ignored)" in found
 
 
-def test_a_key_that_is_not_text_does_not_hide_a_bad_question(tmp_path: Path) -> None:
-    # covers: AC-3. `key: no` reads as false in YAML.
-    text = GOOD.replace("  - key: ch\n", "  - key: no\n").replace(
-        "options: [{text: A, correct: true}, {text: B}]", "options: [{text: A}, {text: B}]"
-    )
-    out = problems(tmp_path, text)
-    assert "key must be text" in out
-    assert "has no correct option" in out
-
-
-def test_four_question_problems_in_one_file_are_all_named(tmp_path: Path) -> None:
-    # covers: AC-3
-    def q(key: str, options: str) -> str:
-        return f"      - key: {key}\n        text: T\n        options: {options}\n"
-
-    bad = (
-        q("a", "[{text: a, correct: true}, {text: b}, {text: c}, {text: d}, {text: e}]")
-        + q("b", "[{text: a}, {text: b}]")
-        + q("c", '[{text: a, correct: true}, {text: ""}]')
-        + q("d", "[{text: a, correct: true}, {text: a}]")
-    )
-    head = GOOD.split("      - key: q1")[0]
-    out = problems(tmp_path, head + bad)
-    for part in ("has 5 options", "has no correct option", "has an empty option", "repeats"):
-        assert part in out
-
-
-def test_a_top_level_list_is_refused(tmp_path: Path) -> None:
-    assert "course: must be a mapping" in problems(tmp_path, "- a\n- b\n")
-
-
-def test_a_non_utf8_body_file_is_not_a_traceback(tmp_path: Path) -> None:
-    write(tmp_path)
-    (tmp_path / "labs" / "a.md").write_bytes(b"\xff\xfe\x00bad")
-    with pytest.raises(ContentError):
-        load_course(tmp_path)
-
-
-def test_chapters_that_are_not_a_list_are_named(tmp_path: Path) -> None:
-    # covers: AC-3
-    head = GOOD.split("chapters:")[0]
-    assert "chapters: must be a list" in problems(tmp_path, head + "chapters: nope\n")
-
-
-def test_options_that_are_not_a_list_are_named(tmp_path: Path) -> None:
-    # covers: AC-3
-    text = GOOD.replace("options: [{text: A, correct: true}, {text: B}]", "options: nope")
-    out = problems(tmp_path, text)
-    assert "question 'q1': must be a list" in out
-    assert "has 0 options" in out
-
-
-@pytest.mark.parametrize("marks", ["two", "1.5", "true"])
-def test_marks_must_be_a_whole_number(tmp_path: Path, marks: str) -> None:
-    # covers: AC-3
-    text = GOOD.replace("        text: Which?\n", f"        text: Which?\n        marks: {marks}\n")
-    assert "marks must be a whole number" in problems(tmp_path, text)
-
-
-def test_a_lab_without_a_body_file_is_named(tmp_path: Path) -> None:
-    # covers: AC-3
-    text = GOOD.replace(", body_file: labs/a.md", "")
-    assert "body_file must be text, found NoneType None" in problems(tmp_path, text)
+def test_problems_are_sorted_by_course_file_where(tmp_path: Path) -> None:
+    course_dir(tmp_path, "b", GOOD.replace("key: c", "key: b").replace("title: Course", "title: B"))
+    course_dir(tmp_path, "a", GOOD.replace("key: c", "key: x"))
+    keys = [(p.course, p.file, p.where) for p in load_catalog(tmp_path).problems]
+    assert keys == sorted(keys)
