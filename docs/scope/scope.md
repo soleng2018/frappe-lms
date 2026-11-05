@@ -145,7 +145,7 @@ spec [0006](../specs/0006-group-to-role-mapping/index.md), student rule replaced
 - [ ] Verify it: `/check verify group to role mapping`
 - [ ] Test it: `/test group to role mapping`
 - [x] Review it (fresh model): `/check review group to role mapping`
-- [ ] Document it: `/document group to role mapping`
+- [x] Document it: `/document group to role mapping`
 
 ### 8. Content sync, one course · done
 Push one course from git to Frappe through its API: a YouTube video lesson, a lab guide lesson, and a quiz for each. The thinnest real version of the authoring path.
@@ -182,7 +182,7 @@ spec [0009](../specs/0009-course-access-from-groups/index.md) · code in `apps/n
 - [ ] Verify it: `/check verify course access from groups`
 - [ ] Test it: `/test course access from groups`
 - [x] Review it (fresh model): `/check review course access from groups`
-- [ ] Document it: `/document course access from groups`
+- [x] Document it: `/document course access from groups`
 
 ## Slice 2: look and authoring
 
