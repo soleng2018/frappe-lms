@@ -186,6 +186,61 @@ try:
     finally:
         frappe.set_user("Guest")
 
+    # AC-13 more: the catalog, the course row, a quiz of A, and a Program that holds A
+    def listed(doctype):
+        try:
+            frappe.set_user(s)
+            return frappe.get_list(doctype, pluck="name", limit_page_length=0)
+        except frappe.PermissionError:
+            return None  # the learner may not list this doctype at all, so nothing leaks
+        finally:
+            frappe.set_user("Guest")
+
+    def catalog_api():
+        try:
+            frappe.set_user(s)
+            fn = frappe.get_attr("lms.lms.utils.get_courses")
+            while hasattr(fn, "__wrapped__"):  # past the rate limit, which needs a real request
+                fn = fn.__wrapped__
+            return [c.get("name") for c in (fn() or [])]
+        except Exception as e:
+            return type(e).__name__ + ": " + str(e)[:120]
+        finally:
+            frappe.set_user("Guest")
+
+    api = catalog_api()
+    out["catalog"] = {
+        "list_denied": listed("LMS Course") is None,
+        "list_sees_a": a.name in (listed("LMS Course") or []),
+        "api": api if isinstance(api, str) else {"sees_a": a.name in api, "sees_b": b.name in api},
+        "row_a": as_user(s, lambda: frappe.has_permission("LMS Course", "read", a.name)),
+    }
+    quiz = frappe.get_doc({"doctype": "LMS Quiz", "title": "q " + sfx, "course": a.name}).insert(
+        ignore_permissions=True
+    )
+    out["quiz_a"] = {
+        "listed": quiz.name in (listed("LMS Quiz") or []),
+        "read": as_user(s, lambda: frappe.has_permission("LMS Quiz", "read", quiz.name)),
+    }
+    program = frappe.get_doc(
+        {
+            "doctype": "LMS Program", "title": "Nile IT P " + sfx, "published": 1,
+            "program_courses": [{"course": a.name}], "program_members": [{"member": s}],
+        }
+    ).insert(ignore_permissions=True)
+    out["program"] = {
+        "course_access": as_user(s, lambda: can_access_course(a.name)),
+        "lesson_access": as_user(s, lambda: can_access_lesson(ls.name)),
+    }
+    try:
+        frappe.set_user(s)
+        frappe.get_doc({"doctype": "LMS Enrollment", "course": a.name, "member": s}).insert()
+        out["program"]["self_enroll"] = "allowed"
+    except Exception as e:
+        out["program"]["self_enroll"] = type(e).__name__
+    finally:
+        frappe.set_user("Guest")
+
     # AC-3, AC-11: results mode, then back to live with the progress rebuilt (AC-1)
     out["results"] = login(s, ["staff"])
     out["results_state"] = state(s)

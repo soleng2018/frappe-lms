@@ -38,6 +38,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `create-site` stops with "must differ" before it writes any site setting when `LMS_MCP_USER` matches `LMS_SERVICE_USER`, ignoring upper and lower case.
 
 ### Fixed
+- Two different new learners signing in at the same moment could deadlock on the User insert, and one got the retry page. The login now takes a named lock per person instead of a row lock, and runs the provisioning again when the database picks it as a deadlock victim (`nile_auth` 0.6.2).
+- The login log said `ok` for a callback whose state had expired between the check and Frappe's last step. It now says `bad_state`.
+- An admin with no course group now loses any leftover course enrollment at login, as spec 0009 says.
+- The README no longer lists the retired `AUTHENTIK_STUDENT_GROUP_*` keys as defaults you may change.
 - Every Authentik sign in was refused because the provider had no grant types. `idp setup` now sets `authorization_code`, and `idp check` compares it.
 - Rotating the MCP key now works when the MCP user has no stored secret. The new key and secret from `.env` are written instead of the run failing with a confusing error.
 - `restart-test` no longer stops with a template error if a service has no healthcheck.

@@ -42,7 +42,7 @@ Everything lives in one file, `.env`, at the repo root. It is never committed an
 | `LMS_API_KEY`, `LMS_API_SECRET` | API credentials of the service user that the tools container uses. |
 | `LMS_MCP_API_KEY`, `LMS_MCP_API_SECRET` | API credentials of a separate MCP user for your AI agent (section 6). Not fixed: to rotate, edit both in `.env`, then `make up`. |
 
-**Defaults you may change:** `LMS_SERVICE_USER`, `LMS_MCP_USER` (default `nile-mcp@example.com`), `LMS_TIMEZONE` (default `America/Los_Angeles`, so Pacific time; use any IANA name), `AUTHENTIK_APP_SLUG`, `AUTHENTIK_ADMIN_GROUP`, `AUTHENTIK_STUDENT_GROUP_PREFIX`, `AUTHENTIK_STUDENT_GROUP_SUFFIX`, `TRAEFIK_NETWORK`, `TRAEFIK_ENTRYPOINT`, `TRAEFIK_CERT_RESOLVER`.
+**Defaults you may change:** `LMS_SERVICE_USER`, `LMS_MCP_USER` (default `nile-mcp@example.com`), `LMS_TIMEZONE` (default `America/Los_Angeles`, so Pacific time; use any IANA name), `AUTHENTIK_APP_SLUG`, `AUTHENTIK_ADMIN_GROUP`, `TRAEFIK_NETWORK`, `TRAEFIK_ENTRYPOINT`, `TRAEFIK_CERT_RESOLVER`.
 
 **Fixed after the first start** (never edit once the stack has run): `LMS_HOSTNAME`, `LMS_ADMIN_PASSWORD`, `LMS_ENCRYPTION_KEY`, `LMS_SERVICE_USER`, `LMS_MCP_USER`, `LMS_API_KEY`, `LMS_API_SECRET`, `DB_ROOT_PASSWORD`, `AUTHENTIK_APP_SLUG`. **Keep a private copy of `.env`**: if you lose it, the data in the volumes cannot be recovered, and `create-site` refuses to start with a different encryption key.
 

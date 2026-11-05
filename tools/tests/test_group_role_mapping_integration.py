@@ -76,7 +76,7 @@ def test_a_move_removes_the_old_enrollment_and_keeps_progress(run: dict[str, Any
 
 
 def test_a_learner_in_one_course_cannot_reach_the_other(run: dict[str, Any]) -> None:
-    """AC-13 (course, lesson and chapter reads, and self enrollment; Programs are not covered)."""
+    """AC-13: course, lesson, chapter, catalog, quiz and Program reads, and self enrollment."""
     assert run["isolation"] == {
         "own_access": True,
         "other_access": False,
@@ -84,6 +84,15 @@ def test_a_learner_in_one_course_cannot_reach_the_other(run: dict[str, Any]) -> 
         "other_chapter": False,
     }
     assert run["self_enroll"] != "allowed"
+    # The catalog, the course row, a quiz of A, and a Program that holds A (read through LMS code
+    # with the throwaway learner as the session user).
+    assert run["catalog"]["list_sees_a"] is False
+    assert run["catalog"]["api"] == {"sees_a": False, "sees_b": False}
+    assert run["catalog"]["row_a"] is False
+    assert run["quiz_a"] == {"listed": False, "read": False}
+    assert run["program"]["course_access"] is False
+    assert run["program"]["lesson_access"] is False
+    assert run["program"]["self_enroll"] != "allowed"
 
 
 def test_results_mode_closes_lessons_and_keeps_everything_else(run: dict[str, Any]) -> None:
@@ -219,3 +228,22 @@ def test_two_logins_of_one_person_at_once(key: None, premade: bool) -> None:
             assert any(signed), results
     finally:
         assert _race([email], premade, tag, "drop")["left"] == 0
+
+
+def test_two_first_logins_of_different_people_at_once(key: None) -> None:
+    """AC-9: two new learners whose emails sort side by side must both get in. A locking read of
+    a missing User row takes a gap lock, and the two User inserts then deadlock."""
+    tag = uuid.uuid4().hex[:6]
+    emails = [f"nile-race-{tag}-a@example.com", f"nile-race-{tag}-b@example.com"]
+    _race(emails, False, tag, "make")
+    start = str(time.time() + 25)
+    jobs = [_script("concurrent", EMAIL=e, TITLE=f"Nile Race {tag}", START=start) for e in emails]
+    try:
+        with ThreadPoolExecutor(2) as pool:
+            results = list(pool.map(_run_script, jobs))
+        left = _race(emails, False, tag, "check")
+        assert [r.get("signed_in") for r in results] == [True, True], results
+        assert [left["enrollments"][e] for e in emails] == [1, 1]
+        assert [left["roles"][e] for e in emails] == [1, 1]
+    finally:
+        assert _race(emails, False, tag, "drop")["left"] == 0

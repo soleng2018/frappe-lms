@@ -115,12 +115,15 @@ One log line per login on the Frappe logger `nile_auth` (`sites/<site>/logs/nile
 - LMS adds LMS Student to every new user on insert, so the role reconcile runs after the insert.
 - An LMS Enrollment made as Administrator with no batch queues no mail and no job, and skips LMS's unpublished course check.
 - Frappe's own `update_oauth_user` step after ours keeps the roles and links the subject.
-- The login takes one lock: a locking read of the User row, first statement after an empty commit. Two logins of
-  one existing person end in the same state with no error; two first logins of one new person may collide on the
-  User insert and one gets the retry page with nothing half done. No isolation level change is needed
-  (pinned by `test_two_logins_of_one_person_at_once`).
+- The login takes one named database lock per person (`GET_LOCK`), first thing after an empty commit. Two logins of
+  one person end in the same state with no error. A row lock on a User that does not exist yet would take a gap
+  lock, and two different new learners then deadlocked on the insert, so the lock is not a row lock. Frappe's own
+  User insert can still deadlock two new learners (the `__Auth` password row, the shared `username` index). The
+  loser is rolled back whole and `provision` runs again, up to four times. No isolation level change is needed
+  (pinned by `test_two_logins_of_one_person_at_once` and `test_two_first_logins_of_different_people_at_once`).
 - A learner can read a course through LMS's permission functions only while enrolled; self enrollment in an
-  unpublished course is refused. LMS Programs holding a second course are not covered by the live test.
+  unpublished course is refused. The same holds for the course list, the catalog API, a quiz of the other course,
+  and a Program that holds it (pinned by `test_a_learner_in_one_course_cannot_reach_the_other`).
 - The `backend` container has no `LMS_SERVICE_USER`; only `create-site` does, which is why it is written to site config.
 
 ## Not checked

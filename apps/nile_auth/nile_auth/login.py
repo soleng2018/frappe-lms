@@ -5,8 +5,11 @@ group, provisions the user and the one enrollment in one transaction, then hands
 `login_oauth_user`, which commits. Any failure rolls everything back and shows a retry page.
 """
 
+import hashlib
 import json
 import logging
+import random
+import time
 from dataclasses import dataclass, field
 
 import frappe
@@ -40,6 +43,8 @@ from nile_auth.groups import (
 __all__ = ["Outcome", "custom", "provision"]
 
 PROTECTED_USERS = ("Administrator", "Guest")
+LOCK_WAIT_SECONDS = 30
+DEADLOCK_TRIES = 4
 
 
 @dataclass
@@ -71,7 +76,7 @@ def custom(code: str, state: str):
 	if not (len(path) == 4 and path[3] and frappe.db.exists("Social Login Key", path[3])):
 		return
 	provider = path[3]
-	seen = {"email": "none", "mode": "none", "group": ""}  # filled in as the flow learns them
+	seen = {"email": "none", "mode": "none", "group": "", "lock": ""}  # filled in as the flow learns
 	try:
 		outcome = _login(provider, code, state, seen)
 	except Refused as refusal:
@@ -83,6 +88,8 @@ def custom(code: str, state: str):
 		_log_fault(code, state)
 		_respond(c.PAGE_RETRY)
 		outcome = c.OUTCOME_ERROR
+	finally:
+		_drop_lock(seen["lock"])
 	_log(outcome, seen)
 
 
@@ -106,16 +113,15 @@ def _login(provider: str, code: str, state: str, seen: dict) -> str:
 	if claim_fault(groups, admin_group):
 		raise Refused(c.OUTCOME_FAULT_CLAIM, c.PAGE_SETUP_FAULT)
 
-	# The empty commit ends the read view of this request. The locking read that follows is then the
-	# first statement of a new transaction, so it serializes two logins of one person and every plain
-	# read after it sees what the other login committed.
+	# The empty commit ends the read view of this request. The named lock that follows touches no
+	# table, so it opens no new read view: it serializes two logins of one person, and every plain
+	# read after it sees what the other login committed. A row lock on a User that does not exist yet
+	# would take a gap lock, and two different new learners would deadlock on the insert.
 	frappe.db.commit()
-	frappe.db.get_value("User", email.lower(), "name", for_update=True)
+	seen["lock"] = _take_lock(email)
 
-	courses = [
-		(row.name, row.title)
-		for row in frappe.get_all("LMS Course", filters={"nile_key": ["is", "set"]}, fields=["name", "title"])
-	]
+	managed = frappe.get_all("LMS Course", filters={"nile_key": ["is", "set"]}, fields=["name", "title"])
+	courses = [(row.name, row.title) for row in managed]
 	existing = frappe.db.exists("User", email)
 	known = bool(existing) and _is_known_learner(email)
 	decision = decide(groups, admin_group, courses, known)
@@ -137,14 +143,52 @@ def _login(provider: str, code: str, state: str, seen: dict) -> str:
 			_strip_admin_roles(existing)
 		raise Refused(c.OUTCOME_NO_GROUP, c.PAGE_REFUSED)
 
-	try:
-		frappe.set_user("Administrator")
-		out = provision(info, decision, email)
-	finally:
-		frappe.set_user("Guest")
+	out = _provision_retrying(info, decision, email, [name for name, _title in courses])
 	login_oauth_user(info, provider=provider, state=state)  # consumes the state, sets a redirect
-	_land(decision, out.user, kept)
+	if frappe.local.response.get("type") != "redirect" or frappe.session.user != out.user:
+		return c.OUTCOME_BAD_STATE  # the state was gone: Frappe showed its 417 page, nobody signed in
+	try:
+		_land(decision, out.user, kept)
+	except Exception:
+		_log_fault(code, state)  # the person is signed in; keep Frappe's own redirect
 	return c.OUTCOME_OK
+
+
+def _provision_retrying(info: dict, decision: Decision, email: str, managed: list[str]) -> Outcome:
+	"""Run `provision` as Administrator; if the database picks it as a deadlock victim, start over.
+
+	Frappe's own User insert (the __Auth password row, the username index) can deadlock with the insert
+	of another new learner. The loser is rolled back whole, so running it again is safe.
+	"""
+	for attempt in range(1, DEADLOCK_TRIES + 1):
+		try:
+			frappe.set_user("Administrator")
+			return provision(info, decision, email, managed)
+		except frappe.QueryDeadlockError:
+			frappe.db.rollback()
+			if attempt == DEADLOCK_TRIES:
+				raise
+			time.sleep(random.uniform(0.05, 0.4) * attempt)
+		finally:
+			frappe.set_user("Guest")
+	raise AssertionError("unreachable")
+
+
+def _take_lock(email: str) -> str:
+	"""Take the named database lock of one person's login, or raise after the wait."""
+	name = "nile_login:" + hashlib.sha1(email.encode()).hexdigest()
+	if frappe.db.sql("select get_lock(%s, %s)", (name, LOCK_WAIT_SECONDS))[0][0] != 1:
+		raise TimeoutError("the login lock of this person was not free in time")
+	return name
+
+
+def _drop_lock(name: str) -> None:
+	"""Release the named lock; a failure here must not hide the login's own result."""
+	if name:
+		try:
+			frappe.db.sql("select release_lock(%s)", (name,))
+		except Exception:
+			pass
 
 
 def _is_known_learner(email: str) -> bool:
@@ -199,7 +243,9 @@ def _strip_admin_roles(name: str) -> None:
 	frappe.db.commit()
 
 
-def provision(info: dict, decision: Decision, email: str | None = None) -> Outcome:
+def provision(
+	info: dict, decision: Decision, email: str | None = None, managed: list[str] | None = None
+) -> Outcome:
 	"""Create or update the user and the one enrollment. Runs as Administrator, no commit."""
 	email = (email or get_email(info)).lower()
 	out = Outcome()
@@ -209,13 +255,13 @@ def provision(info: dict, decision: Decision, email: str | None = None) -> Outco
 
 	have = frappe.get_all(
 		"LMS Enrollment",
-		filters={"member": user.name, "course": ["in", _managed_courses()]},
+		filters={"member": user.name, "course": ["in", managed or _managed_courses()]},
 		fields=["name", "course"],
 	)
 	if decision.kind == KIND_LIVE:
 		if not any(row.course == decision.course for row in have):
 			_enroll(decision.course, user.name, out)
-	if decision.kind in (KIND_LIVE, KIND_RESULTS):
+	if decision.kind in (KIND_LIVE, KIND_RESULTS, KIND_ADMIN_ONLY):
 		for row in have:
 			if row.course != decision.course:
 				frappe.delete_doc("LMS Enrollment", row.name, ignore_permissions=True)
@@ -291,7 +337,8 @@ def _log(outcome: str, seen: dict) -> None:
 		f"course_group={json.dumps(seen['group'])}"
 	)
 	logger = frappe.logger(c.LOGGER_NAME)
-	logger.setLevel(logging.INFO)  # frappe.logger starts at WARNING, and the ok line is info
+	if logger.level != logging.INFO:
+		logger.setLevel(logging.INFO)  # frappe.logger starts at WARNING, and the ok line is info
 	if outcome == c.OUTCOME_OK:
 		logger.info(line)
 	elif outcome in (
