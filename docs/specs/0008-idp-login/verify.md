@@ -28,6 +28,14 @@ _Build task 1 findings from the live probe (Authentik 2026.8.3, Frappe version-1
 - **Service user**: its API token still answers `get_logged_user` with the form off.
 - **Break glass**: `idp password-login on` lets `Administrator` sign in (HTTP 200 on `/api/method/login`) and `off` refuses it again (401). The email link stays off in both states. No `bench execute` fallback is needed.
 
+## idp check and idp remove (task 5, probed on the live site)
+
+- **Mapping test**: Authentik runs it as `POST /api/v3/propertymappings/all/<pk>/test/` with `{"user": <pk>}`. It answers `{"successful", "result"}` where `result` is a JSON string of the claims. It stores nothing. The `provider/scope/<pk>/test/` path answers 404, and GET answers 405.
+- **Version**: `GET /admin/version/` gives `version_current`.
+- **Secret check**: the service user can read the decrypted secret with `frappe.client.get_password`. A dummy code with the right secret gives `invalid_grant`.
+- **Live result**: `idp check` is all PASS, and with `--user akadmin` the groups line passes. Without `--user` the groups line is a WARN, because a real username is not in `.env`.
+- `idp remove` was proven on fakes only. It was not run live, so the working setup stays in place. Run it live when you next rebuild.
+
 ## Still to probe
 
 - The authentication flow stages, the `hol-labs-access` policy against the test group name, and the links that block a Frappe User delete (task 7).

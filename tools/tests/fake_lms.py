@@ -19,6 +19,7 @@ class FakeLms:
         self.writes: list[tuple[str, str, str]] = []  # method, doctype, name
         self.fail_write: Callable[[int, str, str], httpx.Response | None] = lambda n, m, d: None
         self.counter = 0
+        self.password_denied = False
         # The single System Settings record, as a fresh site holds it.
         self.seed(
             "System Settings",
@@ -71,6 +72,12 @@ class FakeLms:
         doctype = parts[3]
         name = parts[4] if len(parts) > 4 else None
         store = self.docs.setdefault(doctype, {})
+        if parts[2] == "method" and doctype == "frappe.client.get_password":
+            if self.password_denied:
+                return httpx.Response(403, json={"exc_type": "PermissionError"})
+            asked = request.url.params
+            doc = self.docs.get(asked["doctype"], {}).get(asked["name"], {})
+            return httpx.Response(200, json={"message": doc.get(asked["fieldname"])})
         if request.method == "GET":
             if name:
                 return (
@@ -89,6 +96,10 @@ class FakeLms:
         refused = self.fail_write(self.counter_writes, request.method, doctype)
         if refused is not None:
             return refused
+        if request.method == "DELETE":
+            store.pop(name or "")
+            self.writes.append(("DELETE", doctype, name or ""))
+            return httpx.Response(202, json={"message": "ok"})
         body = json.loads(request.content)
         for f in RICH & body.keys():
             text = str(body[f])

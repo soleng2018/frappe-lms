@@ -27,6 +27,9 @@ class FakeAuthentik:
         self.calls: list[tuple[str, str]] = []
         self.groups_mapping = groups_mapping
         self.marked = marked
+        self.version = idp.TESTED_VERSION
+        self.email_edit = False
+        self.user_groups: list[str] = ["Some Course"]
 
     def client(self) -> authentik.Authentik:
         return authentik.connect("auth.test", "tok", transport=httpx.MockTransport(self.handle))
@@ -51,7 +54,24 @@ class FakeAuthentik:
             "crypto/certificatekeypairs/": [{"pk": "key-1", "name": idp.SIGNING_KEY_NAME}],
             "core/applications/": list(self.apps.values()),
             "providers/oauth2/": list(self.providers.values()),
+            "core/users/": [{"pk": 7, "username": "real-user"}],
         }
+        if path == "admin/version/":
+            return httpx.Response(200, json={"version_current": self.version})
+        if path == "admin/settings/":
+            return httpx.Response(200, json={"default_user_change_email": self.email_edit})
+        if path.endswith("/test/"):
+            claims = {"groups": self.user_groups}
+            return httpx.Response(200, json={"successful": True, "result": json.dumps(claims)})
+        if request.method == "DELETE":
+            key = path.split("/")[-2]
+            if path.startswith("providers"):
+                self.providers = {k: v for k, v in self.providers.items() if str(v["pk"]) != key}
+                for a in self.apps.values():
+                    a["provider"] = None if a["provider"] == int(key) else a["provider"]
+            else:
+                self.apps = {k: v for k, v in self.apps.items() if v["slug"] != key}
+            return httpx.Response(204)
         if request.method == "GET":
             return httpx.Response(200, json={"results": table[path]})
         if request.method == "POST":
@@ -376,3 +396,207 @@ def test_a_blank_language_is_filled_because_frappe_will_not_save_without_it():
     assert "fixed system-settings: language" in run_setup(fake, lms)
     assert lms.of("System Settings")["System Settings"]["language"] == "en"
     assert settings(lms) == (1, 0)
+
+
+# --- idp check and idp remove (AC-7, AC-8) ---
+
+REDIRECT = idp.redirect_uri(VALUES["LMS_HOSTNAME"])
+
+
+def public_client(
+    *,
+    oauth_error: str = "invalid_grant",
+    login: str = "Login with Authentik",
+    callback: int = 417,
+    discovery: int = 200,
+) -> tuple[httpx.Client, list[httpx.Request]]:
+    seen: list[httpx.Request] = []
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        path = request.url.path
+        if path == "/application/o/token/":
+            return httpx.Response(
+                400 if oauth_error == "invalid_grant" else 401, json={"error": oauth_error}
+            )
+        if path.endswith("openid-configuration"):
+            return httpx.Response(discovery, json={})
+        if path == "/login":
+            return httpx.Response(200, text=login)
+        return httpx.Response(callback)
+
+    return httpx.Client(transport=httpx.MockTransport(handle)), seen
+
+
+def run_check(fake: FakeAuthentik, lms: FakeLms, public: httpx.Client, **kwargs: Any):
+    said: list[str] = []
+    code = idp_run.check(fake.client(), lms.client(), public, VALUES, said.append, **kwargs)
+    return code, said
+
+
+def good_setup() -> tuple[FakeAuthentik, FakeLms]:
+    fake, lms = FakeAuthentik(), FakeLms()
+    run_setup(fake, lms)
+    return fake, lms
+
+
+def test_check_on_a_good_setup_is_all_pass_and_writes_nothing():
+    fake, lms = good_setup()
+    fake.calls.clear()
+    writes = len(lms.writes)
+    public, seen = public_client()
+    code, said = run_check(fake, lms, public, user="real-user")
+    assert code == 0
+    assert all(line.startswith("PASS") for line in said), said
+    assert len(said) == 11
+    posts = [path for method, path in fake.calls if method != "GET"]
+    assert len(posts) == 1 and posts[0].endswith("/test/")  # the mapping test stores nothing
+    assert len(lms.writes) == writes
+    assert [r.method for r in seen].count("POST") == 1  # only the dummy token call
+
+
+def test_check_warns_for_each_known_case_and_still_exits_0():
+    fake, lms = good_setup()
+    fake.version, fake.email_edit = "2026.9.0", True
+    lms.of("System Settings")["System Settings"]["disable_user_pass_login"] = 0
+    lms.password_denied = True
+    code, said = run_check(fake, lms, public_client()[0])
+    assert code == 0
+    warns = [line for line in said if line.startswith("WARN")]
+    assert len(warns) == 5  # version, groups untested, email edit, secret unread, form on
+    assert any("secret not verified, run selftest" in line for line in warns)
+
+
+def test_check_fails_and_exits_1_when_the_secret_is_rejected():
+    fake, lms = good_setup()
+    code, said = run_check(fake, lms, public_client(oauth_error="invalid_client")[0])
+    assert code == 1
+    assert any(line.startswith("FAIL") and "idp setup --resync-secret" in line for line in said)
+    assert all("s3cret-value" not in line for line in said)
+
+
+def test_check_fails_on_an_edited_provider_and_a_disabled_key_and_a_missing_groups_claim():
+    fake, lms = good_setup()
+    fake.providers["nile-lms provider"]["redirect_uris"] = []
+    lms.of("Social Login Key")["authentik"]["enable_social_login"] = 0
+    fake.user_groups = []
+    code, said = run_check(fake, lms, public_client()[0], user="real-user")
+    fails = [line for line in said if line.startswith("FAIL")]
+    assert code == 1 and len(fails) == 3
+    assert any("redirect_uris" in line for line in fails)
+
+
+def test_check_fails_on_the_public_checks():
+    fake, lms = good_setup()
+    public, _ = public_client(login="<form>", callback=200, discovery=404)
+    code, said = run_check(fake, lms, public)
+    assert code == 1
+    assert sum(line.startswith("FAIL") for line in said) == 3
+
+
+def test_check_fails_on_a_missing_application_and_marker():
+    fake, lms = FakeAuthentik(), FakeLms()
+    code, said = run_check(fake, lms, public_client()[0])
+    assert code == 1 and any("application 'nile-lms' is missing" in line for line in said)
+    fake.apps["x"] = {"pk": 9, "slug": "nile-lms", "meta_description": "", "provider": None}
+    assert idp.judge_application(fake.apps["x"], "nile-lms").level == idp.FAIL
+
+
+def test_check_names_the_url_when_authentik_is_unreachable():
+    def down(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("no route")
+
+    ak = authentik.connect("auth.test", "tok", transport=httpx.MockTransport(down), tries=1)
+    with pytest.raises(AuthentikError, match=r"auth.test/api/v3/admin/version/"):
+        idp_run.check(ak, FakeLms().client(), public_client()[0], VALUES, lambda _: None)
+
+
+def run_remove(fake: FakeAuthentik, lms: FakeLms) -> list[str]:
+    said: list[str] = []
+    assert idp_run.remove(fake.client(), lms.client(), VALUES, said.append) == 0
+    return said
+
+
+def test_remove_deletes_the_key_then_the_provider_then_the_application():
+    fake, lms = good_setup()
+    fake.calls.clear()
+    said = run_remove(fake, lms)
+    assert said[:3] == ["removed frappe-key", "removed provider", "removed application"]
+    assert "idp password-login on" in said[3]
+    assert [c[0] for c in fake.calls if c[0] == "DELETE"] == ["DELETE", "DELETE"]
+    assert [c[1].split("/")[0] for c in fake.calls if c[0] == "DELETE"] == ["providers", "core"]
+    assert not lms.of("Social Login Key") and not fake.apps and not fake.providers
+    assert lms.writes[-1] == ("DELETE", "Social Login Key", "authentik")
+
+
+def test_a_second_remove_changes_nothing():
+    fake, lms = good_setup()
+    run_remove(fake, lms)
+    fake.calls.clear()
+    writes = len(lms.writes)
+    assert run_remove(fake, lms)[:3] == [
+        "absent frappe-key",
+        "absent provider",
+        "absent application",
+    ]
+    assert {m for m, _ in fake.calls} == {"GET"} and len(lms.writes) == writes
+
+
+def test_remove_refuses_an_unmarked_application_and_changes_nothing():
+    fake, lms = good_setup()
+    fake.apps["Nile Workshop LMS"]["meta_description"] = ""
+    fake.calls.clear()
+    with pytest.raises(AuthentikError, match="without the ownership marker"):
+        idp_run.remove(fake.client(), lms.client(), VALUES, lambda _: None)
+    assert {m for m, _ in fake.calls} == {"GET"}
+    assert lms.of("Social Login Key")
+
+
+def test_remove_keeps_frappe_users_and_the_password_form_as_it_is():
+    fake, lms = good_setup()
+    lms.seed("User", "student@example.com")
+    before = dict(lms.of("System Settings")["System Settings"])
+    run_remove(fake, lms)
+    assert "student@example.com" in lms.of("User")
+    assert lms.of("System Settings")["System Settings"] == before
+
+
+def test_a_remove_stopped_after_the_key_delete_is_finished_by_a_second_run():
+    fake, lms = good_setup()
+    lms.docs["Social Login Key"].clear()  # the first run died right after this delete
+    said = run_remove(fake, lms)
+    assert said[:3] == ["absent frappe-key", "removed provider", "removed application"]
+    assert not fake.providers and not fake.apps
+
+
+def test_a_remove_stopped_after_the_provider_delete_leaves_no_orphan():
+    fake, lms = good_setup()
+    lms.docs["Social Login Key"].clear()
+    fake.providers.clear()
+    fake.apps["Nile Workshop LMS"]["provider"] = None
+    assert run_remove(fake, lms)[:3] == [
+        "absent frappe-key",
+        "absent provider",
+        "removed application",
+    ]
+    assert not fake.apps
+
+
+def test_the_check_judges_are_pure_and_total():
+    assert idp.judge_version(idp.TESTED_VERSION).level == idp.PASS
+    assert idp.judge_version("1").level == idp.WARN
+    assert idp.judge_secret("invalid_grant").level == idp.PASS
+    assert idp.judge_secret("invalid_client").level == idp.FAIL
+    assert idp.judge_secret(None).level == idp.WARN
+    assert idp.judge_secret("HTTP 500").level == idp.WARN
+    assert idp.judge_groups(None, None).level == idp.WARN
+    assert idp.judge_groups("u", {"groups": ["a"]}).level == idp.PASS
+    assert idp.judge_groups("u", {"groups": []}).level == idp.FAIL
+    assert (
+        idp.judge_form({"disable_user_pass_login": 1, "login_with_email_link": 0}).level == idp.PASS
+    )
+    assert (
+        idp.judge_form({"disable_user_pass_login": 1, "login_with_email_link": 1}).level == idp.WARN
+    )
+    assert idp.judge_bad_state(None).level == idp.FAIL
+    assert idp.judge_frappe_key(None, {}, None).level == idp.FAIL

@@ -15,6 +15,7 @@ __all__ = [
     "create",
     "delete",
     "find",
+    "get",
     "get_one",
     "update",
 ]
@@ -82,6 +83,11 @@ def find(ak: Authentik, path: str, **params: str) -> list[Record]:
     """Return every item of a list endpoint matching the exact query parameters."""
     r = _call(ak, "GET", path, params={"page_size": "100", **params})
     return list(r.json()["results"])
+
+
+def get(ak: Authentik, path: str, **params: str) -> Record:
+    """Return the JSON object at a detail path."""
+    return dict(_call(ak, "GET", path, params=params).json())
 
 
 def get_one(ak: Authentik, path: str, **params: str) -> Record | None:

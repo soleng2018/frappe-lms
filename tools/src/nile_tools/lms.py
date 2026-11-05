@@ -16,6 +16,8 @@ __all__ = [
     "LmsError",
     "connect",
     "create_record",
+    "delete_record",
+    "get_password",
     "get_record",
     "list_records",
     "update_record",
@@ -179,3 +181,20 @@ def create_record(lms: Lms, doctype: str, data: Mapping[str, object], *, label: 
 
 def _is_duplicate_key(message: str) -> bool:
     return any(f"HTTP {s}" in message for s in _DUPLICATE_STATUSES) and "nile_key" in message
+
+
+def delete_record(lms: Lms, doctype: str, name: str, *, label: str = "") -> None:
+    """Delete one record by name."""
+    _send(lms, label or f"{doctype} {name}", "DELETE", _path(doctype, name))
+
+
+def get_password(lms: Lms, doctype: str, name: str, field: str) -> str | None:
+    """Return a decrypted password field, or None when Frappe will not give it."""
+    label = f"{doctype} {name} {field}"
+    params = {"doctype": doctype, "name": name, "fieldname": field}
+    try:
+        r = _send(lms, label, "GET", "/api/method/frappe.client.get_password", params=params)
+        value = r.json().get("message")
+    except (LmsError, ValueError, AttributeError):
+        return None
+    return value if isinstance(value, str) and value else None

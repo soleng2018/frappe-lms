@@ -21,7 +21,9 @@ __all__ = [
     "ConfigError",
     "config_check",
     "config_show",
+    "idp_check",
     "idp_password_login",
+    "idp_remove",
     "idp_setup",
     "init",
     "main",
@@ -171,6 +173,34 @@ def idp_setup(root: Path, *, resync_secret: bool = False) -> int:
         return 1
 
 
+def _authentik_from_env(values: Mapping[str, str]) -> authentik.Authentik:
+    host, token = (_require(values, k) for k in ("AUTHENTIK_HOSTNAME", "AUTHENTIK_API_TOKEN"))
+    return authentik.connect(host, token)
+
+
+def idp_check(root: Path, *, user: str | None = None) -> int:
+    """Report PASS, WARN or FAIL for each part of the Authentik sign in; write nothing."""
+    values = config.load_env(root).values
+    try:
+        with httpx.Client(timeout=30) as public:
+            return idp_run.check(
+                _authentik_from_env(values), _lms_from_env(values), public, values, print, user=user
+            )
+    except (AuthentikError, LmsError, idp.ConfigProblem) as e:
+        print(f"ERROR {e}", file=sys.stderr)
+        return 1
+
+
+def idp_remove(root: Path) -> int:
+    """Delete only the marked Frappe key, provider and application."""
+    values = config.load_env(root).values
+    try:
+        return idp_run.remove(_authentik_from_env(values), _lms_from_env(values), values, print)
+    except (AuthentikError, LmsError, idp.ConfigProblem) as e:
+        print(f"ERROR {e}", file=sys.stderr)
+        return 1
+
+
 def _secret_values(root: Path) -> list[str]:
     """Return the secret values in .env, or none if the file cannot be read."""
     try:
@@ -201,6 +231,9 @@ def _parser() -> argparse.ArgumentParser:
         action="store_true",
         help="rewrite the Frappe client secret from Authentik",
     )
+    check_cmd = idp_actions.add_parser("check", help="report PASS, WARN or FAIL, writing nothing")
+    check_cmd.add_argument("--user", help="a real Authentik username, to test the groups claim")
+    idp_actions.add_parser("remove", help="delete only the items setup created")
     pw_cmd = idp_actions.add_parser(
         "password-login", help="switch Frappe's own password form on (break glass) or off"
     )
@@ -232,6 +265,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.command == "idp":
             if args.action == "password-login":
                 return idp_password_login(root, args.state)
+            if args.action == "check":
+                return idp_check(root, user=args.user)
+            if args.action == "remove":
+                return idp_remove(root)
             return idp_setup(root, resync_secret=args.resync_secret)
         if args.command == "sync":
             return sync(root, check=args.check)
