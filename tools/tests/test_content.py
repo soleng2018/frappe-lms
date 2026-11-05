@@ -112,7 +112,7 @@ def test_pass_mark_outside_80_to_100(mark: int) -> None:
     bad = replace(course.quizzes[0], passing_percentage=mark)
     problems = check_course(replace(course, quizzes=(bad, course.quizzes[1])))
     assert len(problems) == 1
-    assert "quiz 'q1'" in problems[0] or "passing_percentage" in problems[0]
+    assert "quiz 'q1'" in problems[0]
     assert f"passing_percentage is {mark}, must be 80 to 100" in problems[0]
 
 

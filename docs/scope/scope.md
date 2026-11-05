@@ -172,9 +172,10 @@ spec [0010](../specs/0010-quiz-pass-rules-and-certificate.md) · code in `tools/
   - [x] Raise the pass mark floor to 80 in the content check (AC-1)
   - [x] Log learners stranded without a certificate at the login cleanup (AC-9)
   - [x] Integration test and README steps for students and admins (AC-2 to AC-8)
+  - [x] Let a Moderator publish or unpublish after the learner is removed: `nile_auth` certificate override, version bump, rebuilt image, test and README (AC-10)
 - [ ] Verify it: `/check verify quiz pass rules & certificate`
 - [ ] Test it: `/test quiz pass rules & certificate`
-- [ ] Review it (fresh model): `/check review quiz pass rules & certificate`
+- [x] Review it (fresh model): `/check review quiz pass rules & certificate`
 - [ ] Document it: `/document quiz pass rules & certificate`
 
 ### 17. Course access from course groups · done

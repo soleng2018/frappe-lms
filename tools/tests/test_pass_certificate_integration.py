@@ -189,6 +189,11 @@ def set_published(world: World, who: str, name: str, value: int) -> httpx.Respon
         return c.put(f"/api/resource/LMS Certificate/{name}", json={"published": value})
 
 
+def set_published_member(world: World, who: str, name: str, member: str) -> httpx.Response:
+    with client(world, who) as c:
+        return c.put(f"/api/resource/LMS Certificate/{name}", json={"member": member})
+
+
 def open_link(world: World, who: str | None, name: str) -> httpx.Response:
     with client(world, who, follow=True) as c:
         # LMS routes /courses/<course>/<certificate id> to its certificate page.
@@ -332,14 +337,30 @@ def test_a_removed_learner_keeps_the_certificate_and_a_learner_without_one_is_re
 ) -> None:
     """AC-7: no enrollment keeps the old certificate, and a learner with none is refused."""
     name = certificate_name(world, "student")
+    assert set_published(world, "admin", name, 1).status_code == 200
     _enroll(world, "student", "remove")
     _enroll(world, "other", "remove")
 
     link = open_link(world, "student", name)
     assert link.status_code == 200 and link.content.startswith(b"%PDF")
+    guest = open_link(world, None, name)
+    assert guest.status_code == 200 and guest.content.startswith(b"%PDF")
     assert request_certificate(world, "student").json()["message"]["name"] == name
 
     refused = request_certificate(world, "other")
     assert refused.status_code >= 400
     assert "You are not enrolled in this course." in refused.text
+    assert certificate_count(world) == [["1"]]
+
+    # AC-10: the nile_auth override lets a Moderator publish and unpublish after removal.
+    assert set_published(world, "admin", name, 0).status_code == 200
+    assert open_link(world, None, name).status_code == 403
+    assert set_published(world, "admin", name, 1).status_code == 200
+    guest_again = open_link(world, None, name)
+    assert guest_again.status_code == 200 and guest_again.content.startswith(b"%PDF")
+
+    # A certificate cannot be moved to a learner who is not enrolled, and no new one is issued.
+    moved = set_published_member(world, "admin", name, world.users["other"]["email"])
+    assert moved.status_code >= 400
+    assert certificate_name(world, "student") == name
     assert certificate_count(world) == [["1"]]

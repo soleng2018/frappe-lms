@@ -16,3 +16,8 @@ fixtures = [
 override_whitelisted_methods = {
 	"frappe.integrations.oauth2_logins.custom": "nile_auth.login.custom",
 }
+
+# Spec 0010: a Moderator can publish a certificate after the learner has left the course.
+override_doctype_class = {
+	"LMS Certificate": "nile_auth.certificate.NileLMSCertificate",
+}
