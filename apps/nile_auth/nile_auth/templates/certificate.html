@@ -1,0 +1,34 @@
+{#- Spec 0012. Every changing value is escaped with | e: the name comes from the identity provider and
+    wkhtmltopdf runs this HTML. The font size bands are fixed by length (AC-7). -#}
+{%- set course_title = frappe.db.get_value("LMS Course", doc.course, "title") or doc.course or "" -%}
+{%- set issued = frappe.utils.getdate(doc.issue_date) -%}
+{%- set issue_text = issued.strftime("%B") ~ " " ~ issued.day ~ ", " ~ issued.year -%}
+{%- set link = frappe.utils.get_url() ~ "/courses/" ~ doc.course ~ "/" ~ doc.name -%}
+{%- set name_length = (doc.member_name or "") | length -%}
+{%- if name_length <= 24 -%}{%- set name_class = "name-l" -%}
+{%- elif name_length <= 40 -%}{%- set name_class = "name-m" -%}
+{%- else -%}{%- set name_class = "name-s" -%}{%- endif -%}
+{%- set title_class = "course-l" if (course_title | length) <= 50 else "course-s" -%}
+<div class="nile-cert">
+	<div class="bar"></div>
+	<div class="ring"></div>
+	<img class="logo" src="{{ logo_data_uri('nile-logo.png') }}" alt="Nile">
+	<div class="body">
+		<div class="eyebrow">NILE LEARNING</div>
+		<div class="title">Certificate of Completion</div>
+		<div class="presented">This certificate is proudly presented to</div>
+		<div class="name {{ name_class }}">{{ doc.member_name | e }}</div>
+		<div class="detail">for successfully completing the hands on lab requirements for the <b class="{{ title_class }}">{{ course_title | e }}</b> certification.</div>
+	</div>
+	<div class="signature">
+		<div class="line"></div>
+		<div class="sig-label">Authorized Signature</div>
+		<div class="sig-org">Nile Learning &amp; Enablement</div>
+	</div>
+	<div class="issued">
+		<div class="issued-by">Issued by Nile</div>
+		<div class="issued-line">{{ issue_text | e }}</div>
+		<div class="issued-line">Credential ID: {{ doc.name | e }}</div>
+		<div class="issued-link">{{ link | e }}</div>
+	</div>
+</div>

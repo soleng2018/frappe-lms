@@ -1,0 +1,86 @@
+# Runs inside `bench console` (see test_progress_reports_integration.py); __P__ is the test prefix.
+# Builds learners with raw inserts inside one transaction, runs both reports, then rolls everything back.
+import json, frappe
+from frappe.desk.query_report import run
+out = {}
+P = "__P__"
+try:
+    frappe.set_user("Administrator")
+    course = frappe.get_all("LMS Course", filters={"nile_key": ["is", "set"]}, pluck="name")[0]
+    lessons = [r["lesson"] for r in frappe.db.sql(
+        "select lr.lesson from `tabChapter Reference` cr join `tabLesson Reference` lr on lr.parent=cr.chapter "
+        "where cr.parent=%s order by cr.idx, lr.idx", course, as_dict=True)]
+    quizzes = frappe.db.sql(
+        "select q.name from `tabLMS Quiz` q join `tabLesson Reference` lr on lr.lesson=q.lesson "
+        "join `tabChapter Reference` cr on lr.parent=cr.chapter where cr.parent=%s order by cr.idx, lr.idx",
+        course, pluck="name")
+    out["lessons"], out["quizzes"] = len(lessons), len(quizzes)
+    q1, q2 = quizzes[0], quizzes[1]
+    frappe.db.set_value("LMS Quiz", q1, {"passing_percentage": 80, "max_attempts": 3})
+    frappe.db.set_value("LMS Quiz", q2, {"passing_percentage": 80, "max_attempts": 3})
+
+    def user(kind, enabled=1):
+        email = f"{P}-{kind}@example.com"
+        frappe.get_doc({"doctype": "User", "email": email, "first_name": f"{P}{kind}", "enabled": enabled,
+            "user_type": "Website User", "send_welcome_email": 0,
+            "roles": [{"role": "LMS Student"}]}).insert(ignore_permissions=True)
+        return email
+
+    def raw(doctype, n, **vals):
+        cols = {"name": f"{P}-{doctype[:4]}-{n}", "creation": "2026-01-01 10:00:00", "modified": "2026-01-01 10:00:00",
+                "owner": "Administrator", "modified_by": "Administrator", "docstatus": 0, "idx": 0, **vals}
+        keys = ",".join(f"`{k}`" for k in cols)
+        frappe.db.sql(f"insert into `tab{doctype}` ({keys}) values ({','.join(['%s'] * len(cols))})", list(cols.values()))
+
+    ready, ended, fresh, svc, off = (user("ready"), user("ended"), user("fresh"), user("svc"), user("off", 0))
+    frappe.local.conf["nile_service_user"] = svc
+    n = 0
+    def prog(member, lesson, status="Complete"):
+        global n
+        n += 1
+        raw("LMS Course Progress", n, member=member, course=course, lesson=lesson, status=status)
+    def sub(member, quiz, pct):
+        global n
+        n += 1
+        raw("LMS Quiz Submission", n, member=member, quiz=quiz, course=course, percentage=pct)
+    def cert(member, issue, published):
+        global n
+        n += 1
+        raw("LMS Certificate", n, member=member, course=course, issue_date=issue, published=published)
+    def enroll(member):
+        global n
+        n += 1
+        raw("LMS Enrollment", n, member=member, course=course, member_type="Student", role="Member")
+
+    enroll(ready); enroll(fresh)
+    for l in lessons: prog(ready, l)
+    sub(ready, q1, 85)
+    for _ in range(3): sub(ready, q2, 60)
+    prog(ended, lessons[0]); prog(ended, "no-such-lesson")
+    cert(ended, "2026-02-01", 0); cert(ended, "2026-03-01", 1)
+    prog(svc, lessons[0]); prog(off, lessons[0])
+
+    def rows(report, **f): return run(report, filters=f)["result"]
+    lp = {r["learner"]: r for r in rows("Learner Progress") if r["learner"].startswith(P)}
+    out["lp"] = {k.split("-")[1].split("@")[0]: {x: str(v) for x, v in r.items()} for k, r in lp.items()}
+    qs = [r for r in rows("Quiz Scores") if r["learner"] == ready]
+    out["qs_ready"] = [[r["quiz"] == q1, r["state"], r["attempts_used"], str(r["best_score"])] for r in qs]
+    out["enrolled_only"] = sorted(r["learner"].split("-")[1].split("@")[0] for r in rows("Learner Progress", enrolled_only=1) if r["learner"].startswith(P))
+    out["locked_filter"] = [r["learner"] == ready for r in rows("Quiz Scores", state="Locked") if r["learner"].startswith(P)]
+    frappe.db.set_value("LMS Quiz", q1, "passing_percentage", 90)
+    out["raised_mark"] = [r["state"] for r in rows("Quiz Scores", learner=ready) if r["quiz"] == q1]
+    out["raised_quizzes_passed"] = [r["quizzes_passed"] for r in rows("Learner Progress", learner=ready)]
+    frappe.set_user(fresh)
+    for rep in ("Learner Progress", "Quiz Scores"):
+        try:
+            rows(rep); out["student " + rep] = "ran"
+        except frappe.PermissionError:
+            out["student " + rep] = "PermissionError"
+    frappe.set_user("Administrator")
+except Exception as e:
+    import traceback
+    out["error"] = type(e).__name__ + ": " + traceback.format_exc()[-600:]
+finally:
+    frappe.db.rollback()
+out["leftover"] = frappe.db.count("User", {"email": ["like", f"{P}-%"]})
+print("RESULT:" + json.dumps(out, default=str))
