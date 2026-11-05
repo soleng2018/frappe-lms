@@ -630,3 +630,30 @@ def test_check_warns_while_guest_access_is_on():
     code, said = run_check(fake, lms, public_client()[0])
     assert code == 0 and "WARN LMS allows guest access; `idp setup` turns it off" in said
     assert idp.judge_guest_access({"allow_guest_access": 0}).level == idp.PASS
+
+
+def test_set_password_posts_the_password_to_the_user_and_accepts_an_empty_answer():
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return httpx.Response(204)
+
+    ak = authentik.connect("auth.test", "tok", transport=httpx.MockTransport(handler))
+    authentik.set_password(ak, 7, "pw-value-123")
+    assert seen[0].method == "POST" and seen[0].url.path == "/api/v3/core/users/7/set_password/"
+    assert json.loads(seen[0].content) == {"password": "pw-value-123"}
+
+
+def test_set_password_failure_names_the_url_and_never_carries_the_password_or_token():
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(400, json={"password": ["This password is too short."]})
+
+    ak = authentik.connect("auth.test", "tok-secret-xyz", transport=httpx.MockTransport(handler))
+    with pytest.raises(AuthentikError) as e:
+        authentik.set_password(ak, 7, "pw-value-123")
+    message = str(e.value)
+    assert (
+        "https://auth.test/api/v3/core/users/7/set_password/" in message and "HTTP 400" in message
+    )
+    assert "pw-value-123" not in message and "tok-secret-xyz" not in message

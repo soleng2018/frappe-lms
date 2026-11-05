@@ -45,6 +45,7 @@ class World:
         self.callback_status: int | None = None  # force an LMS answer for the student
         self.stranger_gets_user = False
         self.interrupt = False
+        self.fail_group_delete = False
         self.ak_calls: list[tuple[str, str]] = []
 
     def authentik(self) -> authentik.Authentik:
@@ -64,6 +65,8 @@ class World:
             store[self.next_pk] = {"pk": self.next_pk, **body}
             return httpx.Response(201, json=store[self.next_pk])
         pk = int(parts[2])
+        if request.method == "DELETE" and self.fail_group_delete and parts[1] == "groups":
+            return httpx.Response(403, json={"detail": "not allowed"})
         if request.method == "DELETE":
             store.pop(pk)
             return httpx.Response(204)
@@ -147,14 +150,10 @@ class World:
 
     def run(self, **kwargs: Any) -> tuple[int, list[str]]:
         said: list[str] = []
+        kwargs.setdefault("password", PASSWORD)
+        values = kwargs.pop("values", VALUES)
         code = idp_selftest.selftest(
-            self.authentik(),
-            self.lms.client(),
-            self.browser,
-            VALUES,
-            said.append,
-            password=PASSWORD,
-            **kwargs,
+            self.authentik(), self.lms.client(), self.browser, values, said.append, **kwargs
         )
         return code, said
 
@@ -421,3 +420,139 @@ def test_the_stranger_judge_wants_a_403_and_no_user():
     ] * 2
     assert idp.judge_stranger(idp.Observed(302, None, None, False))[0].level == idp.FAIL
     assert idp.judge_stranger(idp.Observed(403, None, None, True))[1].level == idp.FAIL
+
+
+# --- more error paths ---
+
+
+def test_a_cleanup_failure_is_reported_and_the_other_items_are_still_removed():
+    """AC-11: one failing delete must not stop the rest of the cleanup."""
+    world = make_world()
+    world.fail_group_delete = True
+    code, said = world.run()
+    assert code == 1
+    assert any(line.startswith("FAIL cleanup:") and "HTTP 403" in line for line in said)
+    assert not world.lms.of("LMS Course") and not world.lms.of("User")
+    assert world.user(idp.TEST_STUDENT) is None
+
+
+def test_missing_hostnames_stop_the_run_before_it_changes_anything():
+    world = make_world()
+    with pytest.raises(idp.ConfigProblem, match="AUTHENTIK_HOSTNAME"):
+        world.run(values={"LMS_HOSTNAME": LMS_HOST})
+    assert not world.lms.writes and not [c for c in world.ak_calls if c[0] != "GET"]
+
+
+def test_without_a_given_password_a_long_random_one_is_made_and_never_printed():
+    first, second = make_world(), make_world()
+    _, said_one = first.run(password=None)
+    _, said_two = second.run(password=None)
+    one, two = first.passwords[idp.TEST_STUDENT], second.passwords[idp.TEST_STUDENT]
+    assert len(one) >= 24 and one != two
+    assert one not in "\n".join(said_one) and two not in "\n".join(said_two)
+
+
+def test_the_student_and_the_stranger_share_one_password_but_sign_in_separately():
+    world = make_world()
+    world.run()
+    assert world.passwords[idp.TEST_STUDENT] == world.passwords[idp.TEST_STRANGER] == PASSWORD
+
+
+def flow_world(executor: Any) -> World:
+    world = make_world()
+    world.executor = executor  # type: ignore[method-assign]
+    return world
+
+
+def test_drive_login_names_the_stage_when_authentik_refuses_the_user():
+    def refuse(request: httpx.Request) -> httpx.Response:
+        challenge = {"component": "ak-stage-password", "response_errors": {"password": ["bad"]}}
+        return httpx.Response(200, json=challenge)
+
+    world = flow_world(refuse)
+    with pytest.raises(SelftestError, match=r"refused the selftest user.*ak-stage-password"):
+        idp_selftest.drive_login(world.browser(), LMS_HOST, AK, "u", "p")
+
+
+def test_drive_login_says_so_when_a_post_is_not_answered_with_a_redirect():
+    def odd(request: httpx.Request) -> httpx.Response:
+        if request.method == "POST":
+            return httpx.Response(200, json={})
+        return httpx.Response(200, json={"component": "ak-stage-identification"})
+
+    world = flow_world(odd)
+    with pytest.raises(SelftestError, match=r"POST .*/flows/executor/f1/ answered HTTP 200"):
+        idp_selftest.drive_login(world.browser(), LMS_HOST, AK, "u", "p")
+
+
+def test_drive_login_gives_up_on_a_flow_that_never_finishes():
+    def forever(request: httpx.Request) -> httpx.Response:
+        if request.method == "POST":
+            return httpx.Response(302, headers={"location": request.url.raw_path.decode()})
+        return httpx.Response(200, json={"component": "ak-stage-identification"})
+
+    world = flow_world(forever)
+    with pytest.raises(SelftestError, match=r"did not finish after \d+ stages"):
+        idp_selftest.drive_login(world.browser(), LMS_HOST, AK, "u", "p")
+
+
+def test_drive_login_says_so_when_the_authorize_url_is_not_a_redirect():
+    def handle(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/login":
+            link = f"https://{AK}/application/o/authorize/?client_id=c"
+            return httpx.Response(200, text=f'<a href="{link}">x</a>')
+        return httpx.Response(200, text="an error page")
+
+    client = httpx.Client(transport=httpx.MockTransport(handle))
+    with pytest.raises(SelftestError, match=r"answered HTTP 200, not a redirect"):
+        idp_selftest.drive_login(client, LMS_HOST, AK, "u", "p")
+
+
+def test_drive_login_gives_up_on_a_redirect_loop():
+    def handle(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/login":
+            link = f"https://{AK}/application/o/authorize/?client_id=c"
+            return httpx.Response(200, text=f'<a href="{link}">x</a>')
+        return httpx.Response(302, headers={"location": f"https://{AK}/somewhere/else"})
+
+    client = httpx.Client(transport=httpx.MockTransport(handle))
+    with pytest.raises(SelftestError, match=rf"did not reach {LMS_HOST} after \d+ redirects"):
+        idp_selftest.drive_login(client, LMS_HOST, AK, "u", "p")
+
+
+def test_drive_login_sends_only_the_test_users_password_to_authentik():
+    world = make_world()
+    world.users[80] = {"pk": 80, "username": "someone", "attributes": MARKED}
+    world.passwords["someone"] = "right-pw"
+    seen: list[tuple[str, str]] = []
+    original = world.web
+
+    def spy(request: httpx.Request) -> httpx.Response:
+        if request.method == "POST":
+            seen.append((request.url.host, request.content.decode()))
+        return original(request)
+
+    world.web = spy  # type: ignore[method-assign]
+    idp_selftest.drive_login(world.browser(), LMS_HOST, AK, "someone", "right-pw")
+    assert {host for host, _ in seen} == {AK}
+    assert any("right-pw" in body for _, body in seen)
+
+
+def test_drive_login_follows_the_extra_redirect_after_the_last_stage():
+    """The live flow answers the final post with a redirect to the same executor, then redirects."""
+    world = make_world()
+    original = world.executor
+    hops: list[str] = []
+
+    def with_extra_hop(request: httpx.Request) -> httpx.Response:
+        finished = world.stage >= 2 and request.method == "GET"
+        if finished and not hops:
+            hops.append("extra")
+            return httpx.Response(302, headers={"location": request.url.raw_path.decode()})
+        return original(request)
+
+    world.executor = with_extra_hop  # type: ignore[method-assign]
+    world.users[90] = {"pk": 90, "username": "someone", "attributes": MARKED}
+    world.passwords["someone"] = "pw"
+    login = idp_selftest.drive_login(world.browser(), LMS_HOST, AK, "someone", "pw")
+    assert hops == ["extra"] and login.status == 403

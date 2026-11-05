@@ -126,7 +126,7 @@ spec [0008](../specs/0008-idp-login/index.md) · code in `tools/src/nile_tools/`
   - [x] `idp check` and `idp remove` (AC-7, AC-8)
   - [x] Landing on `/lms`, `idp selftest`, the manual admin sign in, and README with the break glass steps (AC-3, AC-10, AC-11, AC-12)
 - [x] Verify it: `/check verify IDP login`
-- [ ] Test it: `/test IDP login`
+- [x] Test it: `/test IDP login`
 - [ ] Review it (fresh model): `/check review IDP login`
 - [ ] Document it: `/document IDP login`
 
