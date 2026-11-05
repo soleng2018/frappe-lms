@@ -61,10 +61,13 @@ class FakeAuthentik:
                 item |= {"client_id": "cid", "client_secret": "s3cret-value"}
             store[body["name"]] = item
             return httpx.Response(201, json=item)
-        slug = path.split("/")[-2]
-        app = next(a for a in self.apps.values() if a["slug"] == slug)
-        app.update(body)
-        return httpx.Response(200, json=app)
+        key = path.split("/")[-2]
+        if path.startswith("providers"):
+            item = next(p for p in self.providers.values() if str(p["pk"]) == key)
+        else:
+            item = next(a for a in self.apps.values() if a["slug"] == key)
+        item.update(body)
+        return httpx.Response(200, json=item)
 
 
 def test_wanted_state_builds_every_item_from_config():
@@ -111,7 +114,7 @@ def test_setup_creates_application_provider_and_frappe_key(capsys):
     assert app["provider"] == fake.providers["nile-lms provider"]["pk"]
     key = next(iter(lms.of("Social Login Key").values()))
     assert key["client_id"] == "cid" and key["client_secret"] == "s3cret-value"
-    assert said[0] == "created application: nile-lms"
+    assert said[:3] == ["created application", "created provider", "created frappe-key"]
     assert all("s3cret-value" not in line for line in said)
     assert said[-1] == "Sign in at https://lms.example.com/login"
 
@@ -122,6 +125,164 @@ def test_setup_refuses_an_application_without_the_marker():
     with pytest.raises(AuthentikError, match="without the ownership marker"):
         idp_run.setup(fake.client(), FakeLms().client(), VALUES, lambda _: None)
     assert not [c for c in fake.calls if c[0] != "GET"]
+
+
+def test_setup_refuses_a_provider_whose_application_is_missing():
+    fake = FakeAuthentik()
+    fake.providers["nile-lms provider"] = {"pk": 5, "name": "nile-lms provider"}
+    with pytest.raises(AuthentikError, match="provider is not ours"):
+        idp_run.setup(fake.client(), FakeLms().client(), VALUES, lambda _: None)
+    assert not [c for c in fake.calls if c[0] != "GET"]
+
+
+def run_setup(fake: FakeAuthentik, lms: FakeLms, **kwargs: Any) -> list[str]:
+    said: list[str] = []
+    assert idp_run.setup(fake.client(), lms.client(), VALUES, said.append, **kwargs) == 0
+    return said[:-1]  # drop the sign in line
+
+
+def test_a_second_run_changes_nothing_and_keeps_the_secret():
+    fake, lms = FakeAuthentik(), FakeLms()
+    run_setup(fake, lms)
+    writes = len(fake.calls), len(lms.writes)
+    secret = lms.of("Social Login Key")["authentik"]["client_secret"]
+    fake.calls.clear()
+    assert run_setup(fake, lms) == [
+        "unchanged application",
+        "unchanged provider",
+        "unchanged frappe-key",
+    ]
+    assert not [c for c in fake.calls if c[0] != "GET"]
+    assert len(lms.writes) == writes[1]
+    assert lms.of("Social Login Key")["authentik"]["client_secret"] == secret
+
+
+def test_an_edited_provider_is_put_back_and_extras_are_removed():
+    fake, lms = FakeAuthentik(), FakeLms()
+    run_setup(fake, lms)
+    provider = fake.providers["nile-lms provider"]
+    provider["redirect_uris"] = [
+        *provider["redirect_uris"],
+        {"matching_mode": "regex", "url": ".*", "redirect_uri_type": "authorization"},
+    ]
+    provider["property_mappings"] = ["m-open"]
+    said = run_setup(fake, lms)
+    assert "fixed provider: redirect_uris" in said and "fixed provider: property_mappings" in said
+    assert provider["redirect_uris"] == idp.wanted_state(VALUES, REFS).provider["redirect_uris"]
+    assert run_setup(fake, lms)[1] == "unchanged provider"
+
+
+def test_an_edited_application_and_a_detached_provider_are_fixed():
+    fake, lms = FakeAuthentik(), FakeLms()
+    run_setup(fake, lms)
+    app = fake.apps["Nile Workshop LMS"]
+    app.update({"meta_launch_url": "https://evil.example/", "provider": None})
+    said = run_setup(fake, lms)
+    assert said[:2] == ["fixed application: meta_launch_url", "fixed application: provider"]
+    assert app["meta_launch_url"] == "https://lms.example.com/lms"
+    assert app["provider"] == fake.providers["nile-lms provider"]["pk"]
+
+
+def test_an_edited_frappe_key_is_fixed_without_touching_the_secret():
+    fake, lms = FakeAuthentik(), FakeLms()
+    run_setup(fake, lms)
+    key = lms.of("Social Login Key")["authentik"]
+    key.update({"enable_social_login": 0, "auth_url_data": "{}"})
+    said = run_setup(fake, lms)
+    assert "fixed frappe-key: enable_social_login" in said
+    assert "fixed frappe-key: auth_url_data" in said
+    assert key["enable_social_login"] == 1
+    assert key["client_secret"] == "s3cret-value"
+    assert not any("client_secret" in line for line in said)
+
+
+def test_a_changed_client_id_rewrites_the_secret_too():
+    fake, lms = FakeAuthentik(), FakeLms()
+    run_setup(fake, lms)
+    lms.of("Social Login Key")["authentik"].update({"client_id": "old", "client_secret": "old"})
+    said = run_setup(fake, lms)
+    assert "fixed frappe-key: client_id" in said and "fixed frappe-key: client_secret" in said
+    assert lms.of("Social Login Key")["authentik"]["client_secret"] == "s3cret-value"
+
+
+def test_resync_secret_rewrites_only_the_secret():
+    fake, lms = FakeAuthentik(), FakeLms()
+    run_setup(fake, lms)
+    lms.of("Social Login Key")["authentik"]["client_secret"] = "stale"
+    said = run_setup(fake, lms, resync_secret=True)
+    assert said[2:] == ["fixed frappe-key: client_secret"]
+    assert lms.of("Social Login Key")["authentik"]["client_secret"] == "s3cret-value"
+
+
+def test_a_half_done_setup_is_finished_by_running_it_again():
+    fake, lms = FakeAuthentik(), FakeLms()
+    run_setup(fake, lms)
+    # The run stopped after creating the application: no provider, no key, nothing attached.
+    fake.providers.clear()
+    lms.docs.clear()
+    fake.apps["Nile Workshop LMS"]["provider"] = None
+    said = run_setup(fake, lms)
+    assert said[1:] == ["created provider", "created frappe-key"]
+    assert fake.apps["Nile Workshop LMS"]["provider"] == fake.providers["nile-lms provider"]["pk"]
+
+
+def test_diff_is_empty_when_equal_and_names_each_edited_field():
+    wanted = idp.wanted_state(VALUES, REFS).provider
+    live = {**wanted, "redirect_uris": [{**wanted["redirect_uris"][0], "redirect_uri_type": "x"}]}
+    assert idp.diff("provider", wanted, live) == []
+    live = {**live, "client_type": "public", "sub_mode": "user_id"}
+    assert [c.field for c in idp.diff("provider", wanted, live)] == ["client_type", "sub_mode"]
+    assert [c.field for c in idp.diff("provider", wanted, {})] == list(wanted)
+
+
+def test_reads_are_retried_on_5xx_but_a_create_is_not():
+    answers = iter([503, 503, 200])
+
+    def flaky(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(next(answers), json={"results": []})
+
+    ak = authentik.connect(
+        "auth.test", "tok", transport=httpx.MockTransport(flaky), tries=5, retry_wait=0
+    )
+    assert authentik.find(ak, "/core/applications/") == []
+    seen: list[str] = []
+
+    def down(request: httpx.Request) -> httpx.Response:
+        seen.append(request.method)
+        return httpx.Response(502, json={})
+
+    ak = authentik.connect(
+        "auth.test", "tok", transport=httpx.MockTransport(down), tries=3, retry_wait=0
+    )
+    with pytest.raises(AuthentikError, match="HTTP 502"):
+        authentik.create(ak, "/core/applications/", {})
+    assert seen == ["POST"]
+
+
+def test_an_unreachable_authentik_gives_one_error_naming_the_url():
+    def refuse(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("no route")
+
+    ak = authentik.connect(
+        "auth.test", "tok", transport=httpx.MockTransport(refuse), tries=3, retry_wait=0
+    )
+    with pytest.raises(AuthentikError, match=r"GET https://auth.test/api/v3/core/applications/"):
+        authentik.find(ak, "/core/applications/")
+
+
+def test_a_client_error_is_not_retried():
+    seen: list[int] = []
+
+    def deny(request: httpx.Request) -> httpx.Response:
+        seen.append(1)
+        return httpx.Response(403, json={})
+
+    ak = authentik.connect(
+        "auth.test", "tok", transport=httpx.MockTransport(deny), tries=5, retry_wait=0
+    )
+    with pytest.raises(AuthentikError):
+        authentik.find(ak, "/core/applications/")
+    assert len(seen) == 1
 
 
 def test_a_failed_request_names_the_url_and_not_the_token():

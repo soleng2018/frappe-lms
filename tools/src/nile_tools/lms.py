@@ -38,6 +38,7 @@ class Lms:
 
     http: httpx.Client
     retry_wait: float = 1.0
+    read_tries: int = READ_TRIES
 
 
 def connect(
@@ -47,6 +48,7 @@ def connect(
     *,
     transport: httpx.BaseTransport | None = None,
     retry_wait: float = 1.0,
+    read_tries: int = READ_TRIES,
 ) -> Lms:
     """Open a connection to `https://<host>` that signs every request with the API token."""
     http = httpx.Client(
@@ -55,7 +57,7 @@ def connect(
         timeout=30,
         transport=transport,
     )
-    return Lms(http, retry_wait)
+    return Lms(http, retry_wait, read_tries)
 
 
 def _server_message(body: Mapping[str, Any]) -> str:
@@ -96,7 +98,7 @@ def _describe(label: str, r: httpx.Response) -> str:
 
 
 def _send(lms: Lms, label: str, method: str, path: str, **kwargs: Any) -> httpx.Response:
-    tries = READ_TRIES if method == "GET" else 1  # a repeated write could duplicate
+    tries = lms.read_tries if method == "GET" else 1  # a repeated write could duplicate
     for attempt in range(1, tries + 1):
         try:
             r = lms.http.request(method, path, **kwargs)

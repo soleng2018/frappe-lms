@@ -41,7 +41,14 @@ class FakeLms:
         if doctype == "LMS Quiz":
             slug = re.sub(r"\W+", "-", data["title"].lower()).strip("-")
             return slug if slug not in self.of(doctype) else f"{slug}-2"
+        if doctype == "Social Login Key":  # Frappe names it after the provider
+            return re.sub(r"\W+", "_", data["provider_name"].lower())
         return f"{doctype[:3]}-{self.counter:04d}"
+
+    @staticmethod
+    def _masked(doc: dict[str, Any]) -> dict[str, Any]:
+        """Frappe returns a password field as stars."""
+        return {**doc, "client_secret": "*****"} if "client_secret" in doc else doc
 
     @staticmethod
     def _matches(doc: dict[str, Any], filters: list[list[Any]]) -> bool:
@@ -59,7 +66,7 @@ class FakeLms:
         if request.method == "GET":
             if name:
                 return (
-                    httpx.Response(200, json={"data": store[name]})
+                    httpx.Response(200, json={"data": self._masked(store[name])})
                     if name in store
                     else httpx.Response(404, json={"exc_type": "DoesNotExistError"})
                 )

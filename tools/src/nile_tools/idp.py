@@ -14,9 +14,11 @@ __all__ = [
     "MARKER",
     "SCOPE_NAMES",
     "SIGNING_KEY_NAME",
+    "Change",
     "ConfigProblem",
     "Refs",
     "Wanted",
+    "diff",
     "wanted_state",
 ]
 
@@ -54,6 +56,33 @@ class Wanted:
     provider: Mapping[str, Any]
     application: Mapping[str, Any]
     frappe_key: Mapping[str, Any]
+
+
+@dataclass(frozen=True)
+class Change:
+    """One managed field whose live value differs from the wanted one."""
+
+    item: str
+    field: str
+    wanted: Any
+
+
+def _canonical(field: str, value: Any) -> Any:
+    """Return a value in the form used to compare it: redirect URIs and mappings as exact sets."""
+    if field == "redirect_uris":
+        return frozenset((u.get("matching_mode"), u.get("url")) for u in value or [])
+    if field == "property_mappings":
+        return frozenset(str(v) for v in value or [])
+    return value
+
+
+def diff(item: str, wanted: Mapping[str, Any], live: Mapping[str, Any]) -> list[Change]:
+    """List a Change for each wanted field that the live record lacks or holds differently."""
+    return [
+        Change(item, field, value)
+        for field, value in wanted.items()
+        if _canonical(field, live.get(field)) != _canonical(field, value)
+    ]
 
 
 def redirect_uri(lms_hostname: str) -> str:

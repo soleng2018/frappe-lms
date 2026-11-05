@@ -1,6 +1,7 @@
 """A small client for the Authentik REST API. Errors name the URL and never carry the token."""
 
 import json
+import time
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
@@ -30,9 +31,18 @@ class Authentik:
     """An open connection: the http client holds the bearer header, so nothing else sees it."""
 
     http: httpx.Client
+    tries: int = 60  # with the 5 second step, a 5 minute window
+    retry_wait: float = 5.0
 
 
-def connect(host: str, token: str, *, transport: httpx.BaseTransport | None = None) -> Authentik:
+def connect(
+    host: str,
+    token: str,
+    *,
+    transport: httpx.BaseTransport | None = None,
+    tries: int = 60,
+    retry_wait: float = 5.0,
+) -> Authentik:
     """Open a connection to `https://<host>/api/v3` that signs every request with the token."""
     http = httpx.Client(
         base_url=f"https://{host}/api/v3/",
@@ -40,16 +50,25 @@ def connect(host: str, token: str, *, transport: httpx.BaseTransport | None = No
         timeout=30,
         transport=transport,
     )
-    return Authentik(http)
+    return Authentik(http, tries, retry_wait)
 
 
 def _call(ak: Authentik, method: str, path: str, **kwargs: Any) -> httpx.Response:
     path = path.lstrip("/")  # a leading slash would drop the /api/v3/ part of the base URL
     url = ak.http.base_url.join(path)
-    try:
-        r = ak.http.request(method, path, **kwargs)
-    except httpx.HTTPError as e:
-        raise AuthentikError(f"{method} {url} failed: {type(e).__name__}") from None
+    tries = 1 if method == "POST" else ak.tries  # a repeated create could duplicate
+    for attempt in range(1, tries + 1):
+        try:
+            r = ak.http.request(method, path, **kwargs)
+        except httpx.HTTPError as e:
+            if attempt < tries:
+                time.sleep(ak.retry_wait)
+                continue
+            raise AuthentikError(f"{method} {url} failed: {type(e).__name__}") from None
+        if r.status_code >= 500 and attempt < tries:
+            time.sleep(ak.retry_wait)
+            continue
+        break
     if r.is_success:
         return r
     try:

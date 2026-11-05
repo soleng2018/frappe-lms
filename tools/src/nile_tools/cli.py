@@ -136,7 +136,7 @@ def verify_deploy(root: Path) -> int:
     return verify.run(root, config.load_env(root).values)
 
 
-def idp_setup(root: Path) -> int:
+def idp_setup(root: Path, *, resync_secret: bool = False) -> int:
     """Create or finish the Authentik application, provider and Frappe key."""
     values = config.load_env(root).values
     host, key, secret, ak_host, token = (
@@ -151,7 +151,11 @@ def idp_setup(root: Path) -> int:
     )
     try:
         return idp_run.setup(
-            authentik.connect(ak_host, token), lms.connect(host, key, secret), values, print
+            authentik.connect(ak_host, token),
+            lms.connect(host, key, secret, retry_wait=5.0, read_tries=60),
+            values,
+            print,
+            resync_secret=resync_secret,
         )
     except (AuthentikError, LmsError, idp.ConfigProblem) as e:
         print(f"ERROR {e}", file=sys.stderr)
@@ -180,7 +184,14 @@ def _parser() -> argparse.ArgumentParser:
     ver_actions.add_parser("services", help="list the long running services, one per line")
     idp_cmd = commands.add_parser("idp", help="set up the Authentik sign in")
     idp_actions = idp_cmd.add_subparsers(dest="action", required=True)
-    idp_actions.add_parser("setup", help="create the Authentik application and the Frappe key")
+    setup_cmd = idp_actions.add_parser(
+        "setup", help="create or fix the Authentik application and the Frappe key"
+    )
+    setup_cmd.add_argument(
+        "--resync-secret",
+        action="store_true",
+        help="rewrite the Frappe client secret from Authentik",
+    )
     cfg = commands.add_parser("config", help="check, show or print the sample of the config file")
     actions = cfg.add_subparsers(dest="action", required=True)
     check = actions.add_parser("check", help="validate .env and the repo")
@@ -206,7 +217,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 return 0
             return verify_deploy(root)
         if args.command == "idp":
-            return idp_setup(root)
+            return idp_setup(root, resync_secret=args.resync_secret)
         if args.command == "sync":
             return sync(root, check=args.check)
         if args.action == "check":
