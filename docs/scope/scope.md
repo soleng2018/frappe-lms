@@ -34,7 +34,7 @@ _The Frappe links have not been read by `/scope`; `/architect` should read the o
 | 9 | Quiz pass rules & certificate | Slice 1 | done |
 | 10 | Branding & theme | Slice 2 | planned |
 | 11 | Guide format & full authoring | Slice 2 | done |
-| 12 | Manager progress view | Slice 3 | planned |
+| 12 | Manager progress view | Slice 3 | in-progress |
 | 13 | Monthly report | Slice 3 | planned |
 | 14 | Backup & restore | Slice 4 | planned |
 | 15 | Outbound email | Slice 4 | planned |
@@ -235,10 +235,20 @@ spec [0011](../specs/0011-guide-format-and-full-authoring/index.md) · code in `
 
 ## Slice 3: managers
 
-### 12. Manager progress view · needs a decision
+### 12. Manager progress view · in-progress
 Admins in `hol-admins` see each student's progress, quiz scores, and certificate status across all courses.
 **Done when:** an admin can list students and see who is not started, in progress, or certified; a student cannot see this view.
-- [ ] Design it (spec): `/architect manager progress view`
+spec [0013](../specs/0013-manager-progress-view.md) · code in `apps/nile_auth/nile_auth/nile_auth/report/`
+- [x] Design it (spec): `/architect manager progress view`
+- [x] Build it: `/develop manager progress view`
+  - [x] Thin thread: pure status rules, Learner Progress report with access check, live on the site (AC-1, AC-3, AC-4, AC-10)
+  - [x] Complete Learner Progress: flags, exclusions, quiz columns, activity, certificate, filters (AC-2, AC-3, AC-5, AC-6, AC-7, AC-11)
+  - [x] Quiz Scores report and links (AC-8, AC-9, AC-11)
+  - [x] Integration tests, README admin steps (AC-1 to AC-11)
+- [ ] Verify it: `/check verify manager progress view`
+- [ ] Test it: `/test manager progress view`
+- [ ] Review it (fresh model): `/check review manager progress view`
+- [ ] Document it: `/document manager progress view`
 
 ### 13. Monthly report · needs a decision
 An on demand report page with a CSV export that summarizes a chosen month: completions, scores, and who is behind.
