@@ -29,7 +29,7 @@ _The Frappe links have not been read by `/scope`; `/architect` should read the o
 | 4 | Data model (course, quiz, certificate, roles) | Foundation | done |
 | 5 | LMS running behind Traefik | Slice 1 | done |
 | 6 | IDP login (OIDC) | Slice 1 | done |
-| 7 | Group to role mapping | Slice 1 | in-progress |
+| 7 | Group to role mapping | Slice 1 | done |
 | 8 | Content sync, one course | Slice 1 | done |
 | 9 | Quiz pass rules & certificate | Slice 1 | planned |
 | 10 | Branding & theme | Slice 2 | planned |
@@ -130,7 +130,7 @@ spec [0008](../specs/0008-idp-login/index.md) · code in `tools/src/nile_tools/`
 - [x] Review it (fresh model): `/check review IDP login`
 - [x] Document it: `/document IDP login`
 
-### 7. Group to role mapping · in-progress
+### 7. Group to role mapping · done
 A learner in a group named exactly like a course gets that one course (spec 0009), and `hol-admins` become admins. The LMS only reads the groups.
 **Done when:** a user in a course group gets the student role and that one course, a `hol-admins` user gets admin, and a user in neither is refused. Group changes apply at the next login.
 spec [0006](../specs/0006-group-to-role-mapping/index.md), student rule replaced by spec [0009](../specs/0009-course-access-from-groups/index.md) (feature 17) · code in `apps/nile_auth/`, `deploy/scripts/create-site.sh`
@@ -142,8 +142,8 @@ spec [0006](../specs/0006-group-to-role-mapping/index.md), student rule replaced
   - [x] Safety: early state check, protected accounts, error handling, logs (AC-7, AC-8, AC-9, AC-10, AC-12)
   - [x] Live integration test and README (AC-1 to AC-11)
   - [x] Real Authentik sign in, once feature 6 is up (AC-1, AC-2, AC-3, AC-7)
-- [ ] Verify it: `/check verify group to role mapping`
-- [ ] Test it: `/test group to role mapping`
+- [x] Verify it: `/check verify group to role mapping`
+- [x] Test it: `/test group to role mapping`
 - [x] Review it (fresh model): `/check review group to role mapping`
 - [x] Document it: `/document group to role mapping`
 
