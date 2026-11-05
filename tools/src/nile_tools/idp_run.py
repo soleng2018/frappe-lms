@@ -123,6 +123,7 @@ def setup(
     _report("application", app_created, app_changes, say)
     _report("provider", provider_created, provider_changes, say)
     _frappe_key(connection, wanted.frappe_key, client_id, client_secret, resync_secret, say)
+    _guest_access(connection, say)
     _login_form(connection, on=False, say=say)  # always ends closed, so a rerun shuts a break glass
     say(f"Sign in at https://{values['LMS_HOSTNAME']}/login")
     return 0
@@ -176,6 +177,17 @@ def _login_form(connection: Lms, *, on: bool, say: Say) -> None:
             connection, idp.SYSTEM_SETTINGS, idp.SYSTEM_SETTINGS, _fields(changes), label=SETTINGS
         )
     _report("system-settings", False, changes, say)
+
+
+def _guest_access(connection: Lms, say: Say) -> None:
+    """Turn LMS guest access off, so a signed out visitor sees no page or site total."""
+    live = lms.get_record(connection, idp.LMS_SETTINGS, idp.LMS_SETTINGS)
+    changes = idp.diff("lms-settings", idp.GUEST_ACCESS_OFF, live)
+    if changes:
+        lms.update_record(
+            connection, idp.LMS_SETTINGS, idp.LMS_SETTINGS, _fields(changes), label=idp.LMS_SETTINGS
+        )
+    _report("lms-settings", False, changes, say)
 
 
 def password_login(connection: Lms, state: str, say: Say) -> int:
@@ -258,6 +270,9 @@ def check(
     verdicts.append(_judge_secret(public, connection, wanted, redirect, client_id))
     settings = lms.get_record(connection, SETTINGS, SETTINGS)
     verdicts.append(idp.judge_form(settings))
+    verdicts.append(
+        idp.judge_guest_access(lms.get_record(connection, idp.LMS_SETTINGS, idp.LMS_SETTINGS))
+    )
     discovery = _public(
         public, "GET", f"{base}/application/o/{slug}/.well-known/openid-configuration"
     )

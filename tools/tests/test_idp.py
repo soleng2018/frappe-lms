@@ -135,7 +135,8 @@ def test_setup_creates_application_provider_and_frappe_key(capsys):
     key = next(iter(lms.of("Social Login Key").values()))
     assert key["client_id"] == "cid" and key["client_secret"] == "s3cret-value"
     assert said[:3] == ["created application", "created provider", "created frappe-key"]
-    assert said[3:5] == [
+    assert said[3:6] == [
+        "fixed lms-settings: allow_guest_access",
         "fixed system-settings: disable_user_pass_login",
         "fixed system-settings: login_with_email_link",
     ]
@@ -175,6 +176,7 @@ def test_a_second_run_changes_nothing_and_keeps_the_secret():
         "unchanged application",
         "unchanged provider",
         "unchanged frappe-key",
+        "unchanged lms-settings",
         "unchanged system-settings",
     ]
     assert not [c for c in fake.calls if c[0] != "GET"]
@@ -448,7 +450,7 @@ def test_check_on_a_good_setup_is_all_pass_and_writes_nothing():
     code, said = run_check(fake, lms, public, user="real-user")
     assert code == 0
     assert all(line.startswith("PASS") for line in said), said
-    assert len(said) == 11
+    assert len(said) == 12
     posts = [path for method, path in fake.calls if method != "GET"]
     assert len(posts) == 1 and posts[0].endswith("/test/")  # the mapping test stores nothing
     assert len(lms.writes) == writes
@@ -607,3 +609,20 @@ def test_the_provider_grants_the_authorization_code_or_authentik_refuses_every_l
     assert wanted.provider["grant_types"] == ["authorization_code"]
     live = {**wanted.provider, "grant_types": []}  # what Authentik 2026.8 gives when none is sent
     assert [c.field for c in idp.diff("provider", wanted.provider, live)] == ["grant_types"]
+
+
+def test_setup_turns_guest_access_off_and_a_rerun_puts_it_back():
+    fake, lms = FakeAuthentik(), FakeLms()
+    assert "fixed lms-settings: allow_guest_access" in run_setup(fake, lms)
+    assert lms.of("LMS Settings")["LMS Settings"]["allow_guest_access"] == 0
+    lms.of("LMS Settings")["LMS Settings"]["allow_guest_access"] = 1  # someone switched it on
+    assert "fixed lms-settings: allow_guest_access" in run_setup(fake, lms)
+    assert lms.of("LMS Settings")["LMS Settings"]["allow_guest_access"] == 0
+
+
+def test_check_warns_while_guest_access_is_on():
+    fake, lms = good_setup()
+    lms.of("LMS Settings")["LMS Settings"]["allow_guest_access"] = 1
+    code, said = run_check(fake, lms, public_client()[0])
+    assert code == 0 and "WARN LMS allows guest access; `idp setup` turns it off" in said
+    assert idp.judge_guest_access({"allow_guest_access": 0}).level == idp.PASS

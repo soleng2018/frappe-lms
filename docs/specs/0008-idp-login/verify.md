@@ -46,6 +46,12 @@ _Build task 1 findings from the live probe (Authentik 2026.8.3, Frappe version-1
 - **userinfo groups**: the selftest holds no token. It asserts that Frappe stored the course group in `nile_groups`, which `nile_auth` writes only from the real userinfo `groups` list.
 - **Live result**: `idp selftest` passes all seven checks, a second run starts with nothing to clean, and a run killed with `docker kill` mid way was cleaned by the next run (six leftover items). The `integration` test `test_idp_selftest_integration.py` runs `setup`, `check` and `selftest` and finds no secret in their output.
 
-## Manual (open)
+## Guest access (found after the first real sign ins)
 
-- [ ] Sign in with a real browser as a member of `hol-admins` → lands on `/lms`, and the Desk opens with Moderator, Course Creator and Desk User, no LMS Student → AC-3, AC-10. Not automated: a test account in `hol-admins` would also get Cloudflare Access.
+- LMS Settings `allow_guest_access` was 1 (the LMS default), so a signed out visitor could read the Statistics charts (site totals of signups, enrollments, courses) and open the page shells. The REST data endpoints were already refused.
+- `idp setup` now sets it to 0 and reports `lms-settings`; `idp check` WARNs while it is on. Live, signed out: the charts, chart details, sidebar and job list answer empty, the course and batch lists answer 403. The `/lms/*` page shells still answer 200 (they are the static app); whether the app then sends a guest to `/login` is shown only in a browser, so it is the operator's check.
+- The spec's data model table needs an `LMS Settings` row (`allow_guest_access`). `/architect` owns that edit.
+
+## Manual
+
+- [x] Sign in with a real browser as a member of `hol-admins` → lands on `/lms`, and the Desk opens with Moderator, Course Creator and Desk User, no LMS Student → AC-3, AC-10. Not automated: a test account in `hol-admins` would also get Cloudflare Access. Done 2026-11-05 by the operator as shiv@nilesecure.com: log `outcome=ok mode=admin`, the user is a System User with exactly those three roles, no enrollment, and landed on `/lms`.

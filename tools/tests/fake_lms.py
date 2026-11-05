@@ -20,6 +20,7 @@ class FakeLms:
         self.fail_write: Callable[[int, str, str], httpx.Response | None] = lambda n, m, d: None
         self.counter = 0
         self.password_denied = False
+        self.seed("LMS Settings", "LMS Settings", allow_guest_access=1)
         # The single System Settings record, as a fresh site holds it.
         self.seed(
             "System Settings",

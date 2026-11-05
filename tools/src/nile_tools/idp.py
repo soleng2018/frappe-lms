@@ -13,8 +13,10 @@ __all__ = [
     "FAIL",
     "FRAPPE_KEY_NAME",
     "GROUPS_MAPPING_NAME",
+    "GUEST_ACCESS_OFF",
     "IMPLICIT_CONSENT_SLUG",
     "INVALIDATION_SLUG",
+    "LMS_SETTINGS",
     "MARKER",
     "PASS",
     "SCOPE_NAMES",
@@ -44,6 +46,7 @@ __all__ = [
     "judge_form",
     "judge_frappe_key",
     "judge_groups",
+    "judge_guest_access",
     "judge_login_page",
     "judge_provider",
     "judge_secret",
@@ -70,6 +73,9 @@ APP_NAME = "Nile Workshop LMS"
 PROVIDER_BUTTON = "Authentik"
 CALLBACK_PATH = f"/api/method/frappe.integrations.oauth2_logins.custom/{FRAPPE_KEY_NAME}"
 SYSTEM_SETTINGS = "System Settings"
+LMS_SETTINGS = "LMS Settings"
+# Guests would otherwise read the site totals and open the LMS pages without signing in.
+GUEST_ACCESS_OFF = {"allow_guest_access": 0}
 DEFAULT_LANGUAGE = "en"
 # Both states keep the email link off; only the password form comes back for the break glass.
 FORM_OFF = {"disable_user_pass_login": 1, "login_with_email_link": 0}
@@ -301,6 +307,13 @@ def judge_form(settings: Mapping[str, Any]) -> Verdict:
     if on:
         return Verdict(WARN, f"{' and '.join(on)} on; `idp setup` closes them")
     return Verdict(PASS, "password form and email link are off")
+
+
+def judge_guest_access(settings: Mapping[str, Any]) -> Verdict:
+    """WARN while LMS lets a signed out visitor in, since every page should need Authentik."""
+    if settings.get("allow_guest_access") in (1, True):
+        return Verdict(WARN, "LMS allows guest access; `idp setup` turns it off")
+    return Verdict(PASS, "LMS guest access is off")
 
 
 def judge_discovery(status: int | None) -> Verdict:
