@@ -3,19 +3,19 @@ _Steps derived from spec 0006 acceptance criteria. `/check verify` runs these; `
 
 ## UI / manual (needs feature 6, the real Authentik sign in)
 - [x] Superseded by spec 0009 AC-1: sign in with an Authentik test user in a course group → lands in that one course, enrolled in it only → AC-1 (proved by `idp selftest`, spec 0008)
-- [ ] Sign in with an Authentik test user in `hol-admins` → opens the Desk, has Moderator, Course Creator, Desk User, no LMS Student → AC-2
+- [x] Sign in with an Authentik test user in `hol-admins` → opens the Desk, has Moderator, Course Creator, Desk User, no LMS Student → AC-2 Done 2026-11-04 live: lands on `/lms`, roles Moderator, Course Creator, Desk User, System User, no enrollment.
 - [x] Sign in with a user in neither group → 403 page, no User created → AC-3 (proved by `idp selftest`, spec 0008)
-- [ ] Remove the test user from `hol-admins` in Authentik and sign in again → admin rights are gone, no System User → AC-5
+- [x] Remove the test user from `hol-admins` in Authentik and sign in again → admin rights are gone, no System User → AC-5 Done 2026-11-04 live: refused 403, roles gone, Website User.
 - [ ] Take the `groups` claim out of the Authentik scope and sign in → setup fault page, no one is demoted → AC-7
-- [ ] Change the test user's email in Authentik and sign in → refused, the old record is untouched → AC-8
-- [ ] Disable the test user in the LMS and sign in → "User is disabled", nothing changed → AC-9
-- [ ] With a session already open, remove the group and sign in again in another browser → the first session loses access at once (Value sourcing: roles) → AC-5
+- [ ] Change the test user's email in Authentik and sign in → refused, the old record is untouched → AC-8 NOT ticked 2026-11-04: a new email that matches nobody makes a new admin user (no takeover, so AC-8 allows it). Only an email that matches an existing user with another social id is refused; the live integration test `identity` covers that. Reword this step.
+- [x] Disable the test user in the LMS and sign in → "User is disabled", nothing changed → AC-9 Done 2026-11-04 live: callback shows the disabled page, no session, still disabled, nothing changed.
+- [x] With a session already open, remove the group and sign in again in another browser → the first session loses access at once (Value sourcing: roles) → AC-5 Done 2026-11-04 live: the open session got 403 on the Desk API at once.
 
 ## Commands
 - [x] `make test` → groups unit tests pass (35 cases, every near miss, odd prefix and suffix) → AC-4, AC-7
-- [x] `uv run --directory tools pytest -m integration tests/test_group_role_mapping_integration.py` → 14 pass → AC-1 to AC-11
-- [ ] `curl -s -o /dev/null -w '%{http_code}' -H 'Host: <site>' 'http://127.0.0.1:8000/api/method/frappe.integrations.oauth2_logins.custom/<provider>?code=x&state=bogus'` from the backend container → `417` before any code exchange → AC-10
-- [ ] `tail sites/<site>/logs/nile_auth.log` after the logins above → one line per login with email, outcome word, and groups, and no code or token → AC-12
+- [x] `uv run --directory tools pytest -m integration tests/test_group_role_mapping_integration.py` → 18 pass on 2026-11-04 → AC-1 to AC-11
+- [x] `curl -s -o /dev/null -w '%{http_code}' -H 'Host: <site>' 'http://127.0.0.1:8000/api/method/frappe.integrations.oauth2_logins.custom/<provider>?code=x&state=bogus'` from the backend container → `417` before any code exchange → AC-10
+- [x] `tail sites/<site>/logs/nile_auth.log` after the logins above → one line per login with email, outcome word, and groups, and no code or token → AC-12
 - [ ] Superseded by spec 0009 AC-5: vary the case and spelling of a course group name in the Authentik test group → counted for nothing → AC-4
 - [ ] Superseded by spec 0009: courses stay unpublished and a learner has one enrollment, the live course → AC-11
 - [ ] Superseded by spec 0009 AC-9: two logins of one existing person at the same moment → one enrollment, both finish → AC-6
