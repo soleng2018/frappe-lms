@@ -204,3 +204,29 @@ def test_update_sends_only_what_it_is_given() -> None:
         return httpx.Response(200, json={"data": {"name": "c", "title": "New"}})
 
     assert lms.update_record(client(handler), "LMS Course", "c", {"title": "New"})["title"] == "New"
+
+
+def test_logged_user_returns_the_name_the_token_signs_in_as() -> None:
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return httpx.Response(200, json={"message": "svc@example.com"})
+
+    assert lms.logged_user(client(handler)) == "svc@example.com"
+    assert seen[0].url.path == "/api/method/frappe.auth.get_logged_user"
+    assert seen[0].headers["Authorization"] == f"token key1:{SECRET}"
+
+
+def test_logged_user_names_the_url_when_the_answer_has_no_message() -> None:
+    with pytest.raises(LmsError, match=r"logged in user: GET .*get_logged_user sent no message"):
+        lms.logged_user(client(lambda r: httpx.Response(200, json={"data": 1})))
+
+
+def test_logged_user_names_the_status_when_frappe_refuses_the_token() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return frappe_error(401, "AuthenticationError", "Invalid token")
+
+    with pytest.raises(LmsError, match=r"HTTP 401.*AuthenticationError") as e:
+        lms.logged_user(client(handler))
+    assert SECRET not in str(e.value)

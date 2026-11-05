@@ -17,6 +17,7 @@ __all__ = [
     "find",
     "get",
     "get_one",
+    "set_password",
     "update",
 ]
 
@@ -114,3 +115,8 @@ def update(ak: Authentik, path: str, body: Mapping[str, object]) -> Record:
 def delete(ak: Authentik, path: str) -> None:
     """Delete one item."""
     _call(ak, "DELETE", path)
+
+
+def set_password(ak: Authentik, user_pk: int | str, password: str) -> None:
+    """Set a user's password; the answer has no body."""
+    _call(ak, "POST", f"/core/users/{user_pk}/set_password/", json={"password": password})

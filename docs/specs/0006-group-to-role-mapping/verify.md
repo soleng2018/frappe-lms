@@ -2,9 +2,9 @@
 _Steps derived from spec 0006 acceptance criteria. `/check verify` runs these; `/test` locks the durable ones._
 
 ## UI / manual (needs feature 6, the real Authentik sign in)
-- [ ] Superseded by spec 0009 AC-1: sign in with an Authentik test user in a course group → lands in that one course, enrolled in it only → AC-1
+- [x] Superseded by spec 0009 AC-1: sign in with an Authentik test user in a course group → lands in that one course, enrolled in it only → AC-1 (proved by `idp selftest`, spec 0008)
 - [ ] Sign in with an Authentik test user in `hol-admins` → opens the Desk, has Moderator, Course Creator, Desk User, no LMS Student → AC-2
-- [ ] Sign in with a user in neither group → 403 page, no User created → AC-3
+- [x] Sign in with a user in neither group → 403 page, no User created → AC-3 (proved by `idp selftest`, spec 0008)
 - [ ] Remove the test user from `hol-admins` in Authentik and sign in again → admin rights are gone, no System User → AC-5
 - [ ] Take the `groups` claim out of the Authentik scope and sign in → setup fault page, no one is demoted → AC-7
 - [ ] Change the test user's email in Authentik and sign in → refused, the old record is untouched → AC-8

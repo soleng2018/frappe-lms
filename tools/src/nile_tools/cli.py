@@ -2,6 +2,7 @@
 
 import argparse
 import os
+import signal
 import stat
 import sys
 import time
@@ -11,9 +12,11 @@ from pathlib import Path
 import httpx
 
 from nile_tools import authentik, checks, config, idp, idp_run, lms, verify
+from nile_tools import idp_selftest as idp_selftest_run
 from nile_tools.authentik import AuthentikError
 from nile_tools.config import ConfigError
 from nile_tools.contentfile import ContentError, load_course
+from nile_tools.idp_selftest import SelftestError
 from nile_tools.lms import LmsError
 from nile_tools.sync import run_sync
 
@@ -24,6 +27,7 @@ __all__ = [
     "idp_check",
     "idp_password_login",
     "idp_remove",
+    "idp_selftest",
     "idp_setup",
     "init",
     "main",
@@ -207,6 +211,34 @@ def idp_remove(root: Path) -> int:
         return 1
 
 
+def idp_selftest(root: Path) -> int:
+    """Sign throwaway users in through the real Authentik and LMS; 1 if any check fails."""
+    values = config.load_env(root).values
+
+    def stop(_signum: int, _frame: object) -> None:
+        signal.signal(signal.SIGTERM, signal.SIG_IGN)  # a second one must not cut the cleanup
+        raise KeyboardInterrupt  # runs the cleanup in `finally`, as for Ctrl+C
+
+    signal.signal(signal.SIGTERM, stop)
+    try:
+        return idp_selftest_run.selftest(
+            _authentik_from_env(values),
+            _lms_from_env(values),
+            lambda: httpx.Client(timeout=60),
+            values,
+            print,
+        )
+    except KeyboardInterrupt:
+        print(
+            "ERROR selftest interrupted; cleanup ran, and the next run sweeps any leftover",
+            file=sys.stderr,
+        )
+        return 1
+    except (AuthentikError, LmsError, idp.ConfigProblem, idp.Refused, SelftestError) as e:
+        print(f"ERROR {e}", file=sys.stderr)
+        return 1
+
+
 def _secret_values(root: Path) -> list[str]:
     """Return the secret values in .env, or none if the file cannot be read."""
     try:
@@ -240,6 +272,9 @@ def _parser() -> argparse.ArgumentParser:
     check_cmd = idp_actions.add_parser("check", help="report PASS, WARN or FAIL, writing nothing")
     check_cmd.add_argument("--user", help="a real Authentik username, to test the groups claim")
     idp_actions.add_parser("remove", help="delete only the items setup created")
+    idp_actions.add_parser(
+        "selftest", help="sign a throwaway student and a stranger in for real, then clean up"
+    )
     pw_cmd = idp_actions.add_parser(
         "password-login", help="switch Frappe's own password form on (break glass) or off"
     )
@@ -275,6 +310,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                 return idp_check(root, user=args.user)
             if args.action == "remove":
                 return idp_remove(root)
+            if args.action == "selftest":
+                return idp_selftest(root)
             return idp_setup(root, resync_secret=args.resync_secret)
         if args.command == "sync":
             return sync(root, check=args.check)

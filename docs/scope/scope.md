@@ -119,15 +119,15 @@ A script creates the OIDC application in Authentik through its API (only items i
 **Done when:** running the script on a clean setup lets a student sign in through Authentik and land in the LMS, and running it twice changes nothing.
 spec [0008](../specs/0008-idp-login/index.md) · code in `tools/src/nile_tools/`, `apps/nile_auth/`
 - [x] Design it (spec): `/architect IDP login`
-- [ ] Build it: `/develop IDP login`
+- [x] Build it: `/develop IDP login`
   - [x] Probe the live Authentik and Frappe, then the thin thread: `idp setup` creates the provider, application, and Frappe key (AC-1, AC-4, AC-6)
   - [x] Safe reruns: marker, diff and fix in place, secret rule, pre checks, retry and errors (AC-2, AC-4, AC-9)
   - [x] Close the bypasses: password form and email link off, `idp password-login on|off` (AC-5)
   - [x] `idp check` and `idp remove` (AC-7, AC-8)
-  - [ ] Landing on `/lms`, `idp selftest`, the manual admin sign in, and README with the break glass steps (AC-3, AC-10, AC-11, AC-12)
-- [ ] Verify it: `/check verify IDP login`
-- [ ] Test it: `/test IDP login`
-- [ ] Review it (fresh model): `/check review IDP login`
+  - [x] Landing on `/lms`, `idp selftest`, the manual admin sign in, and README with the break glass steps (AC-3, AC-10, AC-11, AC-12)
+- [x] Verify it: `/check verify IDP login`
+- [x] Test it: `/test IDP login`
+- [x] Review it (fresh model): `/check review IDP login`
 - [ ] Document it: `/document IDP login`
 
 ### 7. Group to role mapping · in-progress

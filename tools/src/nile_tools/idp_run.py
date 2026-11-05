@@ -24,6 +24,14 @@ def _need(found: Mapping[str, object] | None, what: str) -> str:
     return str(found["pk"])
 
 
+def _application(ak: Authentik, slug: str) -> Mapping[str, Any] | None:
+    """Find our application by slug. Without `superuser_full_list` Authentik lists only what the
+    token's user may open, and that list can come back empty after an application is made or
+    deleted, so a lookup would wrongly say the application is missing.
+    """
+    return authentik.get_one(ak, "/core/applications/", slug=slug, superuser_full_list="true")
+
+
 def lookup_refs(ak: Authentik) -> Refs:
     """Read the shared flows, signing key and scope mappings by slug or name; write nothing."""
     maps = authentik.find(ak, "/propertymappings/provider/scope/")
@@ -87,7 +95,7 @@ def setup(
     slug = str(wanted.application["slug"])
     provider_name = str(wanted.provider["name"])
     # Read everything first, so a refusal happens before the first write.
-    app = authentik.get_one(ak, "/core/applications/", slug=slug)
+    app = _application(ak, slug)
     provider = authentik.get_one(ak, "/providers/oauth2/", name=provider_name)
     if app is not None and app.get("meta_description") != idp.MARKER:
         raise AuthentikError(f"Authentik application '{slug}' exists without the ownership marker")
@@ -123,6 +131,7 @@ def setup(
     _report("application", app_created, app_changes, say)
     _report("provider", provider_created, provider_changes, say)
     _frappe_key(connection, wanted.frappe_key, client_id, client_secret, resync_secret, say)
+    _guest_access(connection, say)
     _login_form(connection, on=False, say=say)  # always ends closed, so a rerun shuts a break glass
     say(f"Sign in at https://{values['LMS_HOSTNAME']}/login")
     return 0
@@ -176,6 +185,17 @@ def _login_form(connection: Lms, *, on: bool, say: Say) -> None:
             connection, idp.SYSTEM_SETTINGS, idp.SYSTEM_SETTINGS, _fields(changes), label=SETTINGS
         )
     _report("system-settings", False, changes, say)
+
+
+def _guest_access(connection: Lms, say: Say) -> None:
+    """Turn LMS guest access off, so a signed out visitor sees no page or site total."""
+    live = lms.get_record(connection, idp.LMS_SETTINGS, idp.LMS_SETTINGS)
+    changes = idp.diff("lms-settings", idp.GUEST_ACCESS_OFF, live)
+    if changes:
+        lms.update_record(
+            connection, idp.LMS_SETTINGS, idp.LMS_SETTINGS, _fields(changes), label=idp.LMS_SETTINGS
+        )
+    _report("lms-settings", False, changes, say)
 
 
 def password_login(connection: Lms, state: str, say: Say) -> int:
@@ -234,7 +254,7 @@ def check(
     slug, lms_host = values["AUTHENTIK_APP_SLUG"], values["LMS_HOSTNAME"]
     base = f"https://{values['AUTHENTIK_HOSTNAME']}"
     verdicts.append(idp.judge_version(authentik.get(ak, "/admin/version/").get("version_current")))
-    app = authentik.get_one(ak, "/core/applications/", slug=slug)
+    app = _application(ak, slug)
     verdicts.append(idp.judge_application(app, slug))
     provider = authentik.get_one(ak, "/providers/oauth2/", name=f"{slug} provider")
     try:
@@ -258,6 +278,9 @@ def check(
     verdicts.append(_judge_secret(public, connection, wanted, redirect, client_id))
     settings = lms.get_record(connection, SETTINGS, SETTINGS)
     verdicts.append(idp.judge_form(settings))
+    verdicts.append(
+        idp.judge_guest_access(lms.get_record(connection, idp.LMS_SETTINGS, idp.LMS_SETTINGS))
+    )
     discovery = _public(
         public, "GET", f"{base}/application/o/{slug}/.well-known/openid-configuration"
     )
@@ -306,7 +329,7 @@ def remove(ak: Authentik, connection: Lms, values: Mapping[str, str], say: Say) 
     slug = values.get("AUTHENTIK_APP_SLUG", "")
     if not slug:
         raise idp.ConfigProblem("Config key AUTHENTIK_APP_SLUG is missing or blank in .env")
-    app = authentik.get_one(ak, "/core/applications/", slug=slug)
+    app = _application(ak, slug)
     if app is not None and app.get("meta_description") != idp.MARKER:
         raise AuthentikError(f"Authentik application '{slug}' exists without the ownership marker")
     name = idp.FRAPPE_KEY_NAME

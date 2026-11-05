@@ -52,7 +52,11 @@ class FakeAuthentik:
                 for s in (idp.IMPLICIT_CONSENT_SLUG, idp.INVALIDATION_SLUG)
             ],
             "crypto/certificatekeypairs/": [{"pk": "key-1", "name": idp.SIGNING_KEY_NAME}],
-            "core/applications/": list(self.apps.values()),
+            "core/applications/": (
+                list(self.apps.values())
+                if request.url.params.get("superuser_full_list") == "true"
+                else []  # the real default list can come back empty; only the full list is safe
+            ),
             "providers/oauth2/": list(self.providers.values()),
             "core/users/": [{"pk": 7, "username": "real-user"}],
         }
@@ -135,7 +139,8 @@ def test_setup_creates_application_provider_and_frappe_key(capsys):
     key = next(iter(lms.of("Social Login Key").values()))
     assert key["client_id"] == "cid" and key["client_secret"] == "s3cret-value"
     assert said[:3] == ["created application", "created provider", "created frappe-key"]
-    assert said[3:5] == [
+    assert said[3:6] == [
+        "fixed lms-settings: allow_guest_access",
         "fixed system-settings: disable_user_pass_login",
         "fixed system-settings: login_with_email_link",
     ]
@@ -175,6 +180,7 @@ def test_a_second_run_changes_nothing_and_keeps_the_secret():
         "unchanged application",
         "unchanged provider",
         "unchanged frappe-key",
+        "unchanged lms-settings",
         "unchanged system-settings",
     ]
     assert not [c for c in fake.calls if c[0] != "GET"]
@@ -448,7 +454,7 @@ def test_check_on_a_good_setup_is_all_pass_and_writes_nothing():
     code, said = run_check(fake, lms, public, user="real-user")
     assert code == 0
     assert all(line.startswith("PASS") for line in said), said
-    assert len(said) == 11
+    assert len(said) == 12
     posts = [path for method, path in fake.calls if method != "GET"]
     assert len(posts) == 1 and posts[0].endswith("/test/")  # the mapping test stores nothing
     assert len(lms.writes) == writes
@@ -600,3 +606,54 @@ def test_the_check_judges_are_pure_and_total():
     )
     assert idp.judge_bad_state(None).level == idp.FAIL
     assert idp.judge_frappe_key(None, {}, None).level == idp.FAIL
+
+
+def test_the_provider_grants_the_authorization_code_or_authentik_refuses_every_login():
+    wanted = idp.wanted_state(VALUES, REFS)
+    assert wanted.provider["grant_types"] == ["authorization_code"]
+    live = {**wanted.provider, "grant_types": []}  # what Authentik 2026.8 gives when none is sent
+    assert [c.field for c in idp.diff("provider", wanted.provider, live)] == ["grant_types"]
+
+
+def test_setup_turns_guest_access_off_and_a_rerun_puts_it_back():
+    fake, lms = FakeAuthentik(), FakeLms()
+    assert "fixed lms-settings: allow_guest_access" in run_setup(fake, lms)
+    assert lms.of("LMS Settings")["LMS Settings"]["allow_guest_access"] == 0
+    lms.of("LMS Settings")["LMS Settings"]["allow_guest_access"] = 1  # someone switched it on
+    assert "fixed lms-settings: allow_guest_access" in run_setup(fake, lms)
+    assert lms.of("LMS Settings")["LMS Settings"]["allow_guest_access"] == 0
+
+
+def test_check_warns_while_guest_access_is_on():
+    fake, lms = good_setup()
+    lms.of("LMS Settings")["LMS Settings"]["allow_guest_access"] = 1
+    code, said = run_check(fake, lms, public_client()[0])
+    assert code == 0 and "WARN LMS allows guest access; `idp setup` turns it off" in said
+    assert idp.judge_guest_access({"allow_guest_access": 0}).level == idp.PASS
+
+
+def test_set_password_posts_the_password_to_the_user_and_accepts_an_empty_answer():
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return httpx.Response(204)
+
+    ak = authentik.connect("auth.test", "tok", transport=httpx.MockTransport(handler))
+    authentik.set_password(ak, 7, "pw-value-123")
+    assert seen[0].method == "POST" and seen[0].url.path == "/api/v3/core/users/7/set_password/"
+    assert json.loads(seen[0].content) == {"password": "pw-value-123"}
+
+
+def test_set_password_failure_names_the_url_and_never_carries_the_password_or_token():
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(400, json={"password": ["This password is too short."]})
+
+    ak = authentik.connect("auth.test", "tok-secret-xyz", transport=httpx.MockTransport(handler))
+    with pytest.raises(AuthentikError) as e:
+        authentik.set_password(ak, 7, "pw-value-123")
+    message = str(e.value)
+    assert (
+        "https://auth.test/api/v3/core/users/7/set_password/" in message and "HTTP 400" in message
+    )
+    assert "pw-value-123" not in message and "tok-secret-xyz" not in message

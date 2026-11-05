@@ -1,7 +1,7 @@
 # The Nile Workshop course. One file, plus one markdown file per lab guide in content/labs/.
 # Every key is the record's identity in the LMS: change a title freely, never change a key.
 key: nile-workshop
-title: Nile Workshop
+title: Nile Certified Associate
 short_introduction: Learn the basics, then prove them in the hands on lab.
 description: A short video, a quiz on it, a lab guide, and a quiz on the lab. Pass both quizzes to earn the certificate.
 chapters:
