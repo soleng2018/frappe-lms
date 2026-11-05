@@ -1,7 +1,7 @@
 """Unit tests for nile_auth.groups.decide (spec 0006 AC-4, AC-5, AC-7). No Frappe needed."""
 
 import pytest
-from nile_auth.groups import decide
+from nile_auth.groups import decide, landing_path, safe_return_path
 
 ARGS = ("hol-admins", "NileWorkshop", "Admin")
 
@@ -89,3 +89,34 @@ def test_an_empty_setting_is_a_settings_fault(which: int, bad: object) -> None:
 def test_the_decision_is_immutable() -> None:
     with pytest.raises(AttributeError):
         decide(["hol-admins"], *ARGS).kind = "x"  # type: ignore[misc]
+
+
+@pytest.mark.parametrize(
+    "value", ["/lms/courses/x", "/lms", "/app?a=b", "/lms/%2Fok".replace("%2F", "a")]
+)
+def test_safe_return_path_accepts_paths_on_this_site(value) -> None:
+    assert safe_return_path(value) == value
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "//evil.example",
+        "https://evil.example",
+        "/\\evil",
+        "/%2Fevil",
+        "/%5cevil",
+        "/a\nb",
+        "",
+        None,
+        5,
+    ],
+)
+def test_safe_return_path_rejects_everything_else(value) -> None:
+    assert safe_return_path(value) is None
+
+
+def test_landing_path_defaults_to_lms() -> None:
+    assert landing_path("") == "/lms"
+    assert landing_path("//evil.example") == "/lms"
+    assert landing_path("/lms/courses/x") == "/lms/courses/x"

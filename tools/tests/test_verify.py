@@ -199,6 +199,13 @@ def test_label_on_other_service_and_network_fail():
     assert levels["compose labels"] == levels["compose networks"] == "FAIL"
 
 
+@pytest.mark.parametrize("service", ["tools", "backend"])
+def test_host_gateway_mapping_fails(service):
+    c = _compose()
+    c["services"][service]["extra_hosts"] = ["auth.example.com:host-gateway"]
+    assert _levels(verify.compose_results(c))["compose hosts"] == "FAIL"
+
+
 def test_wrong_host_rule_and_missing_restart_fail():
     c = _compose()
     labels = c["services"]["frontend"]["labels"]

@@ -22,7 +22,7 @@ from frappe.utils.oauth import (
 )
 
 from nile_auth import constants as c
-from nile_auth.groups import KIND_NO_CLAIM, KIND_NO_GROUP, Decision, decide
+from nile_auth.groups import KIND_NO_CLAIM, KIND_NO_GROUP, Decision, decide, landing_path
 
 __all__ = ["Outcome", "custom", "provision"]
 
@@ -92,7 +92,8 @@ def _read_committed() -> None:
 
 def _login(provider: str, code: str, state: str, seen: dict) -> str:
 	"""Run steps 2 to 9 of the flow. Returns the outcome word, or raises Refused."""
-	if not state or frappe.cache.get_value(f"{OAUTH_LOGIN_FLOW_CACHE_PREFIX}:{state}") is None:
+	kept = frappe.cache.get_value(f"{OAUTH_LOGIN_FLOW_CACHE_PREFIX}:{state}") if state else None
+	if kept is None:
 		raise Refused(c.OUTCOME_BAD_STATE, c.PAGE_BAD_STATE)
 
 	admin_group, prefix, suffix = (
@@ -129,8 +130,15 @@ def _login(provider: str, code: str, state: str, seen: dict) -> str:
 		provision(info, decision, email)
 	finally:
 		frappe.set_user("Guest")
-	login_oauth_user(info, provider=provider, state=state)
+	login_oauth_user(info, provider=provider, state=state)  # consumes the state, sets a redirect
+	_land(kept)
 	return c.OUTCOME_OK
+
+
+def _land(kept: str) -> None:
+	"""Send a signed in person to `/lms`, or to a safe deep link kept in the state (AC-10)."""
+	if frappe.local.response.get("type") == "redirect":
+		frappe.local.response["location"] = landing_path(kept)
 
 
 def _refuse_if_protected(name: str, info: dict, provider: str) -> None:

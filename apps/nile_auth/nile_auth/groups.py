@@ -6,8 +6,9 @@ from typing import Any
 
 from nile_auth.constants import ADMIN_ROLES, STUDENT_ROLES
 
-__all__ = ["Decision", "decide"]
+__all__ = ["LANDING_PATH", "Decision", "decide", "landing_path", "safe_return_path"]
 
+LANDING_PATH = "/lms"  # where everyone lands after a sign in (spec 0008 AC-10)
 KIND_MEMBER = "member"
 KIND_NO_GROUP = "no_group"
 KIND_NO_CLAIM = "no_claim"
@@ -46,3 +47,19 @@ def decide(groups: Any, admin_group: Any, prefix: Any, suffix: Any) -> Decision:
 
 	roles = (ADMIN_ROLES if is_admin else ()) + (STUDENT_ROLES if workshop else ())
 	return Decision(KIND_MEMBER, "", workshop, matched, is_admin, roles)
+
+
+def safe_return_path(value: Any) -> str | None:
+	"""Return `value` if it is a path on this site, else None (spec 0008 AC-10)."""
+	if not isinstance(value, str) or not value.startswith("/") or value.startswith("//"):
+		return None
+	if any(ord(ch) < 32 or ord(ch) == 127 or ch == "\\" for ch in value):
+		return None
+	if value[1:4].lower() in ("%2f", "%5c"):
+		return None
+	return value
+
+
+def landing_path(redirect_to: Any) -> str:
+	"""Where a person lands: the kept deep link when it is a path on this site, else `/lms`."""
+	return safe_return_path(redirect_to) or LANDING_PATH

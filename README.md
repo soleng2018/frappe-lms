@@ -12,7 +12,7 @@ You need all of these before you start.
 | `make`, `git`, `curl`, `sha256sum` | The Makefile and the build scripts use them. |
 | An existing Traefik v3 container on an external Docker network (default name `traefik`) with a `websecure` entrypoint and a `letsencrypt` certificate resolver | Routes HTTPS to the LMS. This repo does not start Traefik. |
 | A public DNS name for the LMS (for example `guide.nile.global`) pointing at the host that runs Traefik | It becomes the Frappe site name and the Traefik host rule. It cannot change after the first start. |
-| A running Authentik with admin access | Students and admins log in through it. |
+| A running Authentik with admin access, holding the `HOL: OpenID groups scope` property mapping, the `default-provider-authorization-implicit-consent` flow and a self signed certificate | Students and admins log in through it. `idp setup` stops with a named error if one of these is missing, and never edits them. |
 | Internet access during the first build | Pulls the base images and clones Frappe, LMS and payments at pinned tags. |
 | `sudo` on the host and access to the Cloudflare dashboard of your zone | `make restart-test` kills container processes with `sudo kill -9`. The Cloudflare step in section 6 makes plain HTTP redirect to HTTPS. |
 | `uv` and Python 3.12 (only if you run the `tools` code or tests on the host) | Lint and unit tests. Not needed to run the stack. |
@@ -86,6 +86,16 @@ The first `make up` builds the image, which takes a while. `configurator` and `c
 The stack tests need the stack running and a `.env`: run `cd tools && uv run pytest -m integration`. They rerun `create-site` against your live site, which keeps it and changes nothing except pending migrations.
 
 Style: `tools/` uses spaces and 100 columns, `apps/nile_auth/` follows Frappe (tabs, 110 columns). Details in [spec 0003](docs/specs/0003-coding-standards-and-tooling.md).
+
+### Signing in and break glass
+
+After `idp setup`, the only way into the LMS is the Authentik button. Everyone lands on `/lms` after signing in (a safe deep link on this site is kept). If Authentik is down and you must get in as `Administrator`:
+
+1. `make tools CMD="idp password-login on"` brings back the password form.
+2. Sign in as `Administrator`.
+3. `make tools CMD="idp password-login off"` closes it again. Running `idp setup` also closes it.
+
+Changing the login landing code needs a new image: `make up` after the `nile_auth` version bump.
 
 ## 5. Course content
 
