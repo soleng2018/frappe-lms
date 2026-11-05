@@ -39,7 +39,7 @@ _The Frappe links have not been read by `/scope`; `/architect` should read the o
 | 14 | Backup & restore | Slice 4 | planned |
 | 15 | Outbound email | Slice 4 | planned |
 | 16 | Health checks & error monitoring | Slice 4 | planned |
-| 17 | Course access from course groups | Slice 1 | in-progress |
+| 17 | Course access from course groups | Slice 1 | done |
 
 ## Foundations
 
@@ -135,13 +135,13 @@ A learner in a group named exactly like a course gets that one course (spec 0009
 **Done when:** a user in a course group gets the student role and that one course, a `hol-admins` user gets admin, and a user in neither is refused. Group changes apply at the next login.
 spec [0006](../specs/0006-group-to-role-mapping/index.md), student rule replaced by spec [0009](../specs/0009-course-access-from-groups/index.md) (feature 17) · code in `apps/nile_auth/`, `deploy/scripts/create-site.sh`
 - [x] Design it (spec): `/architect group to role mapping`
-- [ ] Build it: `/develop group to role mapping`
+- [x] Build it: `/develop group to role mapping`
   - [x] Probe the live site, add the `nile_service_user` site setting, and the pure group check with unit tests (AC-4, AC-7)
   - [x] Thin thread: the callback override creates a student and refuses everyone else (AC-1, AC-3)
   - [x] Batches, enrollments, `nile_groups`, admin and both paths, role reconcile (AC-1, AC-2, AC-5, AC-6, AC-11)
   - [x] Safety: early state check, protected accounts, error handling, logs (AC-7, AC-8, AC-9, AC-10, AC-12)
   - [x] Live integration test and README (AC-1 to AC-11)
-  - [ ] Real Authentik sign in, once feature 6 is up (AC-1, AC-2, AC-3, AC-7)
+  - [x] Real Authentik sign in, once feature 6 is up (AC-1, AC-2, AC-3, AC-7)
 - [ ] Verify it: `/check verify group to role mapping`
 - [ ] Test it: `/test group to role mapping`
 - [x] Review it (fresh model): `/check review group to role mapping`
@@ -167,7 +167,7 @@ A student passes each quiz at 80% or higher, with a limited number of retakes, a
 **Done when:** a student who scores 80% or more on both quizzes gets a downloadable certificate, a lower score does not, and retakes stop at the limit. The retake limit is a number to settle in the spec.
 - [ ] Design it (spec): `/architect quiz pass rules & certificate`
 
-### 17. Course access from course groups · in-progress
+### 17. Course access from course groups · done
 A learner gets only the course they booked. The reservation app puts the learner in an Authentik group named exactly like the course, and Frappe enrolls them in that course only and removes any other course enrollment. Courses stay unpublished, so other courses are hidden and cannot be self enrolled. After the slot a known learner can still sign in and sees only their certificate. Two course groups at once are refused with a clear message.
 **Done when:** a learner in the group for course A is enrolled in A only and cannot read or enroll in course B, a learner with no course group reaches only their certificate, two groups at once are refused, and content sync keeps courses unpublished and out of batches. The reservation app and Authentik parts are a contract, built in their own repositories.
 spec [0009](../specs/0009-course-access-from-groups/index.md) · code in `apps/nile_auth/`, `tools/src/nile_tools/`, `deploy/`
@@ -179,8 +179,8 @@ spec [0009](../specs/0009-course-access-from-groups/index.md) · code in `apps/n
   - [x] Landing on the course or the profile (AC-11)
   - [x] Content sync keeps courses unpublished and out of batches, and the two student group keys are retired (AC-12, AC-14)
   - [x] Live integration tests, then remove the batch code and the READ COMMITTED setting, then README, cleanup function, and version bump (AC-1 to AC-13)
-- [ ] Verify it: `/check verify course access from groups`
-- [ ] Test it: `/test course access from groups`
+- [x] Verify it: `/check verify course access from groups`
+- [x] Test it: `/test course access from groups`
 - [x] Review it (fresh model): `/check review course access from groups`
 - [x] Document it: `/document course access from groups`
 
