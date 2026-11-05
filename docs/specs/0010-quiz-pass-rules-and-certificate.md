@@ -1,7 +1,7 @@
 # 0010. Pass every quiz at 80% or more, then request a shareable certificate
 
 **Date**: 2026-11-04
-**Status**: In Progress
+**Status**: Accepted
 
 ## Summary
 

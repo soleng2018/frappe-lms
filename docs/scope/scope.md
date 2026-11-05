@@ -31,7 +31,7 @@ _The Frappe links have not been read by `/scope`; `/architect` should read the o
 | 6 | IDP login (OIDC) | Slice 1 | done |
 | 7 | Group to role mapping | Slice 1 | done |
 | 8 | Content sync, one course | Slice 1 | done |
-| 9 | Quiz pass rules & certificate | Slice 1 | in-progress |
+| 9 | Quiz pass rules & certificate | Slice 1 | done |
 | 10 | Branding & theme | Slice 2 | planned |
 | 11 | Guide format & full authoring | Slice 2 | planned |
 | 12 | Manager progress view | Slice 3 | planned |
@@ -162,7 +162,7 @@ spec [0005](../specs/0005-content-sync/index.md) · code in `tools/src/nile_tool
 - [x] Review it (fresh model): `/check review content sync`
 - [x] Document it: `/document content sync`
 
-### 9. Quiz pass rules & certificate · in progress
+### 9. Quiz pass rules & certificate · done
 A student passes each quiz at 80% or higher, with 3 attempts per quiz, and earns a certificate after every lesson and quiz is complete. A hol-admin publishes the certificate on request, so its link works for LinkedIn.
 **Done when:** a student who scores 80% or more on every quiz can request a downloadable certificate, a lower score does not, retakes stop at 3 attempts, and a published certificate link opens for a guest. The content check refuses a pass mark under 80.
 spec [0010](../specs/0010-quiz-pass-rules-and-certificate.md) · code in `tools/src/nile_tools/content.py`, `apps/nile_auth/`
@@ -174,7 +174,7 @@ spec [0010](../specs/0010-quiz-pass-rules-and-certificate.md) · code in `tools/
   - [x] Integration test and README steps for students and admins (AC-2 to AC-8)
   - [x] Let a Moderator publish or unpublish after the learner is removed: `nile_auth` certificate override, version bump, rebuilt image, test and README (AC-10)
 - [x] Verify it: `/check verify quiz pass rules & certificate`
-- [ ] Test it: `/test quiz pass rules & certificate`
+- [x] Test it: `/test quiz pass rules & certificate`
 - [x] Review it (fresh model): `/check review quiz pass rules & certificate`
 - [ ] Document it: `/document quiz pass rules & certificate`
 
