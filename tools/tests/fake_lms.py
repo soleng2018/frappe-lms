@@ -19,6 +19,14 @@ class FakeLms:
         self.writes: list[tuple[str, str, str]] = []  # method, doctype, name
         self.fail_write: Callable[[int, str, str], httpx.Response | None] = lambda n, m, d: None
         self.counter = 0
+        # The single System Settings record, as a fresh site holds it.
+        self.seed(
+            "System Settings",
+            "System Settings",
+            language="en",
+            disable_user_pass_login=0,
+            login_with_email_link=1,
+        )
 
     def client(self) -> lms.Lms:
         return lms.connect(

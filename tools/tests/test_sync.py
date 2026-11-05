@@ -59,7 +59,7 @@ def built() -> FakeLms:
 
 def test_a_clean_site_gets_the_whole_course() -> None:
     fake = built()
-    kinds = {t: len(d) for t, d in fake.docs.items() if d}
+    kinds = {t: len(d) for t, d in fake.docs.items() if d and t != "System Settings"}
     assert kinds == {
         "LMS Course": 1,
         "Course Chapter": 2,
@@ -67,7 +67,12 @@ def test_a_clean_site_gets_the_whole_course() -> None:
         "LMS Quiz": 2,
         "LMS Question": 2,
     }
-    assert all(d["nile_key"] for docs in fake.docs.values() for d in docs.values())
+    assert all(
+        d["nile_key"]
+        for t, docs in fake.docs.items()
+        if t != "System Settings"
+        for d in docs.values()
+    )
     c = fake.by_key("LMS Course", "c")
     assert (
         c["published"],

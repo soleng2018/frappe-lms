@@ -14,11 +14,15 @@ __all__ = [
     "MARKER",
     "SCOPE_NAMES",
     "SIGNING_KEY_NAME",
+    "SYSTEM_SETTINGS",
     "Change",
     "ConfigProblem",
     "Refs",
+    "Refused",
     "Wanted",
     "diff",
+    "key_enabled",
+    "login_form_state",
     "wanted_state",
 ]
 
@@ -32,11 +36,20 @@ SIGNING_KEY_NAME = "authentik Self-signed Certificate"
 APP_NAME = "Nile Workshop LMS"
 PROVIDER_BUTTON = "Authentik"
 CALLBACK_PATH = f"/api/method/frappe.integrations.oauth2_logins.custom/{FRAPPE_KEY_NAME}"
+SYSTEM_SETTINGS = "System Settings"
+DEFAULT_LANGUAGE = "en"
+# Both states keep the email link off; only the password form comes back for the break glass.
+FORM_OFF = {"disable_user_pass_login": 1, "login_with_email_link": 0}
+FORM_ON = {"disable_user_pass_login": 0, "login_with_email_link": 0}
 AUTH_URL_DATA = '{"response_type":"code","scope":"openid profile email groups"}'
 
 
 class ConfigProblem(Exception):
     """A needed setting is missing; the message names the key."""
+
+
+class Refused(Exception):
+    """A command declined to run because it would lock people out; the message says why."""
 
 
 @dataclass(frozen=True)
@@ -133,3 +146,19 @@ def wanted_state(values: Mapping[str, str], refs: Refs) -> Wanted:
         "user_id_property": "sub",
     }
     return Wanted(provider, application, frappe_key)
+
+
+def login_form_state(on: bool, live: Mapping[str, Any]) -> dict[str, Any]:
+    """Return the System Settings values for the form on (break glass) or off.
+
+    Frappe will not save System Settings with a blank Language, so a blank one gets its default.
+    """
+    wanted: dict[str, Any] = dict(FORM_ON if on else FORM_OFF)
+    if not live.get("language"):
+        wanted["language"] = DEFAULT_LANGUAGE
+    return wanted
+
+
+def key_enabled(record: Mapping[str, Any] | None) -> bool:
+    """Say whether the Social Login Key record exists and is switched on."""
+    return record is not None and record.get("enable_social_login") in (1, True)

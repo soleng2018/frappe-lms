@@ -21,7 +21,13 @@ _Build task 1 findings from the live probe (Authentik 2026.8.3, Frappe version-1
 - **`tools` to Authentik**: the old host gateway mapping hit this host's Traefik, which answers 404 for Authentik. The mapping is removed (specs 0001, 0002 and 0008 amended).
 - **Thin thread result**: `idp setup` created the application, the provider and the Frappe key. The login page shows `Login with Authentik`, and a callback with a bad `state` answers 417.
 
+## Bypasses closed (task 4, probed on the live site)
+
+- **System Settings over REST**: `PUT /api/resource/System Settings/System Settings` works for the service user, but Frappe refuses the save while `language` is blank (`MandatoryError`). Setup and `password-login` therefore send `language: en` when it is blank, and report it as `fixed system-settings: language`.
+- **After setup**: the login page shows `Login with Authentik`, no password field, and no email link text. `POST /api/method/login` answers 401 `Login with username and password is not allowed.` `send_login_link` returns nothing and sends nothing, and `login_via_key` needs a key that only `send_login_link` creates.
+- **Service user**: its API token still answers `get_logged_user` with the form off.
+- **Break glass**: `idp password-login on` lets `Administrator` sign in (HTTP 200 on `/api/method/login`) and `off` refuses it again (401). The email link stays off in both states. No `bench execute` fallback is needed.
+
 ## Still to probe
 
-- Whether `Administrator` can sign in with the form off, and the break glass wording (task 4).
 - The authentication flow stages, the `hol-labs-access` policy against the test group name, and the links that block a Frappe User delete (task 7).

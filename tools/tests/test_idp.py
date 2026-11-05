@@ -115,6 +115,10 @@ def test_setup_creates_application_provider_and_frappe_key(capsys):
     key = next(iter(lms.of("Social Login Key").values()))
     assert key["client_id"] == "cid" and key["client_secret"] == "s3cret-value"
     assert said[:3] == ["created application", "created provider", "created frappe-key"]
+    assert said[3:5] == [
+        "fixed system-settings: disable_user_pass_login",
+        "fixed system-settings: login_with_email_link",
+    ]
     assert all("s3cret-value" not in line for line in said)
     assert said[-1] == "Sign in at https://lms.example.com/login"
 
@@ -151,6 +155,7 @@ def test_a_second_run_changes_nothing_and_keeps_the_secret():
         "unchanged application",
         "unchanged provider",
         "unchanged frappe-key",
+        "unchanged system-settings",
     ]
     assert not [c for c in fake.calls if c[0] != "GET"]
     assert len(lms.writes) == writes[1]
@@ -210,7 +215,7 @@ def test_resync_secret_rewrites_only_the_secret():
     run_setup(fake, lms)
     lms.of("Social Login Key")["authentik"]["client_secret"] = "stale"
     said = run_setup(fake, lms, resync_secret=True)
-    assert said[2:] == ["fixed frappe-key: client_secret"]
+    assert said[2:3] == ["fixed frappe-key: client_secret"]
     assert lms.of("Social Login Key")["authentik"]["client_secret"] == "s3cret-value"
 
 
@@ -219,10 +224,10 @@ def test_a_half_done_setup_is_finished_by_running_it_again():
     run_setup(fake, lms)
     # The run stopped after creating the application: no provider, no key, nothing attached.
     fake.providers.clear()
-    lms.docs.clear()
+    lms.docs.pop("Social Login Key")
     fake.apps["Nile Workshop LMS"]["provider"] = None
     said = run_setup(fake, lms)
-    assert said[1:] == ["created provider", "created frappe-key"]
+    assert said[1:3] == ["created provider", "created frappe-key"]
     assert fake.apps["Nile Workshop LMS"]["provider"] == fake.providers["nile-lms provider"]["pk"]
 
 
@@ -294,3 +299,80 @@ def test_a_failed_request_names_the_url_and_not_the_token():
         authentik.find(ak, "/core/applications/")
     assert "https://auth.test/api/v3/core/applications/" in str(e.value)
     assert "tok-123" not in str(e.value)
+
+
+def settings(lms: FakeLms) -> tuple[int, int]:
+    doc = lms.of("System Settings")["System Settings"]
+    return doc["disable_user_pass_login"], doc["login_with_email_link"]
+
+
+def test_setup_closes_the_password_form_and_the_email_link():
+    fake, lms = FakeAuthentik(), FakeLms()
+    run_setup(fake, lms)
+    assert settings(lms) == (1, 0)
+
+
+def test_password_login_on_opens_only_the_form_and_off_closes_it_again():
+    fake, lms = FakeAuthentik(), FakeLms()
+    run_setup(fake, lms)
+    said: list[str] = []
+    assert idp_run.password_login(lms.client(), "on", said.append) == 0
+    assert settings(lms) == (0, 0)  # the email link stays off
+    assert said == ["fixed system-settings: disable_user_pass_login", "password login is on"]
+    said.clear()
+    assert idp_run.password_login(lms.client(), "off", said.append) == 0
+    assert settings(lms) == (1, 0)
+    assert said[-1] == "password login is off"
+
+
+def test_password_login_is_idempotent():
+    fake, lms = FakeAuthentik(), FakeLms()
+    run_setup(fake, lms)
+    writes = len(lms.writes)
+    said: list[str] = []
+    idp_run.password_login(lms.client(), "off", said.append)
+    assert said == ["unchanged system-settings", "password login is off"]
+    assert len(lms.writes) == writes
+
+
+def test_a_rerun_closes_a_break_glass_left_open():
+    fake, lms = FakeAuthentik(), FakeLms()
+    run_setup(fake, lms)
+    idp_run.password_login(lms.client(), "on", lambda _: None)
+    assert run_setup(fake, lms)[-1] == "fixed system-settings: disable_user_pass_login"
+    assert settings(lms) == (1, 0)
+
+
+@pytest.mark.parametrize("enabled", [None, 0])
+def test_off_refuses_without_an_enabled_authentik_key(enabled):
+    lms = FakeLms()
+    if enabled is not None:
+        lms.seed("Social Login Key", "authentik", enable_social_login=enabled)
+    with pytest.raises(idp.Refused, match="stays as it is"):
+        idp_run.password_login(lms.client(), "off", lambda _: None)
+    assert settings(lms) == (0, 1)
+    assert not lms.writes
+
+
+def test_on_needs_no_key():
+    lms = FakeLms()
+    assert idp_run.password_login(lms.client(), "on", lambda _: None) == 0
+    assert settings(lms) == (0, 0)
+
+
+def test_login_form_state_never_turns_the_email_link_on():
+    live = {"language": "en"}
+    assert idp.login_form_state(True, live)["login_with_email_link"] == 0
+    assert idp.login_form_state(False, live) == {
+        "disable_user_pass_login": 1,
+        "login_with_email_link": 0,
+    }
+    assert not idp.key_enabled(None) and idp.key_enabled({"enable_social_login": 1})
+
+
+def test_a_blank_language_is_filled_because_frappe_will_not_save_without_it():
+    fake, lms = FakeAuthentik(), FakeLms()
+    lms.of("System Settings")["System Settings"]["language"] = None
+    assert "fixed system-settings: language" in run_setup(fake, lms)
+    assert lms.of("System Settings")["System Settings"]["language"] == "en"
+    assert settings(lms) == (1, 0)

@@ -8,10 +8,11 @@ from nile_tools.authentik import Authentik, AuthentikError
 from nile_tools.idp import Refs
 from nile_tools.lms import Lms
 
-__all__ = ["lookup_refs", "setup"]
+__all__ = ["lookup_refs", "password_login", "setup"]
 
 Say = Callable[[str], None]
 SOCIAL_KEY = "Social Login Key"
+SETTINGS = "System Settings"
 
 
 def _need(found: Mapping[str, object] | None, what: str) -> str:
@@ -119,6 +120,7 @@ def setup(
     _report("application", app_created, app_changes, say)
     _report("provider", provider_created, provider_changes, say)
     _frappe_key(connection, wanted.frappe_key, client_id, client_secret, resync_secret, say)
+    _login_form(connection, on=False, say=say)  # always ends closed, so a rerun shuts a break glass
     say(f"Sign in at https://{values['LMS_HOSTNAME']}/login")
     return 0
 
@@ -148,3 +150,34 @@ def _frappe_key(
     if write:
         lms.update_record(connection, SOCIAL_KEY, name, write, label=f"{SOCIAL_KEY} {name}")
     _report("frappe-key", False, changes, say)
+
+
+def _require_enabled_key(connection: Lms) -> None:
+    """Refuse to close the password form unless the Authentik button will work."""
+    found = lms.list_records(connection, SOCIAL_KEY, filters=[["name", "=", idp.FRAPPE_KEY_NAME]])
+    if not found or not idp.key_enabled(found[0]):
+        raise idp.Refused(
+            f"No enabled {SOCIAL_KEY} '{idp.FRAPPE_KEY_NAME}' exists, so the password form stays "
+            "as it is; run `idp setup` first"
+        )
+
+
+def _login_form(connection: Lms, *, on: bool, say: Say) -> None:
+    """Set the password form and email link; closing it needs an enabled Authentik key."""
+    if not on:
+        _require_enabled_key(connection)
+    live = lms.get_record(connection, idp.SYSTEM_SETTINGS, idp.SYSTEM_SETTINGS)
+    changes = idp.diff("system-settings", idp.login_form_state(on, live), live)
+    if changes:
+        lms.update_record(
+            connection, idp.SYSTEM_SETTINGS, idp.SYSTEM_SETTINGS, _fields(changes), label=SETTINGS
+        )
+    _report("system-settings", False, changes, say)
+
+
+def password_login(connection: Lms, state: str, say: Say) -> int:
+    """Switch Frappe's own password form `on` (break glass) or `off`, and report the state."""
+    on = state == "on"
+    _login_form(connection, on=on, say=say)
+    say(f"password login is {state}")
+    return 0

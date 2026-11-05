@@ -21,6 +21,7 @@ __all__ = [
     "ConfigError",
     "config_check",
     "config_show",
+    "idp_password_login",
     "idp_setup",
     "init",
     "main",
@@ -136,28 +137,36 @@ def verify_deploy(root: Path) -> int:
     return verify.run(root, config.load_env(root).values)
 
 
+def _lms_from_env(values: Mapping[str, str]) -> lms.Lms:
+    host, key, secret = (
+        _require(values, k) for k in ("LMS_HOSTNAME", "LMS_API_KEY", "LMS_API_SECRET")
+    )
+    return lms.connect(host, key, secret, retry_wait=5.0, read_tries=60)
+
+
+def idp_password_login(root: Path, state: str) -> int:
+    """Switch Frappe's password form on (break glass) or off."""
+    values = config.load_env(root).values
+    try:
+        return idp_run.password_login(_lms_from_env(values), state, print)
+    except (LmsError, idp.Refused) as e:
+        print(f"ERROR {e}", file=sys.stderr)
+        return 1
+
+
 def idp_setup(root: Path, *, resync_secret: bool = False) -> int:
     """Create or finish the Authentik application, provider and Frappe key."""
     values = config.load_env(root).values
-    host, key, secret, ak_host, token = (
-        _require(values, k)
-        for k in (
-            "LMS_HOSTNAME",
-            "LMS_API_KEY",
-            "LMS_API_SECRET",
-            "AUTHENTIK_HOSTNAME",
-            "AUTHENTIK_API_TOKEN",
-        )
-    )
+    ak_host, token = (_require(values, k) for k in ("AUTHENTIK_HOSTNAME", "AUTHENTIK_API_TOKEN"))
     try:
         return idp_run.setup(
             authentik.connect(ak_host, token),
-            lms.connect(host, key, secret, retry_wait=5.0, read_tries=60),
+            _lms_from_env(values),
             values,
             print,
             resync_secret=resync_secret,
         )
-    except (AuthentikError, LmsError, idp.ConfigProblem) as e:
+    except (AuthentikError, LmsError, idp.ConfigProblem, idp.Refused) as e:
         print(f"ERROR {e}", file=sys.stderr)
         return 1
 
@@ -192,6 +201,10 @@ def _parser() -> argparse.ArgumentParser:
         action="store_true",
         help="rewrite the Frappe client secret from Authentik",
     )
+    pw_cmd = idp_actions.add_parser(
+        "password-login", help="switch Frappe's own password form on (break glass) or off"
+    )
+    pw_cmd.add_argument("state", choices=["on", "off"])
     cfg = commands.add_parser("config", help="check, show or print the sample of the config file")
     actions = cfg.add_subparsers(dest="action", required=True)
     check = actions.add_parser("check", help="validate .env and the repo")
@@ -217,6 +230,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                 return 0
             return verify_deploy(root)
         if args.command == "idp":
+            if args.action == "password-login":
+                return idp_password_login(root, args.state)
             return idp_setup(root, resync_secret=args.resync_secret)
         if args.command == "sync":
             return sync(root, check=args.check)

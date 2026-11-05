@@ -122,7 +122,7 @@ spec [0008](../specs/0008-idp-login/index.md) · code in `tools/src/nile_tools/`
 - [ ] Build it: `/develop IDP login`
   - [x] Probe the live Authentik and Frappe, then the thin thread: `idp setup` creates the provider, application, and Frappe key (AC-1, AC-4, AC-6)
   - [x] Safe reruns: marker, diff and fix in place, secret rule, pre checks, retry and errors (AC-2, AC-4, AC-9)
-  - [ ] Close the bypasses: password form and email link off, `idp password-login on|off` (AC-5)
+  - [x] Close the bypasses: password form and email link off, `idp password-login on|off` (AC-5)
   - [ ] `idp check` and `idp remove` (AC-7, AC-8)
   - [ ] Landing on `/lms`, `idp selftest`, the manual admin sign in, and README with the break glass steps (AC-3, AC-10, AC-11, AC-12)
 - [ ] Verify it: `/check verify IDP login`
