@@ -258,7 +258,7 @@ def provision(
 	have = frappe.get_all(
 		"LMS Enrollment",
 		filters={"member": user.name, "course": ["in", managed or _managed_courses()]},
-		fields=["name", "course"],
+		fields=["name", "course", "progress"],
 	)
 	if decision.kind == KIND_LIVE:
 		if not any(row.course == decision.course for row in have):
@@ -266,9 +266,22 @@ def provision(
 	if decision.kind in (KIND_LIVE, KIND_RESULTS, KIND_ADMIN_ONLY):
 		for row in have:
 			if row.course != decision.course:
+				_warn_if_stranded(user.name, row)
 				frappe.delete_doc("LMS Enrollment", row.name, ignore_permissions=True)
 				out.enrollments_removed.append(row.course)
 	return out
+
+
+def _warn_if_stranded(member: str, row) -> None:
+	"""Spec 0010 AC-9: name a learner who loses an enrollment at 100% progress with no certificate."""
+	if (row.progress or 0) < 100:
+		return
+	if frappe.db.exists("LMS Certificate", {"member": member, "course": row.course}):
+		return
+	frappe.logger(c.LOGGER_NAME).warning(
+		f"stranded learner email={json.dumps(member)} course={json.dumps(row.course)} "
+		"progress=100 certificate=none"
+	)
 
 
 def _managed_courses() -> list[str]:

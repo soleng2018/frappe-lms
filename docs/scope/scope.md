@@ -31,7 +31,7 @@ _The Frappe links have not been read by `/scope`; `/architect` should read the o
 | 6 | IDP login (OIDC) | Slice 1 | done |
 | 7 | Group to role mapping | Slice 1 | done |
 | 8 | Content sync, one course | Slice 1 | done |
-| 9 | Quiz pass rules & certificate | Slice 1 | planned |
+| 9 | Quiz pass rules & certificate | Slice 1 | in-progress |
 | 10 | Branding & theme | Slice 2 | planned |
 | 11 | Guide format & full authoring | Slice 2 | planned |
 | 12 | Manager progress view | Slice 3 | planned |
@@ -162,10 +162,20 @@ spec [0005](../specs/0005-content-sync/index.md) · code in `tools/src/nile_tool
 - [x] Review it (fresh model): `/check review content sync`
 - [x] Document it: `/document content sync`
 
-### 9. Quiz pass rules & certificate · needs a decision
-A student passes each quiz at 80% or higher, with a limited number of retakes, and earns a certificate after passing both the video quiz and the lab quiz.
-**Done when:** a student who scores 80% or more on both quizzes gets a downloadable certificate, a lower score does not, and retakes stop at the limit. The retake limit is a number to settle in the spec.
-- [ ] Design it (spec): `/architect quiz pass rules & certificate`
+### 9. Quiz pass rules & certificate · in progress
+A student passes each quiz at 80% or higher, with 3 attempts per quiz, and earns a certificate after every lesson and quiz is complete. A hol-admin publishes the certificate on request, so its link works for LinkedIn.
+**Done when:** a student who scores 80% or more on every quiz can request a downloadable certificate, a lower score does not, retakes stop at 3 attempts, and a published certificate link opens for a guest. The content check refuses a pass mark under 80.
+spec [0010](../specs/0010-quiz-pass-rules-and-certificate.md) · code in `tools/src/nile_tools/content.py`, `apps/nile_auth/`
+- [x] Design it (spec): `/architect quiz pass rules & certificate`
+- [x] Build it: `/develop quiz pass rules & certificate`
+  - [x] Probe the live site: boundary, attempt limit, certificate, guest link, publish, reset (AC-2 to AC-7)
+  - [x] Raise the pass mark floor to 80 in the content check (AC-1)
+  - [x] Log learners stranded without a certificate at the login cleanup (AC-9)
+  - [x] Integration test and README steps for students and admins (AC-2 to AC-8)
+- [ ] Verify it: `/check verify quiz pass rules & certificate`
+- [ ] Test it: `/test quiz pass rules & certificate`
+- [ ] Review it (fresh model): `/check review quiz pass rules & certificate`
+- [ ] Document it: `/document quiz pass rules & certificate`
 
 ### 17. Course access from course groups · done
 A learner gets only the course they booked. The reservation app puts the learner in an Authentik group named exactly like the course, and Frappe enrolls them in that course only and removes any other course enrollment. Courses stay unpublished, so other courses are hidden and cannot be self enrolled. After the slot a known learner can still sign in and sees only their certificate. Two course groups at once are refused with a clear message.

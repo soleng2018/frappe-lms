@@ -10,6 +10,7 @@ __all__ = [
     "DEFAULT_MAX_ATTEMPTS",
     "DEFAULT_PASSING_PERCENTAGE",
     "MAX_OPTIONS",
+    "MIN_PASSING_PERCENTAGE",
     "Chapter",
     "Course",
     "LabLesson",
@@ -26,6 +27,7 @@ __all__ = [
 
 DEFAULT_PASSING_PERCENTAGE = 80
 DEFAULT_MAX_ATTEMPTS = 3
+MIN_PASSING_PERCENTAGE = 80  # a certificate means 80% or more on every quiz (spec 0010)
 MAX_OPTIONS = 4  # an LMS Question has option_1 to option_4
 
 # A YouTube video id: 11 letters, digits, dashes or underscores. A URL is not an id.
@@ -211,8 +213,11 @@ def _choice_problems(quiz_name: str, question: Question) -> list[str]:
 def _quiz_problems(quiz: Quiz) -> list[str]:
     name = f"quiz {quiz.key!r}"
     problems = []
-    if not 1 <= quiz.passing_percentage <= 100:
-        problems.append(f"{name} passing_percentage is {quiz.passing_percentage}, must be 1 to 100")
+    if not MIN_PASSING_PERCENTAGE <= quiz.passing_percentage <= 100:
+        problems.append(
+            f"{name} passing_percentage is {quiz.passing_percentage}, "
+            f"must be {MIN_PASSING_PERCENTAGE} to 100"
+        )
     if quiz.max_attempts < 1:
         problems.append(f"{name} max_attempts is {quiz.max_attempts}, must be at least 1")
     if not quiz.questions:

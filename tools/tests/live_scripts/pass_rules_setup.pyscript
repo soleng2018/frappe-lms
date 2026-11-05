@@ -1,0 +1,20 @@
+# Runs inside `bench console` (see test_pass_certificate_integration.py); __P__ is the test prefix.
+# Makes a student, a second student and a Moderator, each with API keys. The course comes from the sync.
+import json, frappe
+from frappe.core.doctype.user.user import generate_keys
+out = {}
+try:
+    def make(kind, roles, user_type):
+        email = f"__P__-{kind}@example.com"
+        frappe.get_doc({"doctype": "User", "email": email, "first_name": kind, "user_type": user_type,
+            "send_welcome_email": 0, "roles": [{"role": r} for r in roles]}).insert(ignore_permissions=True)
+        secret = generate_keys(email)["api_secret"]
+        return {"email": email, "token": frappe.db.get_value("User", email, "api_key") + ":" + secret}
+    out["student"] = make("student", ["LMS Student"], "Website User")
+    out["other"] = make("other", ["LMS Student"], "Website User")
+    out["admin"] = make("admin", ["Moderator", "Course Creator", "Desk User"], "System User")
+    frappe.db.commit()
+except Exception as e:
+    frappe.db.rollback()
+    out["error"] = type(e).__name__ + ": " + str(e)[:300]
+print("RESULT:" + json.dumps(out))
