@@ -1,0 +1,17 @@
+# Runs inside `bench console`; __P__ is the test prefix, __WHO__ the user, __ACTION__ is add or remove.
+import json, frappe
+out = {}
+try:
+    course = frappe.db.get_value("LMS Course", {"nile_key": "__P__-course"})
+    email = "__P__-__WHO__@example.com"
+    if "__ACTION__" == "add":
+        frappe.get_doc({"doctype": "LMS Enrollment", "member": email, "course": course}).insert(ignore_permissions=True)
+    else:
+        for n in frappe.get_all("LMS Enrollment", filters={"course": course, "member": email}, pluck="name"):
+            frappe.delete_doc("LMS Enrollment", n, force=True, ignore_permissions=True)
+    frappe.db.commit()
+    out["ok"] = True
+except Exception as e:
+    frappe.db.rollback()
+    out["error"] = type(e).__name__ + ": " + str(e)[:300]
+print("RESULT:" + json.dumps(out))

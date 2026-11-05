@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- A hol-admin can publish or unpublish a certificate after the learner has left the course group (spec 0010 AC-10). `nile_auth` overrides the LMS Certificate class so the enrollment and progress checks run only for a new certificate or one moved to another learner (`nile_auth` 0.6.4).
 - Course access from groups (spec 0009): a learner in an Authentik group named exactly like a course is enrolled in that course only, with no batch. With no course group a known learner keeps their certificate and progress but loses the lessons. Two course groups are refused with a clear page.
 - A learner who is live in a course is sent to that course after signing in, and a learner with no course group (after the slot) is sent to their profile, where the certificate is. A real deep link still wins, and an admin goes to `/lms`.
 - A learner who comes back to a course they finished starts with their old progress, so they can still be certified. Their progress, quiz attempts and certificates are never deleted when a course group goes away.

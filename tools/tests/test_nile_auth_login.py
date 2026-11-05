@@ -58,6 +58,7 @@ class FakeFrappe:
         self.session_users: list[str] = []
         self.logs: list[tuple[str, str]] = []
         self.created = 0
+        self.certificates: set[tuple[str, str]] = set()  # (member, course)
 
     def set_user(self, name: str) -> None:
         self.session_users.append(name)
@@ -86,6 +87,8 @@ def _build(state: FakeFrappe) -> dict[str, types.ModuleType]:
     def db_exists(doctype: str, name: Any = None) -> Any:
         if doctype == "Has Role" and isinstance(name, dict):
             return (name["parent"], name["role"]) in state.has_role or None
+        if doctype == "LMS Certificate":
+            return "cert" if (name["member"], name["course"]) in state.certificates else None
         return exists(doctype, name)
 
     def commit() -> None:
@@ -202,6 +205,7 @@ def _add_enrollment(state: FakeFrappe, doc: dict) -> None:
             "name": f"enr-{len(state.enrollments) + 1}",
             "member": doc["member"],
             "course": doc["course"],
+            "progress": doc.get("progress", 0),
         }
     )
 
@@ -370,6 +374,39 @@ def test_results_mode_removes_every_managed_enrollment(load: Any, fake: FakeFrap
     out = login.provision(INFO, _decision(kind="results"), "kim@example.com", ["nca"])
     assert out.enrollments_removed == ["nca"] and out.enrollments_created == 0
     assert fake.enrollments == []
+
+
+def _finish(fake: FakeFrappe, progress: int) -> None:
+    for row in fake.enrollments:
+        row["progress"] = progress
+
+
+@pytest.mark.parametrize(
+    ("progress", "certificate", "warned"),
+    [
+        (100, False, True),
+        (99, False, False),
+        (100, True, False),
+    ],
+)
+def test_a_stranded_learner_is_named_in_one_warning(
+    load: Any, fake: FakeFrappe, progress: int, certificate: bool, warned: bool
+) -> None:
+    login = load("nile_auth.login")
+    login.provision(INFO, _decision(**LIVE), "kim@example.com", ["nca"])
+    _finish(fake, progress)
+    if certificate:
+        fake.certificates.add(("kim@example.com", "nca"))
+    out = login.provision(INFO, _decision(kind="results"), "kim@example.com", ["nca"])
+    assert out.enrollments_removed == ["nca"] and fake.enrollments == []
+    stranded = [line for level, line in fake.logs if "stranded learner" in line]
+    if warned:
+        assert fake.logs == [("warning", stranded[0])]
+        assert stranded[0] == (
+            'stranded learner email="kim@example.com" course="nca" progress=100 certificate=none'
+        )
+    else:
+        assert fake.logs == []
 
 
 def test_an_enrollment_in_an_unmanaged_course_is_left_alone(load: Any, fake: FakeFrappe) -> None:

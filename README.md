@@ -117,6 +117,21 @@ make tools CMD=sync             # checks the file first, then makes the LMS matc
 - The course is created and kept unpublished, and it is added to no batch. A learner reaches it only through an enrollment made at login. Progress is recalculated when the outline changes.
 - If you change a course title, `sync` prints the old and new title first. The Authentik group name must change too. It refuses a title that another course already has, or that equals `AUTHENTIK_ADMIN_GROUP`.
 
+### Passing and the certificate (spec 0010)
+
+No new keys. The rules come from the LMS itself, and `sync` refuses a quiz whose `passing_percentage` is under 80 or over 100.
+
+- **Pass mark.** A quiz passes at 80% or more. A score is stored as a whole number and cut down, never rounded up, so 79.5% is stored as 79 and fails.
+- **Attempts.** Each quiz allows 3 attempts unless its content file sets `max_attempts`. After the last miss the LMS refuses another attempt.
+- **Student: get the certificate.** Pass every quiz and finish every lesson (progress 100), then press the certificate button on the course page. **Do this while you are still in your course group.** When the group goes away you are removed from the course and the button is gone. A certificate you already hold stays. If someone misses the window, put them back in the group, let them sign in, and ask them to press the button.
+- **Student: find it.** Open Profile, then Certificates. The download link holds the certificate name (the `name=` part). Your certificate is private until an admin publishes it.
+- **Student: LinkedIn.** Ask a hol-admin to publish your certificate. Then add it under Licenses and certifications: name is the course title, organization is Nile, issue date is the certificate date, credential id is the certificate name, credential URL is `https://<LMS_HOSTNAME>/courses/<course name>/<certificate name>`. Publishing shows your name publicly, so it only happens on your request.
+- **Admin: publish.** In the Desk open LMS Certificate, filter by member or course, open the certificate, tick Publish on Participant Page, save. Untick it to make it private again. A student cannot do this. Publishing or unpublishing works at any time, even after the learner has left the course group. The learner must still request the certificate while enrolled, because a person with no enrollment cannot create one.
+- **Admin: reset a locked out student.** In the Desk open LMS Quiz Submission, filter by quiz and member, select that student's rows and delete them. The student can try again. Passed lessons and other progress stay. An admin needs the Moderator role.
+- **Warning in the log.** If a login removes an enrollment at 100% progress and the learner has no certificate, `nile_auth` writes one `stranded learner` warning with the email and course. Search the `nile_auth` log for it.
+
+Run the live proof from the repo with `cd tools && uv run pytest tests/test_pass_certificate_integration.py -m integration` (needs the stack up and `.env`).
+
 ## 6. Checking the deployment and connecting an agent
 
 Run `make tools CMD="verify deploy"` after every rebuild.

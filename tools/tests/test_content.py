@@ -52,6 +52,7 @@ def test_defaults_are_80_and_3() -> None:
     quiz = Quiz("q", "t", "l", ())
     assert (quiz.passing_percentage, quiz.max_attempts) == (80, 3)
     assert (content.DEFAULT_PASSING_PERCENTAGE, content.DEFAULT_MAX_ATTEMPTS) == (80, 3)
+    assert content.MIN_PASSING_PERCENTAGE == 80
 
 
 def test_sound_course_has_no_problems() -> None:
@@ -105,15 +106,17 @@ def test_empty_chapter() -> None:
     assert problems == ("chapter 'ch3' has no lessons",)
 
 
-@pytest.mark.parametrize("mark", [0, 101, -5])
-def test_pass_mark_outside_1_to_100(mark: int) -> None:
+@pytest.mark.parametrize("mark", [-5, 0, 1, 79, 101])
+def test_pass_mark_outside_80_to_100(mark: int) -> None:
     course = good_course()
     bad = replace(course.quizzes[0], passing_percentage=mark)
     problems = check_course(replace(course, quizzes=(bad, course.quizzes[1])))
-    assert any("passing_percentage" in p for p in problems)
+    assert len(problems) == 1
+    assert "quiz 'q1'" in problems[0]
+    assert f"passing_percentage is {mark}, must be 80 to 100" in problems[0]
 
 
-@pytest.mark.parametrize("mark", [1, 100])
+@pytest.mark.parametrize("mark", [80, 100])
 def test_pass_mark_edges_are_allowed(mark: int) -> None:
     course = good_course()
     ok = replace(course.quizzes[0], passing_percentage=mark)
