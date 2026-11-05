@@ -1,0 +1,46 @@
+# Runs inside `bench console`. Action "make" commits a managed course (and optionally a user);
+# "check" reports what the race left; "drop" removes it all.
+import json
+
+import frappe
+
+action = "__ACTION__"
+tag = "__TAG__"
+title = "Nile Race " + tag
+emails = "__EMAILS__".split(",")
+out = {}
+frappe.set_user("Administrator")
+if action == "make":
+    frappe.get_doc(
+        {
+            "doctype": "LMS Course", "title": title, "nile_key": "race-" + tag,
+            "short_introduction": "x", "description": "x", "published": 0,
+            "instructors": [{"instructor": frappe.conf.nile_service_user}],
+        }
+    ).insert(ignore_permissions=True)
+    if "__PREMADE__" == "1":
+        for e in emails:
+            frappe.get_doc(
+                {"doctype": "User", "email": e, "first_name": "Race", "send_welcome_email": 0}
+            ).insert(ignore_permissions=True)
+elif action == "check":
+    course = frappe.db.get_value("LMS Course", {"nile_key": "race-" + tag}, "name")
+    out["users"] = {e: bool(frappe.db.exists("User", e)) for e in emails}
+    out["enrollments"] = {
+        e: frappe.db.count("LMS Enrollment", {"member": e, "course": course}) for e in emails
+    }
+    out["roles"] = {
+        e: frappe.db.count("Has Role", {"parent": e, "role": "LMS Student"}) for e in emails
+    }
+else:
+    course = frappe.db.get_value("LMS Course", {"nile_key": "race-" + tag}, "name")
+    for e in emails:
+        for n in frappe.get_all("LMS Enrollment", {"member": e}, pluck="name"):
+            frappe.delete_doc("LMS Enrollment", n, force=True, ignore_permissions=True)
+        if frappe.db.exists("User", e):
+            frappe.delete_doc("User", e, force=True, ignore_permissions=True)
+    if course:
+        frappe.delete_doc("LMS Course", course, force=True, ignore_permissions=True)
+    out["left"] = frappe.db.count("LMS Course", {"nile_key": "race-" + tag})
+frappe.db.commit()
+print("RESULT:" + json.dumps(out))

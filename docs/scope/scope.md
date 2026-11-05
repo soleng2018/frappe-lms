@@ -120,10 +120,10 @@ A script creates the OIDC application in Authentik through its API (only items i
 spec [0008](../specs/0008-idp-login/index.md) · code in `tools/src/nile_tools/`, `apps/nile_auth/`
 - [x] Design it (spec): `/architect IDP login`
 - [ ] Build it: `/develop IDP login`
-  - [ ] Probe the live Authentik and Frappe, then the thin thread: `idp setup` creates the provider, application, and Frappe key (AC-1, AC-4, AC-6)
-  - [ ] Safe reruns: marker, diff and fix in place, secret rule, pre checks, retry and errors (AC-2, AC-4, AC-9)
-  - [ ] Close the bypasses: password form and email link off, `idp password-login on|off` (AC-5)
-  - [ ] `idp check` and `idp remove` (AC-7, AC-8)
+  - [x] Probe the live Authentik and Frappe, then the thin thread: `idp setup` creates the provider, application, and Frappe key (AC-1, AC-4, AC-6)
+  - [x] Safe reruns: marker, diff and fix in place, secret rule, pre checks, retry and errors (AC-2, AC-4, AC-9)
+  - [x] Close the bypasses: password form and email link off, `idp password-login on|off` (AC-5)
+  - [x] `idp check` and `idp remove` (AC-7, AC-8)
   - [ ] Landing on `/lms`, `idp selftest`, the manual admin sign in, and README with the break glass steps (AC-3, AC-10, AC-11, AC-12)
 - [ ] Verify it: `/check verify IDP login`
 - [ ] Test it: `/test IDP login`
@@ -172,12 +172,13 @@ A learner gets only the course they booked. The reservation app puts the learner
 **Done when:** a learner in the group for course A is enrolled in A only and cannot read or enroll in course B, a learner with no course group reaches only their certificate, two groups at once are refused, and content sync keeps courses unpublished and out of batches. The reservation app and Authentik parts are a contract, built in their own repositories.
 spec [0009](../specs/0009-course-access-from-groups/index.md) · code in `apps/nile_auth/`, `tools/src/nile_tools/`, `deploy/`
 - [x] Design it (spec): `/architect course access from groups`
-- [ ] Build it: `/develop course access from groups`
-  - [ ] Probe the live site, then the pure functions and the thin thread: one learner, one course, no batch (AC-1, AC-4, AC-5, AC-7)
-  - [ ] Results mode, pruning, admin roles, and the safe login order with the two courses refusal (AC-2, AC-3, AC-6, AC-8, AC-9, AC-10, AC-15)
-  - [ ] Landing on the course or the profile (AC-11)
-  - [ ] Content sync keeps courses unpublished and out of batches, and the two student group keys are retired (AC-12, AC-14)
-  - [ ] Live integration tests, then remove the batch code and the READ COMMITTED setting, then README, cleanup function, and version bump (AC-1 to AC-13)
+- [x] Build it: `/develop course access from groups`
+  - Next step after this: `idp test` (finish the IDP login selftest against the course group login; feature 6).
+  - [x] Probe the live site, then the pure functions and the thin thread: one learner, one course, no batch (AC-1, AC-4, AC-5, AC-7)
+  - [x] Results mode, pruning, admin roles, and the safe login order with the two courses refusal (AC-2, AC-3, AC-6, AC-8, AC-9, AC-10, AC-15)
+  - [x] Landing on the course or the profile (AC-11)
+  - [x] Content sync keeps courses unpublished and out of batches, and the two student group keys are retired (AC-12, AC-14)
+  - [x] Live integration tests, then remove the batch code and the READ COMMITTED setting, then README, cleanup function, and version bump (AC-1 to AC-13)
 - [ ] Verify it: `/check verify course access from groups`
 - [ ] Test it: `/test course access from groups`
 - [ ] Review it (fresh model): `/check review course access from groups`

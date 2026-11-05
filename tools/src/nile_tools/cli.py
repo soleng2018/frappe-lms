@@ -10,7 +10,8 @@ from pathlib import Path
 
 import httpx
 
-from nile_tools import checks, config, lms, verify
+from nile_tools import authentik, checks, config, idp, idp_run, lms, verify
+from nile_tools.authentik import AuthentikError
 from nile_tools.config import ConfigError
 from nile_tools.contentfile import ContentError, load_course
 from nile_tools.lms import LmsError
@@ -20,6 +21,10 @@ __all__ = [
     "ConfigError",
     "config_check",
     "config_show",
+    "idp_check",
+    "idp_password_login",
+    "idp_remove",
+    "idp_setup",
     "init",
     "main",
     "sync",
@@ -123,7 +128,13 @@ def sync(root: Path, *, check: bool) -> int:
     )
     connection = lms.connect(host, key, secret)
     try:
-        return run_sync(connection, course, check=check, say=print)
+        return run_sync(
+            connection,
+            course,
+            check=check,
+            say=print,
+            admin_group=values.get("AUTHENTIK_ADMIN_GROUP", ""),
+        )
     except LmsError as e:
         print(f"ERROR {e}", file=sys.stderr)
         return 1
@@ -132,6 +143,68 @@ def sync(root: Path, *, check: bool) -> int:
 def verify_deploy(root: Path) -> int:
     """Check the public site, the compose file and the MCP door; return 1 on any FAIL."""
     return verify.run(root, config.load_env(root).values)
+
+
+def _lms_from_env(values: Mapping[str, str]) -> lms.Lms:
+    host, key, secret = (
+        _require(values, k) for k in ("LMS_HOSTNAME", "LMS_API_KEY", "LMS_API_SECRET")
+    )
+    return lms.connect(host, key, secret, retry_wait=5.0, read_tries=60)
+
+
+def idp_password_login(root: Path, state: str) -> int:
+    """Switch Frappe's password form on (break glass) or off."""
+    values = config.load_env(root).values
+    try:
+        return idp_run.password_login(_lms_from_env(values), state, print)
+    except (LmsError, idp.Refused) as e:
+        print(f"ERROR {e}", file=sys.stderr)
+        return 1
+
+
+def idp_setup(root: Path, *, resync_secret: bool = False) -> int:
+    """Create or finish the Authentik application, provider and Frappe key."""
+    values = config.load_env(root).values
+    ak_host, token = (_require(values, k) for k in ("AUTHENTIK_HOSTNAME", "AUTHENTIK_API_TOKEN"))
+    try:
+        return idp_run.setup(
+            authentik.connect(ak_host, token),
+            _lms_from_env(values),
+            values,
+            print,
+            resync_secret=resync_secret,
+        )
+    except (AuthentikError, LmsError, idp.ConfigProblem, idp.Refused) as e:
+        print(f"ERROR {e}", file=sys.stderr)
+        return 1
+
+
+def _authentik_from_env(values: Mapping[str, str]) -> authentik.Authentik:
+    host, token = (_require(values, k) for k in ("AUTHENTIK_HOSTNAME", "AUTHENTIK_API_TOKEN"))
+    return authentik.connect(host, token)
+
+
+def idp_check(root: Path, *, user: str | None = None) -> int:
+    """Report PASS, WARN or FAIL for each part of the Authentik sign in; write nothing."""
+    values = config.load_env(root).values
+    try:
+        with httpx.Client(timeout=30) as public:
+            return idp_run.check(
+                _authentik_from_env(values), _lms_from_env(values), public, values, print, user=user
+            )
+    except (AuthentikError, LmsError, idp.ConfigProblem) as e:
+        print(f"ERROR {e}", file=sys.stderr)
+        return 1
+
+
+def idp_remove(root: Path) -> int:
+    """Delete only the marked Frappe key, provider and application."""
+    values = config.load_env(root).values
+    try:
+        return idp_run.remove(_authentik_from_env(values), _lms_from_env(values), values, print)
+    except (AuthentikError, LmsError, idp.ConfigProblem) as e:
+        print(f"ERROR {e}", file=sys.stderr)
+        return 1
 
 
 def _secret_values(root: Path) -> list[str]:
@@ -154,6 +227,23 @@ def _parser() -> argparse.ArgumentParser:
     ver_actions = ver.add_subparsers(dest="action", required=True)
     ver_actions.add_parser("deploy", help="run every check")
     ver_actions.add_parser("services", help="list the long running services, one per line")
+    idp_cmd = commands.add_parser("idp", help="set up the Authentik sign in")
+    idp_actions = idp_cmd.add_subparsers(dest="action", required=True)
+    setup_cmd = idp_actions.add_parser(
+        "setup", help="create or fix the Authentik application and the Frappe key"
+    )
+    setup_cmd.add_argument(
+        "--resync-secret",
+        action="store_true",
+        help="rewrite the Frappe client secret from Authentik",
+    )
+    check_cmd = idp_actions.add_parser("check", help="report PASS, WARN or FAIL, writing nothing")
+    check_cmd.add_argument("--user", help="a real Authentik username, to test the groups claim")
+    idp_actions.add_parser("remove", help="delete only the items setup created")
+    pw_cmd = idp_actions.add_parser(
+        "password-login", help="switch Frappe's own password form on (break glass) or off"
+    )
+    pw_cmd.add_argument("state", choices=["on", "off"])
     cfg = commands.add_parser("config", help="check, show or print the sample of the config file")
     actions = cfg.add_subparsers(dest="action", required=True)
     check = actions.add_parser("check", help="validate .env and the repo")
@@ -178,6 +268,14 @@ def main(argv: Sequence[str] | None = None) -> int:
                 print("\n".join(verify.long_running(verify.load_compose(root))))
                 return 0
             return verify_deploy(root)
+        if args.command == "idp":
+            if args.action == "password-login":
+                return idp_password_login(root, args.state)
+            if args.action == "check":
+                return idp_check(root, user=args.user)
+            if args.action == "remove":
+                return idp_remove(root)
+            return idp_setup(root, resync_secret=args.resync_secret)
         if args.command == "sync":
             return sync(root, check=args.check)
         if args.action == "check":

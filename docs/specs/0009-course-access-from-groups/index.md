@@ -1,7 +1,7 @@
 # 0009. Give each learner only the course they booked
 
 **Date**: 2026-11-04
-**Status**: Proposed
+**Status**: In Progress
 **Supersedes in part**: [0004](../0004-data-model/index.md), [0005](../0005-content-sync/index.md), [0006](../0006-group-to-role-mapping/index.md). The exact parts are listed in Consequences.
 
 ## Summary

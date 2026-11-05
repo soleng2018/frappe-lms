@@ -12,7 +12,7 @@ You need all of these before you start.
 | `make`, `git`, `curl`, `sha256sum` | The Makefile and the build scripts use them. |
 | An existing Traefik v3 container on an external Docker network (default name `traefik`) with a `websecure` entrypoint and a `letsencrypt` certificate resolver | Routes HTTPS to the LMS. This repo does not start Traefik. |
 | A public DNS name for the LMS (for example `guide.nile.global`) pointing at the host that runs Traefik | It becomes the Frappe site name and the Traefik host rule. It cannot change after the first start. |
-| A running Authentik with admin access | Students and admins log in through it. |
+| A running Authentik with admin access, holding the `HOL: OpenID groups scope` property mapping, the `default-provider-authorization-implicit-consent` flow and a self signed certificate | Students and admins log in through it. `idp setup` stops with a named error if one of these is missing, and never edits them. |
 | Internet access during the first build | Pulls the base images and clones Frappe, LMS and payments at pinned tags. |
 | `sudo` on the host and access to the Cloudflare dashboard of your zone | `make restart-test` kills container processes with `sudo kill -9`. The Cloudflare step in section 6 makes plain HTTP redirect to HTTPS. |
 | `uv` and Python 3.12 (only if you run the `tools` code or tests on the host) | Lint and unit tests. Not needed to run the stack. |
@@ -74,7 +74,7 @@ The first `make up` builds the image, which takes a while. `configurator` and `c
 | `make down` | Stop the stack. Volumes (database, site files) are kept. |
 | `make ps` | Show all containers of the stack. |
 | `make logs` | Last 100 log lines per service. |
-| `make tools CMD=<command>` | Run a tools command in the tools container. Today: `init`, `whoami`, `sync [--check]`, `config check [--for up\|tools-authentik]`, `config show` (secrets as `*****`), `config sample`. |
+| `make tools CMD=<command>` | Run a tools command in the tools container. Today: `init`, `whoami`, `sync [--check]`, `idp setup [--resync-secret]` (creates or fixes the Authentik application and the Frappe login key, then turns off Frappe's password form and email link; safe to run again, prints `created`, `unchanged` or `fixed` per item, never a secret), `idp check [--user NAME]` (read only report of PASS, WARN or FAIL lines, exit 1 on any FAIL; `--user` is a real Authentik username, used to test that the groups claim comes out), `idp remove` (deletes only the Frappe key, provider and application that setup created, in that order; Frappe users and the password form are left as they are, so run `idp password-login on` afterwards to sign in as `Administrator`), `idp password-login on\|off` (break glass: `on` brings back the password form so `Administrator` can sign in while Authentik is down, `off` closes it again; `off` refuses unless the enabled Authentik key exists), `config check [--for up\|tools-authentik]`, `config show` (secrets as `*****`), `config sample`. |
 | `make tools CMD="verify deploy"` | Prove the LMS over its public hostname: ping, home page, assets, socket.io, HTTP redirect, the MCP door, and the compose file (no published ports, log rotation, restart policy). One `PASS`, `WARN` or `FAIL` line per check. Exits 1 only on a FAIL. |
 | `make restart-test` | Restart the long running services, `kill -9` the `backend` and `frontend` processes, and check everything is healthy again within 180 seconds, then run `verify deploy`. Needs Docker and `sudo` on the host. Touches only the `nile-lms` project. |
 | `make hooks` | Install the pre-commit hook. Run once per clone. |
@@ -86,6 +86,16 @@ The first `make up` builds the image, which takes a while. `configurator` and `c
 The stack tests need the stack running and a `.env`: run `cd tools && uv run pytest -m integration`. They rerun `create-site` against your live site, which keeps it and changes nothing except pending migrations.
 
 Style: `tools/` uses spaces and 100 columns, `apps/nile_auth/` follows Frappe (tabs, 110 columns). Details in [spec 0003](docs/specs/0003-coding-standards-and-tooling.md).
+
+### Signing in and break glass
+
+After `idp setup`, the only way into the LMS is the Authentik button. Everyone lands on `/lms` after signing in (a safe deep link on this site is kept). If Authentik is down and you must get in as `Administrator`:
+
+1. `make tools CMD="idp password-login on"` brings back the password form.
+2. Sign in as `Administrator`.
+3. `make tools CMD="idp password-login off"` closes it again. Running `idp setup` also closes it.
+
+Changing the login landing code needs a new image: `make up` after the `nile_auth` version bump.
 
 ## 5. Course content
 
@@ -104,7 +114,8 @@ make tools CMD=sync             # checks the file first, then makes the LMS matc
 - Git wins. If someone edited a synced record in the LMS, `sync` prints `LMS has X, git has Y` and overwrites it. Use `--check` first to see those edits.
 - Nothing is deleted. A lesson, chapter, quiz or question you remove from git leaves the course and stays in the LMS. The command names each one it detaches.
 - If a request fails, the command stops, prints the record, the URL, the status and the reason, and exits 1. Run it again: it carries on where it stopped.
-- Every existing batch gets the course added to it. Students keep their progress, and it is recalculated when the outline changes.
+- The course is created and kept unpublished, and it is added to no batch. A learner reaches it only through an enrollment made at login. Progress is recalculated when the outline changes.
+- If you change a course title, `sync` prints the old and new title first. The Authentik group name must change too. It refuses a title that another course already has, or that equals `AUTHENTIK_ADMIN_GROUP`.
 
 ## 6. Checking the deployment and connecting an agent
 
@@ -126,9 +137,16 @@ The agent can read and write LMS content. Git is the source of truth, so an agen
 
 - `deploy/`: compose file, image build, version pins, container scripts.
 - `tools/`: Python package for setup scripts.
-- `apps/nile_auth/`: custom Frappe app: Authentik groups become LMS roles at login (`hol-admins` admin, `NileWorkshopNAdmin` students).
+- `apps/nile_auth/`: custom Frappe app: Authentik groups become LMS access at login (`hol-admins` admin, a group named exactly like a course enrolls the learner in that course only).
 - `content/`: courses. `brand/`: brand assets (do not edit). `docs/`: scope, specs, reviews.
 
 ## 8. Keeping this file current
 
 This README is updated at the end of every work turn that changes how the repo is set up or used. See the rules in [AGENTS.md](AGENTS.md).
+
+## Upgrading from the batch based login (spec 0009)
+
+1. Delete the lines `AUTHENTIK_STUDENT_GROUP_PREFIX` and `AUTHENTIK_STUDENT_GROUP_SUFFIX` from `.env`. Every command fails with a "retired" line until you do.
+2. `make build` and `make up` (this takes the new `nile_auth` version).
+3. `make tools CMD=sync` sets the existing course to unpublished.
+4. Read, then run, the cleanup of the old batch course rows: `bench --site <site> execute nile_auth.cleanup.clear_batch_courses` (lists only), then add `--kwargs "{'dry_run': False}"` to remove them.

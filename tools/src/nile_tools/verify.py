@@ -482,6 +482,29 @@ def _check_restart(compose: Mapping[str, Any]) -> Result:
     return Result("PASS", "compose restart", f"every long running service is {RESTART_POLICY}")
 
 
+def _check_authentik_hosts(services: Mapping[str, Mapping[str, Any]]) -> Result:
+    """Fail if tools or backend maps a host name to the host gateway (spec 0008 AC-12)."""
+    bad = [
+        n
+        for n in ("tools", "backend")
+        if any("host-gateway" in str(e) for e in _as_list(services.get(n, {}).get("extra_hosts")))
+    ]
+    if bad:
+        return Result(
+            "FAIL",
+            "compose hosts",
+            f"services.{', '.join(bad)}.extra_hosts maps a name to the host gateway; "
+            "Authentik must resolve through public DNS",
+        )
+    return Result("PASS", "compose hosts", "tools and backend have no host gateway mapping")
+
+
+def _as_list(value: Any) -> list[Any]:
+    if isinstance(value, Mapping):
+        return [f"{k}:{v}" for k, v in value.items()]
+    return list(value) if isinstance(value, list) else []
+
+
 def compose_results(compose: Mapping[str, Any]) -> list[Result]:
     """Return the static checks over a parsed compose file."""
     services = _services(compose)
@@ -490,6 +513,7 @@ def compose_results(compose: Mapping[str, Any]) -> list[Result]:
         *_check_traefik(services),
         _check_logging(services),
         _check_restart(compose),
+        _check_authentik_hosts(services),
     ]
 
 

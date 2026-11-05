@@ -19,14 +19,12 @@ from nile_tools.content import (
 )
 
 __all__ = [
-    "BATCH",
     "CHAPTER",
     "COURSE",
     "LESSON",
     "QUESTION",
     "QUIZ",
     "Action",
-    "AddToBatch",
     "Change",
     "Create",
     "Detach",
@@ -45,7 +43,6 @@ CHAPTER = "Course Chapter"
 LESSON = "Course Lesson"
 QUIZ = "LMS Quiz"
 QUESTION = "LMS Question"
-BATCH = "LMS Batch"
 
 Doc = Mapping[str, Any]
 
@@ -102,14 +99,6 @@ class Detach:
 
 
 @dataclass(frozen=True)
-class AddToBatch:
-    """Give an LMS Batch a Batch Course row for the course."""
-
-    batch: str
-    course: str
-
-
-@dataclass(frozen=True)
 class Unmanaged:
     """An LMS record in the course that has no nile_key, so the sync does not manage it."""
 
@@ -117,7 +106,7 @@ class Unmanaged:
     name: str
 
 
-Action = Update | Detach | AddToBatch | Unmanaged
+Action = Update | Detach | Unmanaged
 
 
 @dataclass(frozen=True)
@@ -129,7 +118,7 @@ class Found:
     lessons: tuple[Doc, ...] = ()
     quizzes: tuple[Doc, ...] = ()
     questions: tuple[Doc, ...] = ()
-    batches: tuple[Doc, ...] = ()
+    courses: tuple[Doc, ...] = ()  # every LMS Course: name, title, nile_key
 
 
 def _normalise(field: str, value: object) -> object:
@@ -166,7 +155,7 @@ def _course_fields(course: Course) -> dict[str, Any]:
         "title": course.title,
         "short_introduction": course.short_introduction,
         "description": course.description,
-        "published": 1,
+        "published": 0,  # a learner reaches a course only through an enrollment (spec 0009)
         "status": "Approved",
         "enable_certification": 1,
         "enforce_lesson_completion": 0,
@@ -302,7 +291,7 @@ def _question_plan(
 
 
 def plan_sync(course: Course, found: Found) -> tuple[Action, ...]:
-    """Compare git with the LMS and list every update, detach, batch add and unmanaged record.
+    """Compare git with the LMS and list every update, detach and unmanaged record.
 
     Records the LMS does not have yet are left to `plan_creates`. A field that links to such a
     record is left out until the record exists, so the plan is complete once creates are done.
@@ -368,6 +357,8 @@ def plan_sync(course: Course, found: Found) -> tuple[Action, ...]:
         if chapter_rows is not None
         else ()
     )
+    if found.course.get("title") and found.course["title"] != course.title:
+        notes = (_retitle_note(found.course["title"], course.title), *notes)
     add(_diff(COURSE, course.key, course_fields, found.course, notes))
 
     detached_questions: list[Detach] = []
@@ -395,9 +386,33 @@ def plan_sync(course: Course, found: Found) -> tuple[Action, ...]:
                 add(_diff(QUIZ, gone.key, {"lesson": ""}, doc))
 
     actions += [*detached, *detached_questions]
-    actions += _batch_adds(cname, found.batches)
     actions += _unmanaged(found)
     return tuple(actions)
+
+
+def _retitle_note(old: str, new: str) -> str:
+    return (
+        f"title changes from {old!r} to {new!r}: the Authentik group name must change too, "
+        "or learners lose the course"
+    )
+
+
+def title_clash(course: Course, found: Found, admin_group: str) -> str | None:
+    """Name the clash when creating or retitling would hit another course or the admin group.
+
+    Titles are compared here with the case kept, because the REST filter ignores case.
+    """
+    here = found.course["name"] if found.course else None
+    if found.course is not None and found.course.get("title") == course.title:
+        return None
+    if admin_group and course.title == admin_group:
+        return f"course title {course.title!r} equals the admin group name (AUTHENTIK_ADMIN_GROUP)"
+    for other in found.courses:
+        if other.get("name") != here and other.get("title") == course.title:
+            return (
+                f"another LMS Course ({other.get('name')}) already has the title {course.title!r}"
+            )
+    return None
 
 
 def _detached(found: Found, git: Mapping[str, set[str]]) -> list[Detach]:
@@ -420,14 +435,6 @@ def _detached(found: Found, git: Mapping[str, set[str]]) -> list[Detach]:
         for doctype, docs in kinds
         for doc in docs
         if doc.get("nile_key") and doc["nile_key"] not in git[doctype] and attached[doctype](doc)
-    ]
-
-
-def _batch_adds(course_name: str, batches: Iterable[Doc]) -> list[Action]:
-    return [
-        AddToBatch(b["name"], course_name)
-        for b in batches
-        if course_name not in [r["course"] for r in b.get("courses") or ()]
     ]
 
 

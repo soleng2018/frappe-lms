@@ -16,6 +16,8 @@ __all__ = [
     "LmsError",
     "connect",
     "create_record",
+    "delete_record",
+    "get_password",
     "get_record",
     "list_records",
     "update_record",
@@ -38,6 +40,7 @@ class Lms:
 
     http: httpx.Client
     retry_wait: float = 1.0
+    read_tries: int = READ_TRIES
 
 
 def connect(
@@ -47,6 +50,7 @@ def connect(
     *,
     transport: httpx.BaseTransport | None = None,
     retry_wait: float = 1.0,
+    read_tries: int = READ_TRIES,
 ) -> Lms:
     """Open a connection to `https://<host>` that signs every request with the API token."""
     http = httpx.Client(
@@ -55,7 +59,7 @@ def connect(
         timeout=30,
         transport=transport,
     )
-    return Lms(http, retry_wait)
+    return Lms(http, retry_wait, read_tries)
 
 
 def _server_message(body: Mapping[str, Any]) -> str:
@@ -96,7 +100,7 @@ def _describe(label: str, r: httpx.Response) -> str:
 
 
 def _send(lms: Lms, label: str, method: str, path: str, **kwargs: Any) -> httpx.Response:
-    tries = READ_TRIES if method == "GET" else 1  # a repeated write could duplicate
+    tries = lms.read_tries if method == "GET" else 1  # a repeated write could duplicate
     for attempt in range(1, tries + 1):
         try:
             r = lms.http.request(method, path, **kwargs)
@@ -177,3 +181,20 @@ def create_record(lms: Lms, doctype: str, data: Mapping[str, object], *, label: 
 
 def _is_duplicate_key(message: str) -> bool:
     return any(f"HTTP {s}" in message for s in _DUPLICATE_STATUSES) and "nile_key" in message
+
+
+def delete_record(lms: Lms, doctype: str, name: str, *, label: str = "") -> None:
+    """Delete one record by name."""
+    _send(lms, label or f"{doctype} {name}", "DELETE", _path(doctype, name))
+
+
+def get_password(lms: Lms, doctype: str, name: str, field: str) -> str | None:
+    """Return a decrypted password field, or None when Frappe will not give it."""
+    label = f"{doctype} {name} {field}"
+    params = {"doctype": doctype, "name": name, "fieldname": field}
+    try:
+        r = _send(lms, label, "GET", "/api/method/frappe.client.get_password", params=params)
+        value = r.json().get("message")
+    except (LmsError, ValueError, AttributeError):
+        return None
+    return value if isinstance(value, str) and value else None

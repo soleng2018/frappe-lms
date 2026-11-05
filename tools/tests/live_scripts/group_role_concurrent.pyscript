@@ -1,26 +1,40 @@
 # Runs inside `bench console`, one copy per simultaneous login. Commits on purpose.
+# It runs the real `custom` handler; only the IDP call and Frappe's last login step are replaced.
 import json
 import time
-import frappe
-from nile_auth.groups import decide
-from nile_auth.login import provision
+import types
 
-group = "NileWorkshop__N__Admin"
+import frappe
+import nile_auth.login as L
+
 email = "__EMAIL__"
-frappe.set_user("Administrator")
-frappe.db.sql("SET SESSION TRANSACTION ISOLATION LEVEL READ COMMITTED")  # as login.custom does
-frappe.db.commit()
+title = "__TITLE__"
 out = {}
 try:
+    L.get_info_via_oauth = lambda provider, code, decoder=None: {
+        "email": email, "sub": email, "name": "Nile Race", "groups": [title]
+    }
+
+    def fake_login(info, *, provider=None, state=None):
+        frappe.cache.delete_value(f"frappe_oauth_login:{state}")
+        frappe.local.response["type"] = "redirect"
+        frappe.local.response["location"] = "/app"
+        frappe.session.user = info["email"]
+        frappe.db.commit()
+
+    L.login_oauth_user = fake_login
+    frappe.local.request = types.SimpleNamespace(
+        path="/api/method/frappe.integrations.oauth2_logins.custom/nileprobe"
+    )
+    token = "STATE-" + frappe.generate_hash(length=8)
+    frappe.cache.set_value(f"frappe_oauth_login:{token}", "")
+    frappe.local.response = frappe._dict()
     while time.time() < __START__:
         time.sleep(0.01)
-    info = {"email": email, "name": "Nile Race", "sub": email, "groups": [group]}
-    outcome = provision(info, decide(info["groups"], "hol-admins", "NileWorkshop", "Admin"), email)
-    frappe.db.commit()
-    out["batches_created"] = outcome.batches_created
+    L.custom("code", token)
+    out["status"] = frappe.local.response.get("http_status_code")
+    out["signed_in"] = frappe.local.response.get("type") == "redirect"
 except Exception as e:
     frappe.db.rollback()
-    import traceback
-
-    out["error"] = type(e).__name__ + ": " + str(e)[:200] + " | " + " <- ".join(l.strip() for l in traceback.format_exc().splitlines() if "nile_auth" in l or "lms/" in l)[-900:]
+    out["error"] = type(e).__name__ + ": " + str(e)[:300]
 print("RESULT:" + json.dumps(out))

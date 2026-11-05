@@ -119,14 +119,14 @@ def test_sync_on_the_live_site_end_to_end(prefix: str, tmp_path: Path) -> None:
         f"select published, enable_certification, enforce_lesson_completion from `tabLMS Course` "
         f"where nile_key = '{prefix}-course'"
     )
-    assert course_row == [["1", "1", "0"]]
+    assert course_row == [["0", "1", "0"]]
 
-    # AC-8: the batch made before the first run has exactly one Batch Course row.
+    # Spec 0009 AC-12: sync adds the course to no batch.
     batch_rows = _sql(
         "select count(*) from `tabBatch Course` bc join `tabLMS Course` c on c.name = bc.course "
         f"where c.nile_key = '{prefix}-course'"
     )
-    assert batch_rows == [["1"]]
+    assert batch_rows == [["0"]]
 
     # AC-2: the second run writes nothing, check agrees.
     assert sync(course) == (0, ["nothing to change"])

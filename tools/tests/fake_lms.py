@@ -19,6 +19,15 @@ class FakeLms:
         self.writes: list[tuple[str, str, str]] = []  # method, doctype, name
         self.fail_write: Callable[[int, str, str], httpx.Response | None] = lambda n, m, d: None
         self.counter = 0
+        self.password_denied = False
+        # The single System Settings record, as a fresh site holds it.
+        self.seed(
+            "System Settings",
+            "System Settings",
+            language="en",
+            disable_user_pass_login=0,
+            login_with_email_link=1,
+        )
 
     def client(self) -> lms.Lms:
         return lms.connect(
@@ -41,7 +50,14 @@ class FakeLms:
         if doctype == "LMS Quiz":
             slug = re.sub(r"\W+", "-", data["title"].lower()).strip("-")
             return slug if slug not in self.of(doctype) else f"{slug}-2"
+        if doctype == "Social Login Key":  # Frappe names it after the provider
+            return re.sub(r"\W+", "_", data["provider_name"].lower())
         return f"{doctype[:3]}-{self.counter:04d}"
+
+    @staticmethod
+    def _masked(doc: dict[str, Any]) -> dict[str, Any]:
+        """Frappe returns a password field as stars."""
+        return {**doc, "client_secret": "*****"} if "client_secret" in doc else doc
 
     @staticmethod
     def _matches(doc: dict[str, Any], filters: list[list[Any]]) -> bool:
@@ -56,10 +72,16 @@ class FakeLms:
         doctype = parts[3]
         name = parts[4] if len(parts) > 4 else None
         store = self.docs.setdefault(doctype, {})
+        if parts[2] == "method" and doctype == "frappe.client.get_password":
+            if self.password_denied:
+                return httpx.Response(403, json={"exc_type": "PermissionError"})
+            asked = request.url.params
+            doc = self.docs.get(asked["doctype"], {}).get(asked["name"], {})
+            return httpx.Response(200, json={"message": doc.get(asked["fieldname"])})
         if request.method == "GET":
             if name:
                 return (
-                    httpx.Response(200, json={"data": store[name]})
+                    httpx.Response(200, json={"data": self._masked(store[name])})
                     if name in store
                     else httpx.Response(404, json={"exc_type": "DoesNotExistError"})
                 )
@@ -74,6 +96,10 @@ class FakeLms:
         refused = self.fail_write(self.counter_writes, request.method, doctype)
         if refused is not None:
             return refused
+        if request.method == "DELETE":
+            store.pop(name or "")
+            self.writes.append(("DELETE", doctype, name or ""))
+            return httpx.Response(202, json={"message": "ok"})
         body = json.loads(request.content)
         for f in RICH & body.keys():
             text = str(body[f])

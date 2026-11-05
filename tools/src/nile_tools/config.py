@@ -15,6 +15,7 @@ from typing import Literal
 
 __all__ = [
     "KEYS",
+    "RETIRED_KEYS",
     "SCOPES",
     "ConfigError",
     "EnvFile",
@@ -219,26 +220,6 @@ KEYS: tuple[Key, ...] = (
         services=(("create-site", "AUTHENTIK_ADMIN_GROUP"),),
     ),
     Key(
-        "AUTHENTIK_STUDENT_GROUP_PREFIX",
-        "AUTHENTIK",
-        "Student group name starts with this",
-        "default",
-        required_for="up",
-        validator="letters",
-        default="NileWorkshop",
-        services=(("create-site", "AUTHENTIK_STUDENT_GROUP_PREFIX"),),
-    ),
-    Key(
-        "AUTHENTIK_STUDENT_GROUP_SUFFIX",
-        "AUTHENTIK",
-        "Student group name ends with this",
-        "default",
-        required_for="up",
-        validator="letters",
-        default="Admin",
-        services=(("create-site", "AUTHENTIK_STUDENT_GROUP_SUFFIX"),),
-    ),
-    Key(
         "TRAEFIK_NETWORK",
         "TRAEFIK",
         "External Docker network Traefik listens on",
@@ -396,6 +377,10 @@ class EnvFile:
     errors: tuple[str, ...]
 
 
+# Keys that earlier versions needed. A file that still holds one fails with a clear line.
+RETIRED_KEYS = ("AUTHENTIK_STUDENT_GROUP_PREFIX", "AUTHENTIK_STUDENT_GROUP_SUFFIX")
+
+
 def parse_env(text: str, known: Collection[str]) -> EnvFile:
     """Parse text with the strict dotenv subset, collecting every problem with its line number."""
     values: dict[str, str] = {}
@@ -429,7 +414,9 @@ def parse_env(text: str, known: Collection[str]) -> EnvFile:
             errors.append(f"line {n}: {name} appears twice (first on line {lines[name]})")
             continue
         lines[name] = n
-        if name not in known and not name.startswith("COMPOSE_"):
+        if name in RETIRED_KEYS:
+            errors.append(f"line {n}: {name} is retired, delete this line")
+        elif name not in known and not name.startswith("COMPOSE_"):
             errors.append(f"line {n}: unknown key {name}")
         if not _VALUE.match(value):
             errors.append(

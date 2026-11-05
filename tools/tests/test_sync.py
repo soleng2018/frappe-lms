@@ -45,9 +45,11 @@ def course() -> Course:
     )
 
 
-def run(fake: FakeLms, c: Course | None = None, *, check: bool = False) -> tuple[int, list[str]]:
+def run(
+    fake: FakeLms, c: Course | None = None, *, check: bool = False, admin: str = "hol-admins"
+) -> tuple[int, list[str]]:
     said: list[str] = []
-    code = run_sync(fake.client(), c or course(), check=check, say=said.append)
+    code = run_sync(fake.client(), c or course(), check=check, say=said.append, admin_group=admin)
     return code, said
 
 
@@ -59,7 +61,7 @@ def built() -> FakeLms:
 
 def test_a_clean_site_gets_the_whole_course() -> None:
     fake = built()
-    kinds = {t: len(d) for t, d in fake.docs.items() if d}
+    kinds = {t: len(d) for t, d in fake.docs.items() if d and t != "System Settings"}
     assert kinds == {
         "LMS Course": 1,
         "Course Chapter": 2,
@@ -67,14 +69,19 @@ def test_a_clean_site_gets_the_whole_course() -> None:
         "LMS Quiz": 2,
         "LMS Question": 2,
     }
-    assert all(d["nile_key"] for docs in fake.docs.values() for d in docs.values())
+    assert all(
+        d["nile_key"]
+        for t, docs in fake.docs.items()
+        if t != "System Settings"
+        for d in docs.values()
+    )
     c = fake.by_key("LMS Course", "c")
     assert (
         c["published"],
         c["status"],
         c["enable_certification"],
         c["enforce_lesson_completion"],
-    ) == (1, "Approved", 1, 0)
+    ) == (0, "Approved", 1, 0)
     assert [r["chapter"] for r in c["chapters"]] == [
         fake.by_key("Course Chapter", k)["name"] for k in ("ch1", "ch2")
     ]
@@ -290,18 +297,43 @@ def test_a_progress_row_of_a_detached_lesson_does_not_count() -> None:
     assert fake.of("LMS Enrollment")["e1"]["progress"] == 0.0
 
 
-def test_every_batch_gets_one_row_and_a_second_run_adds_none() -> None:
+def test_no_batch_is_touched_and_a_hand_published_course_is_set_back() -> None:
     fake = built()
-    fake.seed("LMS Batch", "b1", courses=[{"name": "r1", "course": "other"}])
-    fake.seed("LMS Batch", "b2", courses=[])
-    run(fake)
-    course_name = fake.by_key("LMS Course", "c")["name"]
-    for b in ("b1", "b2"):
-        assert [r["course"] for r in fake.of("LMS Batch")[b]["courses"]].count(course_name) == 1
-    assert fake.of("LMS Batch")["b1"]["courses"][0] == {"name": "r1", "course": "other"}
-    before = len(fake.writes)
+    fake.seed("LMS Batch", "b1", courses=[])
+    name = fake.by_key("LMS Course", "c")["name"]
+    fake.docs["LMS Course"][name]["published"] = 1
+    assert run(fake)[0] == 0
+    assert fake.of("LMS Course")[name]["published"] == 0
+    assert fake.of("LMS Batch")["b1"]["courses"] == []
     assert run(fake)[1] == ["nothing to change"]
-    assert len(fake.writes) == before
+
+
+def test_a_retitle_prints_old_and_new_title_in_check_and_in_a_real_run() -> None:
+    fake = built()
+    new = replace(course(), title="Renamed")
+    for check in (True, False):
+        said = run(fake, new, check=check)[1]
+        assert any(
+            "'Renamed'" in line and "Authentik group name must change" in line for line in said
+        )
+        if check:
+            assert not any(line.startswith("updated") for line in said)
+
+
+def test_a_duplicate_title_is_refused_with_the_case_kept_and_nothing_is_written() -> None:
+    fake = FakeLms()
+    fake.seed("LMS Course", "hand-made", title=course().title)
+    with pytest.raises(LmsError, match="hand-made"):
+        run(fake)
+    assert not fake.writes
+    fake = FakeLms()
+    fake.seed("LMS Course", "hand-made", title=course().title.upper())
+    assert run(fake)[0] == 0
+
+
+def test_a_title_equal_to_the_admin_group_is_refused() -> None:
+    with pytest.raises(LmsError, match="admin group"):
+        run(FakeLms(), admin=course().title)
 
 
 def test_a_failed_write_stops_and_a_rerun_finishes_the_job() -> None:
