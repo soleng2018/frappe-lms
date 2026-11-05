@@ -1,8 +1,8 @@
-"""Group to role mapping at login (spec 0006).
+"""Course access from groups at login (spec 0009, building on spec 0006).
 
-`custom` replaces Frappe's OIDC callback. It reads the groups from the userinfo, provisions the user
-and the enrollments in one transaction, then hands over to Frappe's own `login_oauth_user`, which
-commits. Any failure rolls everything back and shows a retry page.
+`custom` replaces Frappe's OIDC callback. It reads the groups from the userinfo, finds the one course
+group, provisions the user and the one enrollment in one transaction, then hands over to Frappe's own
+`login_oauth_user`, which commits. Any failure rolls everything back and shows a retry page.
 """
 
 import json
@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 
 import frappe
 from frappe.integrations.oauth2_logins import decoder_compat
-from frappe.utils import add_years, today
+from frappe.utils import get_url
 from frappe.utils.oauth import (
 	OAUTH_LOGIN_FLOW_CACHE_PREFIX,
 	get_email,
@@ -20,9 +20,22 @@ from frappe.utils.oauth import (
 	get_last_name,
 	login_oauth_user,
 )
+from lms.lms.utils import get_course_progress
 
 from nile_auth import constants as c
-from nile_auth.groups import KIND_NO_CLAIM, KIND_NO_GROUP, Decision, decide, landing_path
+from nile_auth.groups import (
+	KIND_ADMIN_ONLY,
+	KIND_BAD_COURSE,
+	KIND_LIVE,
+	KIND_NO_GROUP,
+	KIND_RESULTS,
+	KIND_TWO_COURSES,
+	Decision,
+	claim_fault,
+	decide,
+	landing_path,
+	mode,
+)
 
 __all__ = ["Outcome", "custom", "provision"]
 
@@ -31,16 +44,14 @@ PROTECTED_USERS = ("Administrator", "Guest")
 
 @dataclass
 class Outcome:
-	"""What `provision` did, for the log line and the tests."""
+	"""What `provision` did, for the tests."""
 
 	user: str = ""
 	created: bool = False
 	roles_added: list[str] = field(default_factory=list)
 	roles_removed: list[str] = field(default_factory=list)
-	batches_created: int = 0
-	batch_courses_added: int = 0
-	batch_enrollments_created: int = 0
 	enrollments_created: int = 0
+	enrollments_removed: list[str] = field(default_factory=list)
 
 
 class Refused(Exception):
@@ -60,8 +71,7 @@ def custom(code: str, state: str):
 	if not (len(path) == 4 and path[3] and frappe.db.exists("Social Login Key", path[3])):
 		return
 	provider = path[3]
-	_read_committed()
-	seen = {"email": "none", "groups": ()}  # filled in as the flow learns them, for the log line
+	seen = {"email": "none", "mode": "none", "group": ""}  # filled in as the flow learns them
 	try:
 		outcome = _login(provider, code, state, seen)
 	except Refused as refusal:
@@ -73,33 +83,17 @@ def custom(code: str, state: str):
 		_log_fault(code, state)
 		_respond(c.PAGE_RETRY)
 		outcome = c.OUTCOME_ERROR
-	frappe.db.sql("SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ")  # for later transactions
-	_log(outcome, seen["email"], seen["groups"])
-
-
-def _read_committed() -> None:
-	"""Run this login's transaction at READ COMMITTED (`custom` puts the session level back).
-
-	Under the default REPEATABLE READ, a login that loses a race for a new batch can never see the
-	winner's committed row through LMS's own plain reads, and locking reads take gap locks that
-	deadlock. Nothing is pending in a guest GET, so ending the transaction here loses nothing.
-	"""
-	frappe.db.sql(
-		"SET SESSION TRANSACTION ISOLATION LEVEL READ COMMITTED"
-	)  # applies from the next transaction
-	frappe.db.commit()  # Frappe starts the next transaction at once, now at READ COMMITTED
+	_log(outcome, seen)
 
 
 def _login(provider: str, code: str, state: str, seen: dict) -> str:
-	"""Run steps 2 to 9 of the flow. Returns the outcome word, or raises Refused."""
+	"""Run steps 2 to 10 of the flow. Returns the outcome word, or raises Refused."""
 	kept = frappe.cache.get_value(f"{OAUTH_LOGIN_FLOW_CACHE_PREFIX}:{state}") if state else None
 	if kept is None:
 		raise Refused(c.OUTCOME_BAD_STATE, c.PAGE_BAD_STATE)
 
-	admin_group, prefix, suffix = (
-		frappe.conf.get(key) for key in (c.CONF_ADMIN_GROUP, c.CONF_STUDENT_PREFIX, c.CONF_STUDENT_SUFFIX)
-	)
-	if not all((admin_group, prefix, suffix, frappe.conf.get(c.CONF_SERVICE_USER))):
+	admin_group = frappe.conf.get(c.CONF_ADMIN_GROUP)
+	if not (admin_group and frappe.conf.get(c.CONF_SERVICE_USER)):
 		raise Refused(c.OUTCOME_FAULT_SETTINGS, c.PAGE_SETUP_FAULT)
 
 	info = get_info_via_oauth(provider, code, decoder_compat)
@@ -108,12 +102,30 @@ def _login(provider: str, code: str, state: str, seen: dict) -> str:
 		raise Refused(c.OUTCOME_NO_EMAIL, c.PAGE_NO_EMAIL)
 	seen["email"] = email
 
-	decision = decide(info.get("groups"), admin_group, prefix, suffix)
-	if decision.kind == KIND_NO_CLAIM:
+	groups = info.get("groups")
+	if claim_fault(groups, admin_group):
 		raise Refused(c.OUTCOME_FAULT_CLAIM, c.PAGE_SETUP_FAULT)
-	seen["groups"] = decision.matched_groups
 
+	# The empty commit ends the read view of this request. The locking read that follows is then the
+	# first statement of a new transaction, so it serializes two logins of one person and every plain
+	# read after it sees what the other login committed.
+	frappe.db.commit()
+	frappe.db.get_value("User", email.lower(), "name", for_update=True)
+
+	courses = [
+		(row.name, row.title)
+		for row in frappe.get_all("LMS Course", filters={"nile_key": ["is", "set"]}, fields=["name", "title"])
+	]
 	existing = frappe.db.exists("User", email)
+	known = bool(existing) and _is_known_learner(email)
+	decision = decide(groups, admin_group, courses, known)
+	seen["mode"] = mode(decision)
+	seen["group"] = decision.course_group
+	if decision.kind == KIND_TWO_COURSES:
+		raise Refused(c.OUTCOME_TWO_COURSES, c.PAGE_TWO_COURSES)
+	if decision.kind == KIND_BAD_COURSE:
+		raise Refused(c.OUTCOME_FAULT_COURSE, c.PAGE_SETUP_FAULT)
+
 	if existing:
 		_refuse_if_protected(existing, info, provider)
 		if not frappe.db.get_value("User", existing, "enabled"):
@@ -122,23 +134,34 @@ def _login(provider: str, code: str, state: str, seen: dict) -> str:
 
 	if decision.kind == KIND_NO_GROUP:
 		if existing:
-			_strip_managed_roles(existing)
+			_strip_admin_roles(existing)
 		raise Refused(c.OUTCOME_NO_GROUP, c.PAGE_REFUSED)
 
 	try:
 		frappe.set_user("Administrator")
-		provision(info, decision, email)
+		out = provision(info, decision, email)
 	finally:
 		frappe.set_user("Guest")
 	login_oauth_user(info, provider=provider, state=state)  # consumes the state, sets a redirect
-	_land(kept)
+	_land(decision, out.user, kept)
 	return c.OUTCOME_OK
 
 
-def _land(kept: str) -> None:
-	"""Send a signed in person to `/lms`, or to a safe deep link kept in the state (AC-10)."""
-	if frappe.local.response.get("type") == "redirect":
-		frappe.local.response["location"] = landing_path(kept)
+def _is_known_learner(email: str) -> bool:
+	"""An existing, enabled user who holds the LMS Student role."""
+	return bool(
+		frappe.db.get_value("User", email, "enabled")
+		and frappe.db.exists("Has Role", {"parent": email, "parenttype": "User", "role": c.STUDENT_ROLES[0]})
+	)
+
+
+def _land(decision: Decision, email: str, kept: str) -> None:
+	"""Change the redirect that Frappe's login left, to the place AC-11 names."""
+	response = frappe.local.response
+	if response.get("type") != "redirect" or frappe.session.user != email:
+		return
+	username = frappe.db.get_value("User", email, "username")
+	response["location"] = get_url(landing_path(decision, username, kept))
 
 
 def _refuse_if_protected(name: str, info: dict, provider: str) -> None:
@@ -160,12 +183,12 @@ def _refuse_if_protected(name: str, info: dict, provider: str) -> None:
 			raise Refused(c.OUTCOME_IDENTITY, c.PAGE_PROTECTED)
 
 
-def _strip_managed_roles(name: str) -> None:
-	"""Take the managed roles from a user who is in no workshop group, and commit just that."""
+def _strip_admin_roles(name: str) -> None:
+	"""Take the admin roles from a user who is in no course group and no admin group, and commit."""
 	try:
 		frappe.set_user("Administrator")
 		user = frappe.get_doc("User", name)
-		keep = [r for r in user.roles if r.role not in c.MANAGED_ROLES]
+		keep = [r for r in user.roles if r.role not in c.ADMIN_ROLES]
 		if len(keep) != len(user.roles):
 			user.set("roles", keep)
 			user.set(c.USER_GROUPS_FIELD, "")
@@ -177,20 +200,31 @@ def _strip_managed_roles(name: str) -> None:
 
 
 def provision(info: dict, decision: Decision, email: str | None = None) -> Outcome:
-	"""Create or update the user and the enrollments for one member. Runs as Administrator, no commit."""
+	"""Create or update the user and the one enrollment. Runs as Administrator, no commit."""
 	email = (email or get_email(info)).lower()
 	out = Outcome()
 	user = _ensure_user(info, email, out)
-	_reconcile_roles(user, decision, out)
+	# LMS adds LMS Student when it inserts a user; an admin with no course group must not keep it.
+	_reconcile_roles(user, decision, out, drop_student=out.created and decision.kind == KIND_ADMIN_ONLY)
 
-	published = sorted(frappe.get_all("LMS Course", {"published": 1}, pluck="name"))
-	batches = [_ensure_batch(group, published, out) for group in decision.workshop_groups]
-	for batch in batches:
-		_enroll_in_batch(batch, user.name, out)
-	if batches:
-		for course in published:
-			_enroll_in_course(course, user.name, batches[0], out)
+	have = frappe.get_all(
+		"LMS Enrollment",
+		filters={"member": user.name, "course": ["in", _managed_courses()]},
+		fields=["name", "course"],
+	)
+	if decision.kind == KIND_LIVE:
+		if not any(row.course == decision.course for row in have):
+			_enroll(decision.course, user.name, out)
+	if decision.kind in (KIND_LIVE, KIND_RESULTS):
+		for row in have:
+			if row.course != decision.course:
+				frappe.delete_doc("LMS Enrollment", row.name, ignore_permissions=True)
+				out.enrollments_removed.append(row.course)
 	return out
+
+
+def _managed_courses() -> list[str]:
+	return frappe.get_all("LMS Course", filters={"nile_key": ["is", "set"]}, pluck="name") or [""]
 
 
 def _ensure_user(info: dict, email: str, out: Outcome):
@@ -215,13 +249,16 @@ def _ensure_user(info: dict, email: str, out: Outcome):
 	return user
 
 
-def _reconcile_roles(user, decision: Decision, out: Outcome) -> None:
-	"""Set the managed roles to exactly the wanted ones and write nile_groups, in one save."""
+def _reconcile_roles(user, decision: Decision, out: Outcome, drop_student: bool = False) -> None:
+	"""Set the admin roles, add LMS Student for a live login, and write nile_groups, in one save."""
 	have = {r.role for r in user.roles}
 	want = set(decision.desired_roles)
-	out.roles_removed = sorted(have & set(c.MANAGED_ROLES) - want)
+	gone = (have & set(c.ADMIN_ROLES)) - want
+	if drop_student:
+		gone |= have & set(c.STUDENT_ROLES)
+	out.roles_removed = sorted(gone)
 	out.roles_added = sorted(want - have)
-	user.set("roles", [r for r in user.roles if r.role not in out.roles_removed])
+	user.set("roles", [r for r in user.roles if r.role not in gone])
 	for role in out.roles_added:
 		user.append("roles", {"role": role})
 	user.set(c.USER_GROUPS_FIELD, "\n".join(decision.matched_groups))
@@ -229,84 +266,16 @@ def _reconcile_roles(user, decision: Decision, out: Outcome) -> None:
 	user.save()
 
 
-def _ensure_batch(group: str, courses: list[str], out: Outcome) -> str:
-	"""Find the batch by nile_group, create it if missing, top up its courses.
-
-	A locking read of a row that does not exist yet takes a gap lock, and two first logins then
-	deadlock on their inserts. So read plainly first, and use the locking read only on a row that
-	exists (a record lock) or after a duplicate key error (the winner's row is then committed).
-	"""
-	name = frappe.db.get_value("LMS Batch", {c.BATCH_GROUP_FIELD: group}, "name")
-	if name:
-		frappe.db.get_value("LMS Batch", name, "name", for_update=True)
-	else:
-		frappe.db.savepoint("nile_batch")
-		try:
-			name = _new_batch(group, courses).name
-			out.batches_created += 1
-		except frappe.DuplicateEntryError, frappe.UniqueValidationError:
-			frappe.db.rollback(save_point="nile_batch")
-			name = _locked_batch(group)
-			if not name:
-				raise
-		return name
-
-	batch = frappe.get_doc("LMS Batch", name)
-	have = {row.course for row in batch.courses}
-	missing = [course for course in courses if course not in have]
-	for course in missing:
-		batch.append("courses", {"course": course})
-	if missing:
-		batch.flags.ignore_permissions = True
-		batch.save()
-		out.batch_courses_added += len(missing)
-	return name
-
-
-def _locked_batch(group: str) -> str | None:
-	return frappe.db.get_value("LMS Batch", {c.BATCH_GROUP_FIELD: group}, "name", for_update=True)
-
-
-def _new_batch(group: str, courses: list[str]):
-	batch = frappe.get_doc(
-		{
-			"doctype": "LMS Batch",
-			"title": group,
-			c.BATCH_GROUP_FIELD: group,
-			"start_date": today(),
-			"end_date": add_years(today(), c.BATCH_END_YEARS),
-			"start_time": c.BATCH_START_TIME,
-			"end_time": c.BATCH_END_TIME,
-			"timezone": frappe.utils.get_system_timezone(),
-			"description": c.BATCH_DESCRIPTION.format(group=group),
-			"batch_details": c.BATCH_DESCRIPTION.format(group=group),
-			"published": c.BATCH_PUBLISHED,
-			"allow_self_enrollment": c.BATCH_ALLOW_SELF_ENROLLMENT,
-			"instructors": [{"instructor": frappe.conf.get(c.CONF_SERVICE_USER)}],
-			"courses": [{"course": course} for course in courses],
-		}
-	)
-	return batch.insert(ignore_permissions=True)
-
-
-def _enroll_in_batch(batch: str, member: str, out: Outcome) -> None:
-	if frappe.db.exists("LMS Batch Enrollment", {"batch": batch, "member": member}):
-		return
+def _enroll(course: str, member: str, out: Outcome) -> None:
+	"""Enroll directly, with no batch. The progress comes from the learner's own lesson rows."""
 	frappe.get_doc(
-		{"doctype": "LMS Batch Enrollment", "batch": batch, "member": member, "confirmation_email_sent": 1}
+		{
+			"doctype": "LMS Enrollment",
+			"course": course,
+			"member": member,
+			"progress": get_course_progress(course, member),
+		}
 	).insert(ignore_permissions=True)
-	out.batch_enrollments_created += 1
-
-
-def _enroll_in_course(course: str, member: str, batch: str, out: Outcome) -> None:
-	frappe.db.get_value("LMS Course", course, "name", for_update=True)
-	if frappe.db.exists("LMS Enrollment", {"course": course, "member": member}):
-		return
-	enrollment = frappe.get_doc(
-		{"doctype": "LMS Enrollment", "course": course, "member": member, "enrollment_from_batch": batch}
-	)
-	enrollment.flags.via_batch_enrollment = True
-	enrollment.insert(ignore_permissions=True)
 	out.enrollments_created += 1
 
 
@@ -315,14 +284,22 @@ def _respond(page: tuple[str, str, int]) -> None:
 	frappe.respond_as_web_page(title, message, http_status_code=status, indicator_color="red")
 
 
-def _log(outcome: str, email: str, groups: tuple[str, ...]) -> None:
+def _log(outcome: str, seen: dict) -> None:
 	"""One line per login on the nile_auth logger. Never holds a token, code or the userinfo."""
-	line = f"login email={json.dumps(email)} outcome={outcome} groups={json.dumps(list(groups))}"
+	line = (
+		f"login email={json.dumps(seen['email'])} outcome={outcome} mode={seen['mode']} "
+		f"course_group={json.dumps(seen['group'])}"
+	)
 	logger = frappe.logger(c.LOGGER_NAME)
 	logger.setLevel(logging.INFO)  # frappe.logger starts at WARNING, and the ok line is info
 	if outcome == c.OUTCOME_OK:
 		logger.info(line)
-	elif outcome in (c.OUTCOME_ERROR, c.OUTCOME_FAULT_CLAIM, c.OUTCOME_FAULT_SETTINGS):
+	elif outcome in (
+		c.OUTCOME_ERROR,
+		c.OUTCOME_FAULT_CLAIM,
+		c.OUTCOME_FAULT_SETTINGS,
+		c.OUTCOME_FAULT_COURSE,
+	):
 		logger.error(line)
 	else:
 		logger.warning(line)

@@ -18,7 +18,7 @@ and [spec 0006](../../docs/specs/0006-group-to-role-mapping/index.md) (login).
 
 ## Files
 
-- `nile_auth/constants.py`: roles, user types, batch defaults, site config key names, outcome words, and page texts.
+- `nile_auth/constants.py`: roles, user types, site config key names, outcome words, and page texts.
 - `nile_auth/groups.py`: `decide()`, the pure group classifier. No Frappe, tested in `tools/tests/test_groups.py`.
 - `nile_auth/login.py`: `custom`, which replaces Frappe's OIDC callback (`hooks.py`
   `override_whitelisted_methods`), and `provision`.
@@ -43,13 +43,56 @@ and [spec 0006](../../docs/specs/0006-group-to-role-mapping/index.md) (login).
 - An LMS Batch with the spec values saves. Inserting a Batch Enrollment as Administrator creates the
   course enrollments. Run the login hook as Administrator: a Batch Enrollment by anyone else needs
   Moderator, Batch Evaluator, or self enrollment switched on.
-- Adding a course to a batch later does not enroll its existing members, so `nile_auth` fills the gap at login.
+- A repeated `nile_key` or `nile_group` is refused. Records with no key are fine (they are NULL).
+
+## The login (spec 0009, on top of spec 0006)
+
+At each Authentik login `custom` checks the `state` token, reads `nile_admin_group` and `nile_service_user` from
+site config (written by `create-site`), gets the userinfo, and classifies its `groups` list against the titles of
+the managed courses (LMS Courses that have a `nile_key`). Names are compared in code, case kept.
+
+| Groups | Result |
+|---|---|
+| exactly one group equal to a managed course title | LMS Student, enrolled in that course only (no batch), other managed enrollments removed, lands on the course |
+| `hol-admins` | Moderator, Course Creator, Desk User (Frappe then makes a System User). Follows the group at every login. |
+| no course group, known learner (enabled, LMS Student) | results mode: enrollments in managed courses removed, everything else kept, lands on the profile |
+| no course group, not a known learner | 403 page, admin roles removed, nothing else touched |
+| two or more course groups | 403 "linked to more than one course" page, nothing changes |
+| no `groups` list, empty group setting, or one title shared by two courses | setup fault page (500), nothing changes |
+
+Courses stay unpublished, so Frappe's own rule "published, enrolled or instructor" hides every other course.
+Only the admin roles, LMS Student (added, never removed) and `nile_groups` are changed, plus the enrollments above.
+Administrator, Guest, the service user, the MCP user, any System Manager, and a user whose stored subject differs
+from the login are refused. One log line per login on the Frappe logger `nile_auth`
+(`sites/<site>/logs/nile_auth.log`) with email, outcome, mode and course group, never a token or code.
+
+`nile_auth.cleanup.clear_batch_courses` lists (and with `dry_run=False` removes) the Batch Course rows the old
+login put into batches that carry `nile_group`.
+
+## What the live site showed (pinned by `tools/tests/test_data_model_integration.py`)
+
+- **Quiz lessons are gated by the body, not by `quiz_id`.** LMS finds a lesson's quizzes from a
+  `{{ Quiz("<quiz name>") }}` macro in `body` (or from `content` blocks). A quiz lesson with only
+  `quiz_id` can be marked complete without passing. Video lessons show only when `body` has a
+  `{{ YouTubeVideo("<id>") }}` macro (from reading the source, not run). The sync therefore writes both
+  macros into `body` (spec 0004 AC-10), built by `lesson_body` in `tools/src/nile_tools/content.py`.
+- A passing `submit_quiz` completes the quiz lesson by itself, when `quiz.lesson` and `quiz.course` are set.
+- Video and lab lessons complete when the student marks them (`save_progress`).
+- `create_certificate` works for a Website User with only LMS Student, no evaluator needed. It is refused
+  under 100% progress. The certificate is created unpublished, and only its owner can read it.
+- A student reads only their own Quiz Submission (LMS gives LMS Student `read` with `if_owner`), their own
+  Enrollment, and no one else's progress or certificates. Once a doctype has any Custom DocPerm row, Frappe
+  ignores its standard permissions, so the Quiz Submission fixture restates all five LMS rows and adds
+  `delete` for Moderator.
+- An LMS Batch with the spec values saves. Inserting a Batch Enrollment as Administrator creates the
+  course enrollments. Run the login hook as Administrator: a Batch Enrollment by anyone else needs
+  Moderator, Batch Evaluator, or self enrollment switched on.
 - A repeated `nile_key` or `nile_group` is refused. Records with no key are fine (they are NULL).
 
 ## The login (spec 0006)
 
 At each Authentik login `custom` checks the `state` token, reads the three group settings from site config
-(`nile_admin_group`, `nile_student_group_prefix`, `nile_student_group_suffix`, plus `nile_service_user`, all written
+( `nile_service_user`, all written
 by `create-site`), gets the userinfo, and classifies its `groups` list.
 
 | Groups | Result |
@@ -70,14 +113,14 @@ One log line per login on the Frappe logger `nile_auth` (`sites/<site>/logs/nile
 - Overriding `frappe.integrations.oauth2_logins.custom` routes `/api/method/...custom/<provider>` to `nile_auth`.
 - Frappe derives the user type from the roles: Desk User gives a System User, anything else a Website User.
 - LMS adds LMS Student to every new user on insert, so the role reconcile runs after the insert.
-- `confirmation_email_sent = 1` on the Batch Enrollment queues no mail. LMS Settings has batch notifications off.
+- An LMS Enrollment made as Administrator with no batch queues no mail and no job, and skips LMS's unpublished course check.
 - Frappe's own `update_oauth_user` step after ours keeps the roles and links the subject.
-- **A locking read of a batch that does not exist yet deadlocks two simultaneous first logins** (gap locks), and
-  under MariaDB's default REPEATABLE READ the losing login cannot see the winner's row through LMS's own reads
-  (Batch Enrollment link check). So `custom` runs its transaction at READ COMMITTED (`SET SESSION`, then a commit
-  of the empty transaction, and puts the level back at the end), reads the batch plainly first, and locks only a row
-  that exists or after a duplicate key error. Spec 0006 was updated to say this on 2026-11-03.
-- Course top up reaches only the groups in the current login. Batches of groups a student has left are not changed.
+- The login takes one lock: a locking read of the User row, first statement after an empty commit. Two logins of
+  one existing person end in the same state with no error; two first logins of one new person may collide on the
+  User insert and one gets the retry page with nothing half done. No isolation level change is needed
+  (pinned by `test_two_logins_of_one_person_at_once`).
+- A learner can read a course through LMS's permission functions only while enrolled; self enrollment in an
+  unpublished course is refused. LMS Programs holding a second course are not covered by the live test.
 - The `backend` container has no `LMS_SERVICE_USER`; only `create-site` does, which is why it is written to site config.
 
 ## Not checked

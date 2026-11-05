@@ -1,4 +1,4 @@
-"""Unit tests for nile_tools.plan: creates, updates, detaches, batches, progress (AC-1 to 6, 8)."""
+"""Unit tests for nile_tools.plan: creates, updates, detaches, progress (AC-1 to 6, 8)."""
 
 from copy import deepcopy
 from dataclasses import replace
@@ -16,7 +16,6 @@ from nile_tools.content import (
     VideoLesson,
 )
 from nile_tools.plan import (
-    AddToBatch,
     Detach,
     Found,
     Ref,
@@ -161,7 +160,7 @@ def test_creates_carry_only_what_is_needed_and_refs_for_what_is_not_made_yet() -
     assert by_key["ql"].fields == {"title": "Quiz lesson", "chapter": Ref(plan.CHAPTER, "ch1")}
     assert by_key["v"].fields["body"] == '{{ YouTubeVideo("dQw4w9WgXcQ") }}'
     assert by_key["lab"].fields["body"] == "# Lab\n& more"
-    assert by_key["c"].fields["published"] == 1
+    assert by_key["c"].fields["published"] == 0
     assert by_key["c"].fields["enable_certification"] == 1
     assert by_key["c"].fields["enforce_lesson_completion"] == 0
 
@@ -345,19 +344,6 @@ def test_the_quiz_lesson_body_uses_the_name_lms_gave_not_the_title() -> None:
     lesson = next(a for a in plan_sync(course(), found) if isinstance(a, Update) and a.key == "ql")
     wanted = {c.field: c.wanted for c in lesson.changes}
     assert wanted == {"quiz_id": "quiz-2", "body": '{{ Quiz("quiz-2") }}'}
-
-
-def test_every_batch_without_a_row_for_the_course_gets_one() -> None:
-    batches = (
-        {"name": "b1", "courses": []},
-        {"name": "b2", "courses": [{"course": "N-c"}]},
-        {"name": "b3", "courses": [{"course": "other"}]},
-    )
-    actions = plan_sync(course(), replace(synced(course()), batches=batches))
-    assert [a for a in actions if isinstance(a, AddToBatch)] == [
-        AddToBatch("b1", "N-c"),
-        AddToBatch("b3", "N-c"),
-    ]
 
 
 def test_records_not_in_the_lms_yet_are_left_to_the_creates() -> None:

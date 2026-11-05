@@ -128,7 +128,13 @@ def sync(root: Path, *, check: bool) -> int:
     )
     connection = lms.connect(host, key, secret)
     try:
-        return run_sync(connection, course, check=check, say=print)
+        return run_sync(
+            connection,
+            course,
+            check=check,
+            say=print,
+            admin_group=values.get("AUTHENTIK_ADMIN_GROUP", ""),
+        )
     except LmsError as e:
         print(f"ERROR {e}", file=sys.stderr)
         return 1

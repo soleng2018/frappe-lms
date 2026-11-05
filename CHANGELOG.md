@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Course access from groups (spec 0009): a learner in an Authentik group named exactly like a course is enrolled in that course only, with no batch. With no course group a known learner keeps their certificate and progress but loses the lessons. Two course groups are refused with a clear page.
+- `nile_auth.cleanup.clear_batch_courses` lists and removes the old batch course rows.
 - `make tools CMD="verify deploy"` proves the LMS is reachable and safe over its public hostname. It checks the ping, the home page with its CSS and JS files, the socket.io endpoint, and that plain HTTP redirects to https. A missing redirect is a warning, never a failure. Each line says PASS, WARN or FAIL, names the URL or compose key, and never shows a secret (see spec 0007).
 - `verify deploy` also reads `deploy/compose.yaml` and fails if a service publishes a port, if any service other than `frontend` has Traefik labels or the Traefik network, if the router rule does not name `${LMS_HOSTNAME}`, or if log rotation or the restart policy is missing.
 - `make restart-test` restarts the long running services, kills `backend` and `frontend` hard, waits up to 180 seconds for every service to be healthy, and runs `verify deploy` again. It touches only the `nile-lms` project.
@@ -21,6 +23,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Tests for the sync: unit tests with a fake LMS, and live integration tests that build a throwaway course and a throwaway student on the running site, then delete them.
 
 ### Changed
+- `sync` creates courses unpublished and adds them to no batch. It warns when a title change needs a new Authentik group name, and refuses a duplicate title or one equal to the admin group.
+- The keys `AUTHENTIK_STUDENT_GROUP_PREFIX` and `AUTHENTIK_STUDENT_GROUP_SUFFIX` are retired. Delete them from `.env`.
 - Git wins over the LMS. If a synced record was edited in the Desk, `sync` prints `LMS has X, git has Y` and overwrites it. Run `--check` first to see those edits.
 - Nothing is deleted. A lesson, chapter, quiz or question removed from git leaves the course outline and stays in the LMS, and the command names each one it detaches.
 - The Authentik login now refuses a user whose email matches the MCP user, with the same generic "cannot use this login" page it shows for the service user.

@@ -114,7 +114,8 @@ make tools CMD=sync             # checks the file first, then makes the LMS matc
 - Git wins. If someone edited a synced record in the LMS, `sync` prints `LMS has X, git has Y` and overwrites it. Use `--check` first to see those edits.
 - Nothing is deleted. A lesson, chapter, quiz or question you remove from git leaves the course and stays in the LMS. The command names each one it detaches.
 - If a request fails, the command stops, prints the record, the URL, the status and the reason, and exits 1. Run it again: it carries on where it stopped.
-- Every existing batch gets the course added to it. Students keep their progress, and it is recalculated when the outline changes.
+- The course is created and kept unpublished, and it is added to no batch. A learner reaches it only through an enrollment made at login. Progress is recalculated when the outline changes.
+- If you change a course title, `sync` prints the old and new title first. The Authentik group name must change too. It refuses a title that another course already has, or that equals `AUTHENTIK_ADMIN_GROUP`.
 
 ## 6. Checking the deployment and connecting an agent
 
@@ -136,9 +137,16 @@ The agent can read and write LMS content. Git is the source of truth, so an agen
 
 - `deploy/`: compose file, image build, version pins, container scripts.
 - `tools/`: Python package for setup scripts.
-- `apps/nile_auth/`: custom Frappe app: Authentik groups become LMS roles at login (`hol-admins` admin, `NileWorkshopNAdmin` students).
+- `apps/nile_auth/`: custom Frappe app: Authentik groups become LMS access at login (`hol-admins` admin, a group named exactly like a course enrolls the learner in that course only).
 - `content/`: courses. `brand/`: brand assets (do not edit). `docs/`: scope, specs, reviews.
 
 ## 8. Keeping this file current
 
 This README is updated at the end of every work turn that changes how the repo is set up or used. See the rules in [AGENTS.md](AGENTS.md).
+
+## Upgrading from the batch based login (spec 0009)
+
+1. Delete the lines `AUTHENTIK_STUDENT_GROUP_PREFIX` and `AUTHENTIK_STUDENT_GROUP_SUFFIX` from `.env`. Every command fails with a "retired" line until you do.
+2. `make build` and `make up` (this takes the new `nile_auth` version).
+3. `make tools CMD=sync` sets the existing course to unpublished.
+4. Read, then run, the cleanup of the old batch course rows: `bench --site <site> execute nile_auth.cleanup.clear_batch_courses` (lists only), then add `--kwargs "{'dry_run': False}"` to remove them.

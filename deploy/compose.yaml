@@ -108,8 +108,6 @@ services:
       LMS_MCP_API_KEY: ${LMS_MCP_API_KEY}
       LMS_MCP_API_SECRET: ${LMS_MCP_API_SECRET}
       AUTHENTIK_ADMIN_GROUP: ${AUTHENTIK_ADMIN_GROUP}
-      AUTHENTIK_STUDENT_GROUP_PREFIX: ${AUTHENTIK_STUDENT_GROUP_PREFIX}
-      AUTHENTIK_STUDENT_GROUP_SUFFIX: ${AUTHENTIK_STUDENT_GROUP_SUFFIX}
     volumes:
       - sites:/home/frappe/frappe-bench/sites
       - logs:/home/frappe/frappe-bench/logs

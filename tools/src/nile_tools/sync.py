@@ -7,6 +7,7 @@ from nile_tools import plan
 from nile_tools.content import Course
 from nile_tools.lms import (
     Lms,
+    LmsError,
     create_record,
     get_record,
     list_records,
@@ -14,7 +15,6 @@ from nile_tools.lms import (
 )
 from nile_tools.plan import (
     Action,
-    AddToBatch,
     Create,
     Detach,
     Found,
@@ -53,13 +53,10 @@ def _in(keys: Sequence[str]) -> list[list[object]]:
 
 def read_state(lms: Lms, course: Course) -> Found:
     """Read what the LMS holds for this course: by `nile_key`, and by `course` for strays."""
-    batches = tuple(
-        get_record(lms, plan.BATCH, b["name"])
-        for b in list_records(lms, plan.BATCH, fields=["name"])
-    )
+    courses = tuple(list_records(lms, plan.COURSE, fields=["name", "title", "nile_key"]))
     found = list_records(lms, plan.COURSE, filters=[["nile_key", "=", course.key]])
     if not found:
-        return Found(batches=batches)
+        return Found(courses=courses)
     doc = get_record(lms, plan.COURSE, found[0]["name"])
     here = [["course", "=", doc["name"]]]
     lesson_keys = [x.key for c in course.chapters for x in c.lessons]
@@ -85,7 +82,7 @@ def read_state(lms: Lms, course: Course) -> Found:
         else (),
         list_records(lms, plan.QUESTION, filters=_in(question_keys)) if question_keys else (),
     )
-    return Found(doc, tuple(chapters), tuple(lessons), tuple(quizzes), tuple(questions), batches)
+    return Found(doc, tuple(chapters), tuple(lessons), tuple(quizzes), tuple(questions), courses)
 
 
 def _names(found: Found) -> Names:
@@ -133,20 +130,15 @@ def _overwrites(update: Update) -> list[str]:
 def _apply(lms: Lms, action: Action, say: Say) -> None:
     match action:
         case Update(doctype=doctype, key=key, name=name, changes=changes, notes=notes):
+            for note in notes:
+                say(f"{doctype} {key}: {note}")
             for line in _overwrites(action):
                 say(line)
             body = {c.field: plan.payload(c.field, c.wanted) for c in changes}
             update_record(lms, doctype, name, body, label=f"{doctype} {key}")
-            for note in notes:
-                say(f"{doctype} {key}: {note}")
             say(f"updated {doctype} {key}: {', '.join(c.field for c in changes)}")
         case Detach(doctype=doctype, key=key):
             say(f"detached {doctype} {key} (kept in the LMS, out of the course)")
-        case AddToBatch(batch=batch, course=course_name):
-            doc = get_record(lms, plan.BATCH, batch)
-            rows = [*(doc.get("courses") or ()), {"course": course_name}]
-            update_record(lms, plan.BATCH, batch, {"courses": rows}, label=f"LMS Batch {batch}")
-            say(f"added the course to LMS Batch {batch}")
         case Unmanaged(doctype=doctype, name=name):
             say(f"unmanaged {doctype} {name}: has no nile_key, left alone")
 
@@ -167,8 +159,6 @@ def _report(creates: Sequence[Create], actions: Sequence[Action]) -> list[str]:
                 ]
             case Detach():
                 lines.append(f"would detach {a.doctype} {a.key}")
-            case AddToBatch():
-                lines.append(f"would add the course to LMS Batch {a.batch}")
             case Unmanaged():
                 lines.append(f"unmanaged {a.doctype} {a.name}: has no nile_key")
     return lines
@@ -215,9 +205,11 @@ def _counts(creates: int, updates: int, detached: int) -> str:
     return f"{creates} created, {updates} updated, {detached} detached"
 
 
-def run_sync(lms: Lms, course: Course, *, check: bool, say: Say) -> int:
+def run_sync(lms: Lms, course: Course, *, check: bool, say: Say, admin_group: str = "") -> int:
     """Make the LMS match git (or, with `check`, only say what differs). Return the exit code."""
     found = read_state(lms, course)
+    if clash := plan.title_clash(course, found, admin_group):
+        raise LmsError(f"refusing to sync: {clash}")
     creates = plan.plan_creates(course, found)
     if check:
         lines = _report(creates, plan.plan_sync(course, found))
@@ -237,6 +229,6 @@ def run_sync(lms: Lms, course: Course, *, check: bool, say: Say) -> int:
         _recompute_progress(lms, found.course["name"], _outline(course, names), say)
     updates = sum(isinstance(a, Update) for a in actions)
     detached = sum(isinstance(a, Detach) for a in actions)
-    changed = len(creates) + updates + detached + sum(isinstance(a, AddToBatch) for a in actions)
+    changed = len(creates) + updates + detached
     say(_counts(len(creates), updates, detached) if changed else "nothing to change")
     return 0

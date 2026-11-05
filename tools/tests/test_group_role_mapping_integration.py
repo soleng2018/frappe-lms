@@ -1,4 +1,4 @@
-"""Spec 0006 on the running site: login, roles, batches, enrollments (pytest -m integration).
+"""Spec 0009 on the running site: login, roles, course enrollments (pytest -m integration).
 
 The IDP call and Frappe's last login step are replaced inside `bench console`; everything else is
 the real code, and the scenario run rolls back. The throwaway Social Login Key is made and deleted
@@ -51,134 +51,171 @@ def test_the_route_is_ours_and_checks_state_before_anything_else(key: None) -> N
     assert done.stdout == "417", done.stdout + done.stderr
 
 
-def test_a_first_login_makes_a_student_with_batch_and_enrollments(run: dict[str, Any]) -> None:
-    """AC-1."""
+def test_a_first_login_makes_a_student_in_one_course_with_no_batch(run: dict[str, Any]) -> None:
+    """AC-1, AC-11."""
     assert run["first"]["signed_in"]
     s = run["student"]
     assert s["user_type"] == "Website User"
-    assert s["managed"] == ["LMS Student"]
-    assert s["groups"] == "NileWorkshop9103Admin"
-    assert (s["batch"], s["batch_enrol"]) == (1, 1)
-    assert s["enrolments"] == run["published"]
-    assert s["batch_courses"] == 1
-    assert s["from_batch"] == "nileworkshop9103admin"
-    assert s["mail_flag"] == 1
-
-
-def test_no_confirmation_mail_is_queued(run: dict[str, Any]) -> None:
-    """AC-1: the batch enrollment sends nothing and the batch notification is switched off."""
-    assert run["emails_queued"] == run["emails_after"] == 0
-    assert not run["lms_notify_setting"]
-
-
-def test_frappes_own_step_keeps_the_roles_and_links_the_subject(run: dict[str, Any]) -> None:
-    after = run["after_frappe_student"]
-    assert after["managed"] == ["LMS Student"]
-    assert after["type"] == "Website User"
-    assert after["sub"].startswith("sub-")
+    assert s["state"]["roles"] == ["LMS Student"]
+    assert s["state"]["enrolled"] == [run["names"][0]]
+    assert s["state"]["groups"].startswith("Nile IT A ")
+    assert s["from_batch"] in (None, "")
+    assert run["first"]["location"].endswith(f"/lms/courses/{run['names'][0]}")
+    assert run["own_lesson"]
 
 
 def test_a_second_login_changes_nothing(run: dict[str, Any]) -> None:
-    """AC-6."""
+    """AC-9."""
     assert run["repeat_same"]
 
 
-def test_a_move_between_groups_keeps_old_records(run: dict[str, Any]) -> None:
-    """AC-5: nile_groups follows the groups (sorted by number), old batch enrollments stay."""
-    moved = run["moved"]
-    assert moved["groups"] == "NileWorkshop9101Admin\nNileWorkshop9102Admin"
-    assert moved["batch_enrol"] == 3
-    assert moved["managed"] == ["LMS Student"]
+def test_a_move_removes_the_old_enrollment_and_keeps_progress(run: dict[str, Any]) -> None:
+    """AC-1, AC-3."""
+    assert run["moved_state"]["enrolled"] == [run["names"][1]]
+    assert run["progress_kept"] == 1
 
 
-def test_a_course_published_later_arrives_at_the_next_login(run: dict[str, Any]) -> None:
+def test_a_learner_in_one_course_cannot_reach_the_other(run: dict[str, Any]) -> None:
+    """AC-13 (course, lesson and chapter reads, and self enrollment; Programs are not covered)."""
+    assert run["isolation"] == {
+        "own_access": True,
+        "other_access": False,
+        "other_lesson": False,
+        "other_chapter": False,
+    }
+    assert run["self_enroll"] != "allowed"
+
+
+def test_results_mode_closes_lessons_and_keeps_everything_else(run: dict[str, Any]) -> None:
+    """AC-3, AC-11."""
+    assert run["results_state"] == {
+        "roles": ["LMS Student"],
+        "enrolled": [],
+        "groups": "",
+        "enabled": 1,
+    }
+    assert run["results_progress_kept"] == 1
+    assert run["results"]["location"].endswith("/lms/user/nile_test")
+
+
+def test_a_returning_learner_is_enrolled_again_at_the_rebuilt_progress(
+    run: dict[str, Any],
+) -> None:
+    """AC-1, AC-3."""
+    assert run["back_live_progress"] == 100
+
+
+def test_deep_links_win_and_default_targets_count_as_absent(run: dict[str, Any]) -> None:
     """AC-11."""
-    assert run["late"]["enrolled"] == 1
-    assert run["late"]["batch_rows"] == 2  # the student's two current batches
+    assert run["deep"].endswith("/lms/courses/other/learn/1.1")
+    assert all(x.endswith(f"/lms/courses/{run['names'][0]}") for x in run["default_targets"])
 
 
 def test_admins(run: dict[str, Any]) -> None:
-    """AC-2, AC-5: admin roles, System User by derivation, no enrollments without a group."""
-    assert run["admin"] == {
-        "user_type": "System User",
-        "managed": ["Course Creator", "Desk User", "Moderator"],
-        "groups": "hol-admins",
-        "batch_enrol": 0,
-        "enrolments": 0,
-    }
-    both = run["admin_both"]
-    assert both["managed"] == ["Course Creator", "Desk User", "LMS Student", "Moderator"]
-    assert both["groups"] == "NileWorkshop9101Admin\nhol-admins"
-    assert both["batch_enrol"] == 1
-    assert run["admin_demoted"] == {"managed": ["LMS Student"], "user_type": "Website User"}
+    """AC-2, AC-11."""
+    admin_roles = ["Course Creator", "Desk User", "Moderator"]
+    assert run["admin"]["state"]["roles"] == admin_roles
+    assert run["admin"]["state"]["enrolled"] == []
+    assert run["admin"]["type"] == "System User"
+    assert run["admin"]["student_role"] is False
+    assert run["admin_live"]["roles"] == sorted([*admin_roles, "LMS Student"])
+    assert run["admin_live"]["enrolled"] == [run["names"][0]]
+    assert run["admin_live"]["groups"].endswith("\nhol-admins")
+    assert run["admin_demoted"]["state"]["roles"] == ["LMS Student"]
+    assert run["admin_demoted"]["type"] == "Website User"
+    assert run["admin_results_state"]["enrolled"] == []
+    for name in ("admin_live_location", "admin_results_location"):
+        assert run[name].endswith("/lms")
 
 
-def test_a_user_in_no_workshop_group_is_refused_and_loses_only_the_managed_roles(
+def test_no_course_group_from_a_stranger_is_refused(run: dict[str, Any]) -> None:
+    """AC-4, AC-5."""
+    for name in ("nogroup_new", "empty_list_new", "nonlearner"):
+        assert run[name] == {"status": 403, "signed_in": False, "location": None}
+    assert run["nogroup_new_user"] is False
+    assert run["nonlearner_state"] == {"roles": [], "enrolled": [], "groups": "", "enabled": 1}
+    assert run["near_miss"] == [403, 403, 403]
+    assert run["near_miss_user"] is False
+
+
+def test_two_course_groups_are_refused_for_everyone_and_change_nothing(
     run: dict[str, Any],
 ) -> None:
-    """AC-3."""
-    for name in ("nogroup_new", "nogroup_existing", "empty_list"):
-        assert run[name] == {"status": 403, "signed_in": False}
-    assert run["nogroup_new_user"] is False
-    after = run["after_strip"]
-    assert after["managed"] == []
-    assert after["enabled"] == 1
-    assert after["enrolments_kept"]
-    assert after["batch_enrol_kept"] == 3
+    """AC-6."""
+    assert [r["status"] for r in run["two"]] == [403, 403, 403]
+    assert not any(r["signed_in"] for r in run["two"])
+    assert run["two_unchanged"]
+    assert (run["two_new"], run["two_new_user"]) == (403, False)
 
 
-def test_a_missing_or_bad_groups_value_changes_nothing(run: dict[str, Any]) -> None:
+def test_faults_change_nothing(run: dict[str, Any]) -> None:
     """AC-7."""
-    for name in ("no_claim", "bad_claim"):
-        assert run[name] == {"status": 500, "signed_in": False}
-    assert run["admin_unchanged"]
+    for name in ("no_claim", "bad_claim", "empty_admin_setting", "duplicate_title"):
+        assert run[name] == 500, name
+    assert run["faults_unchanged"]
 
 
 def test_protected_accounts_and_identity_changes_are_refused(run: dict[str, Any]) -> None:
-    """AC-8, AC-12 (no email)."""
-    for name in (
-        "administrator",
-        "service",
-        "mcp",
-        "mcp_upper",
-        "system_manager",
-        "system_manager_user",
-        "identity",
-        "no_email",
-    ):
-        assert run[name] == {"status": 403, "signed_in": False}, name
+    """AC-8."""
+    for name in ("administrator", "service", "mcp", "system_manager", "identity", "no_email"):
+        assert run[name] == 403, name
     assert run["sm_unchanged"]
-    assert run["mcp_unchanged"]
-    assert run["mcp_blank_setting"]["signed_in"]
-    assert run["admin_user_ok"]
     assert run["same_sub_ok"]
-
-
-def test_a_disabled_user_stays_disabled_and_gets_nothing(run: dict[str, Any]) -> None:
-    """AC-9."""
-    assert run["disabled"] == {"enabled": 0, "managed": [], "batch_enrol": 1}
+    assert run["disabled_same"]
 
 
 def test_a_bad_state_or_a_fault_leaves_nothing_behind(run: dict[str, Any]) -> None:
-    """AC-10."""
-    assert run["bad_state"] == {"status": 417, "signed_in": False}
-    assert run["bad_state_user"] is False
-    assert run["fault"] == {"status": 500, "signed_in": False}
+    """AC-9."""
+    assert (run["bad_state"], run["bad_state_user"]) == (417, False)
+    assert run["fault"] == {"status": 500, "signed_in": False, "location": None}
     assert run["fault_user"] is False
-    assert run["fault_batch_enrol"] == 0
 
 
-def test_two_first_logins_at_once_leave_one_batch(key: None) -> None:
-    """AC-6: the locking read and savepoint, with two real processes and real commits."""
-    number = str(9500 + uuid.uuid4().int % 400)
+def test_no_batch_mail_or_job_is_made(run: dict[str, Any]) -> None:
+    """AC-10."""
+    assert run["batches_same"]
+    assert run["mail_queued"] == 0
+    assert run["jobs_queued"] == 0
+
+
+def test_every_login_writes_one_line_without_a_secret(run: dict[str, Any]) -> None:
+    """AC-15."""
+    text = "\n".join(run["log_tail"])
+    assert "outcome=ok mode=live" in text
+    assert "outcome=ok mode=results" in text
+    assert "outcome=refused_two_courses" in text
+    assert "outcome=setup_fault_course" in text
+    assert "CODE-SECRET" not in text
+    assert "STATE-" not in text
+
+
+def _race(emails: list[str], premade: bool, tag: str, action: str) -> dict[str, Any]:
+    return _run_script(
+        _script(
+            "race", ACTION=action, TAG=tag, EMAILS=",".join(emails), PREMADE="1" if premade else "0"
+        )
+    )
+
+
+@pytest.mark.parametrize("premade", [True, False])
+def test_two_logins_of_one_person_at_once(key: None, premade: bool) -> None:
+    """AC-9: two real processes, real commits. An existing person ends in one state with no
+    error. Two first logins may collide on the User insert, and then nothing is left half done."""
     tag = uuid.uuid4().hex[:6]
-    a, b = f"nile-race-a-{tag}@example.com", f"nile-race-b-{tag}@example.com"
+    email = f"nile-race-{tag}@example.com"
+    _race([email], premade, tag, "make")
     start = str(time.time() + 25)
-    jobs = [_script("concurrent", N=number, EMAIL=e, START=start) for e in (a, b)]
+    jobs = [_script("concurrent", EMAIL=email, TITLE=f"Nile Race {tag}", START=start)] * 2
     try:
         with ThreadPoolExecutor(2) as pool:
             results = list(pool.map(_run_script, jobs))
-        assert sum(r["batches_created"] for r in results) == 1
+        left = _race([email], premade, tag, "check")
+        assert left["enrollments"][email] == 1
+        assert left["roles"][email] == 1
+        signed = [r.get("signed_in") for r in results]
+        if premade:
+            assert signed == [True, True], results
+        else:
+            assert any(signed), results
     finally:
-        left = _run_script(_script("cleanup", N=number, A=a, B=b))
-        assert left["left"] == 0
+        assert _race([email], premade, tag, "drop")["left"] == 0

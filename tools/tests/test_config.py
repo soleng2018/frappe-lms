@@ -74,10 +74,10 @@ def test_parser_accepts_a_file_without_a_final_newline():
 
 
 def test_check_values_names_every_bad_key_at_once_without_values():
-    env = parse("LMS_HOSTNAME=a_b\nLMS_API_KEY=zz\nAUTHENTIK_STUDENT_GROUP_SUFFIX=Ad1\n")
+    env = parse("LMS_HOSTNAME=a_b\nLMS_API_KEY=zz\n")
     problems = config.check_values(env, config.env_keys(), "up")
     text = "\n".join(problems)
-    for name in ("LMS_HOSTNAME", "LMS_API_KEY", "AUTHENTIK_STUDENT_GROUP_SUFFIX"):
+    for name in ("LMS_HOSTNAME", "LMS_API_KEY"):
         assert name in text
     assert "line 1: LMS_HOSTNAME" in text
     assert "zz" not in text.replace("hex", "")
@@ -440,8 +440,6 @@ def test_create_site_receives_exactly_the_variables_the_spec_lists():
         "LMS_MCP_API_KEY",
         "LMS_MCP_API_SECRET",
         "AUTHENTIK_ADMIN_GROUP",
-        "AUTHENTIK_STUDENT_GROUP_PREFIX",
-        "AUTHENTIK_STUDENT_GROUP_SUFFIX",
     }
 
 
@@ -541,3 +539,14 @@ def test_write_private_removes_a_stale_temp_file_and_creates_the_target_at_0600(
     config.write_private(tmp_path / ".env", "A=1\n")
     assert (tmp_path / ".env").stat().st_mode & 0o777 == 0o600
     assert not (tmp_path / ".env.tmp").exists()
+
+
+def test_a_retired_key_fails_once_per_key_with_a_clear_line():
+    env = parse(
+        "AUTHENTIK_STUDENT_GROUP_PREFIX=X\nLMS_HOSTNAME=a\nAUTHENTIK_STUDENT_GROUP_SUFFIX=Y\n"
+    )
+    assert env.errors == (
+        "line 1: AUTHENTIK_STUDENT_GROUP_PREFIX is retired, delete this line",
+        "line 3: AUTHENTIK_STUDENT_GROUP_SUFFIX is retired, delete this line",
+    )
+    assert not any("unknown key" in e for e in env.errors)
