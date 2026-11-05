@@ -13,7 +13,7 @@ _Steps derived from spec 0006 acceptance criteria. `/check verify` runs these; `
 
 ## Commands
 - [x] `make test` → groups unit tests pass (35 cases, every near miss, odd prefix and suffix) → AC-4, AC-7
-- [x] `uv run --directory tools pytest -m integration tests/test_group_role_mapping_integration.py` → 18 pass on 2026-11-04 → AC-1 to AC-11
+- [x] `uv run --directory tools pytest -m integration tests/test_group_role_mapping_integration.py` → 19 pass on 2026-11-04 → AC-1 to AC-11
 - [x] `curl -s -o /dev/null -w '%{http_code}' -H 'Host: <site>' 'http://127.0.0.1:8000/api/method/frappe.integrations.oauth2_logins.custom/<provider>?code=x&state=bogus'` from the backend container → `417` before any code exchange → AC-10
 - [x] `tail sites/<site>/logs/nile_auth.log` after the logins above → one line per login with email, outcome word, and groups, and no code or token → AC-12
 - [ ] Superseded by spec 0009 AC-5: vary the case and spelling of a course group name in the Authentik test group → counted for nothing → AC-4

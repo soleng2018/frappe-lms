@@ -1,7 +1,7 @@
 # 0006. Map Authentik groups to LMS roles with an override of the OIDC callback
 
 **Date**: 2026-11-03
-**Status**: In Progress
+**Status**: Accepted
 **Superseded in part**: by [0009](../0009-course-access-from-groups/index.md). Spec 0009 replaces how a login becomes a student, which course the student gets, the batch, and the two student group settings. This spec still governs admins, protected accounts, disabled users, the state check, all or nothing provisioning, and the log lines.
 
 ## Summary
