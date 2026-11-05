@@ -16,6 +16,7 @@ import httpx
 import pytest
 from test_content_sync_integration import site_is_up, sync  # noqa: F401  (site_is_up is autouse)
 from test_data_model_integration import _run_script, _site, _sql
+from throwaway import question, write_course
 
 from nile_tools.contentfile import load_course
 
@@ -26,34 +27,6 @@ QUIZ_API = "/api/method/lms.lms.doctype.lms_quiz.lms_quiz.submit_quiz"
 CERT_API = "/api/method/lms.lms.doctype.lms_certificate.lms_certificate.create_certificate"
 PROGRESS_API = "/api/method/lms.lms.doctype.course_lesson.course_lesson.save_progress"
 
-COURSE_YAML = """\
-key: {p}-course
-title: Nile pass rules {p}
-short_introduction: Throwaway course for the pass rules test.
-description: Made by the integration test and removed again.
-chapters:
-  - key: {p}-ch1
-    title: Concepts
-    lessons:
-      - {{key: {p}-video, type: video, title: Video, youtube: dQw4w9WgXcQ}}
-      - {{key: {p}-vq, type: quiz, title: Video quiz, quiz: {p}-q1}}
-  - key: {p}-ch2
-    title: Lab
-    lessons:
-      - {{key: {p}-lab, type: lab, title: Lab guide, body_file: labs/lab.md}}
-      - {{key: {p}-lq, type: quiz, title: Lab quiz, quiz: {p}-q2}}
-quizzes:
-  - key: {p}-q1
-    title: Pass rules video quiz {p}
-    questions:
-{q1_questions}
-  - key: {p}-q2
-    title: Pass rules lab quiz {p}
-    questions:
-      - key: {p}-q2a
-        text: Lab question?
-        options: [{{text: "Yes", correct: true}}, {{text: "No"}}]
-"""
 Q1_QUESTION = """\
       - key: {p}-q1{n}
         text: Video question {n}?
@@ -89,11 +62,17 @@ def world(tmp_path_factory: pytest.TempPathFactory) -> Iterator[World]:
     users = _run_script(_script("pass_rules_setup", prefix))
     try:
         folder = tmp_path_factory.mktemp("course")
-        (folder / "labs").mkdir()
-        (folder / "labs" / "lab.md").write_text("# Lab\n\nDo the thing.\n")
         q1 = "\n".join(Q1_QUESTION.format(p=prefix, n=n) for n in range(1, 6))
-        (folder / "course.yaml").write_text(COURSE_YAML.format(p=prefix, q1_questions=q1))
-        code, said = sync(load_course(folder))
+        course_dir = write_course(
+            folder,
+            prefix,
+            title=f"Nile pass rules {prefix}",
+            quiz_titles=(f"Pass rules video quiz {prefix}", f"Pass rules lab quiz {prefix}"),
+            q1_questions=q1,
+            q2_questions=question(f"{prefix}-q2a", "Lab question?", "Yes", "No"),
+            lab_text="# Lab\n\nDo the thing.\n",
+        )
+        code, said = sync(load_course(course_dir))
         assert code == 0, said
 
         def names(table: str, like: str) -> dict[str, str]:

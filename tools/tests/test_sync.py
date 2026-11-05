@@ -4,17 +4,15 @@ from dataclasses import replace
 
 import httpx
 import pytest
+from courses import LabLesson, QuizLesson, VideoLesson
 from fake_lms import FakeLms
 
 from nile_tools.content import (
     Chapter,
     Course,
-    LabLesson,
     Option,
     Question,
     Quiz,
-    QuizLesson,
-    VideoLesson,
 )
 from nile_tools.lms import LmsError
 from nile_tools.sync import run_sync

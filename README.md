@@ -74,7 +74,7 @@ The first `make up` builds the image, which takes a while. `configurator` and `c
 | `make down` | Stop the stack. Volumes (database, site files) are kept. |
 | `make ps` | Show all containers of the stack. |
 | `make logs` | Last 100 log lines per service. |
-| `make tools CMD=<command>` | Run a tools command in the tools container. Today: `init`, `whoami`, `sync [--check]`, `idp setup [--resync-secret]` (creates or fixes the Authentik application and the Frappe login key, then turns off Frappe's password form and email link and LMS guest access, so a signed out visitor sees no page data or site totals; safe to run again, prints `created`, `unchanged` or `fixed` per item, never a secret), `idp check [--user NAME]` (read only report of PASS, WARN or FAIL lines, exit 1 on any FAIL; `--user` is a real Authentik username, used to test that the groups claim comes out), `idp remove` (deletes only the Frappe key, provider and application that setup created, in that order; Frappe users and the password form are left as they are, so run `idp password-login on` afterwards to sign in as `Administrator`), `idp selftest` (the proof that sign in works: makes a throwaway Authentik student, a throwaway course and a group named like it, signs in through the real Authentik and LMS, checks the student lands on that course with the LMS Student role and only that enrollment, checks a second user in no course group gets the 403 page and no Frappe user, then removes everything it made; it also cleans leftovers of a killed run first, refuses to start if an item with a test name exists without our marker, prints PASS or FAIL per check and exits 1 on any FAIL; run `idp setup` first), `idp password-login on\|off` (break glass: `on` brings back the password form so `Administrator` can sign in while Authentik is down, `off` closes it again; `off` refuses unless the enabled Authentik key exists), `config check [--for up\|tools-authentik]`, `config show` (secrets as `*****`), `config sample`. |
+| `make tools CMD=<command>` | Run a tools command in the tools container. Today: `init`, `whoami`, `content check [COURSE]`, `content new COURSE [--title TEXT]`, `sync [COURSE] [--check]`, `idp setup [--resync-secret]` (creates or fixes the Authentik application and the Frappe login key, then turns off Frappe's password form and email link and LMS guest access, so a signed out visitor sees no page data or site totals; safe to run again, prints `created`, `unchanged` or `fixed` per item, never a secret), `idp check [--user NAME]` (read only report of PASS, WARN or FAIL lines, exit 1 on any FAIL; `--user` is a real Authentik username, used to test that the groups claim comes out), `idp remove` (deletes only the Frappe key, provider and application that setup created, in that order; Frappe users and the password form are left as they are, so run `idp password-login on` afterwards to sign in as `Administrator`), `idp selftest` (the proof that sign in works: makes a throwaway Authentik student, a throwaway course and a group named like it, signs in through the real Authentik and LMS, checks the student lands on that course with the LMS Student role and only that enrollment, checks a second user in no course group gets the 403 page and no Frappe user, then removes everything it made; it also cleans leftovers of a killed run first, refuses to start if an item with a test name exists without our marker, prints PASS or FAIL per check and exits 1 on any FAIL; run `idp setup` first), `idp password-login on\|off` (break glass: `on` brings back the password form so `Administrator` can sign in while Authentik is down, `off` closes it again; `off` refuses unless the enabled Authentik key exists), `config check [--for up\|tools-authentik]`, `config show` (secrets as `*****`), `config sample`. |
 | `make tools CMD="verify deploy"` | Prove the LMS over its public hostname: ping, home page, assets, socket.io, HTTP redirect, the MCP door, and the compose file (no published ports, log rotation, restart policy). One `PASS`, `WARN` or `FAIL` line per check. Exits 1 only on a FAIL. |
 | `make restart-test` | Restart the long running services, `kill -9` the `backend` and `frontend` processes, and check everything is healthy again within 180 seconds, then run `verify deploy`. Needs Docker and `sudo` on the host. Touches only the `nile-lms` project. |
 | `make hooks` | Install the pre-commit hook. Run once per clone. |
@@ -99,23 +99,27 @@ Changing the login landing code needs a new image: `make up` after the `nile_aut
 
 ## 5. Course content
 
-You write the course in git and the `sync` command builds it in the LMS. It needs the stack running and the service user's key and secret in `.env` (`LMS_HOSTNAME`, `LMS_API_KEY`, `LMS_API_SECRET`, all created by `make init` and `make up`). No new keys.
-
-- `content/course.yaml` holds the course, its chapters and lessons (video, lab guide or quiz), and the quizzes with their multiple choice questions (two to four options, at least one correct).
-- `content/labs/*.md` holds one markdown lab guide per lab lesson. A lesson names its file with `body_file`, and the file must stay inside `content/`.
-- Every record has a `key`. The key is how the sync finds the record, so you can rename a title freely, but changing a key makes a new record and detaches the old one. Keep keys as text. In YAML write `"no"` and `"yes"` in quotes, and write a video id as text.
+You write each course in git as one folder, and the `sync` command builds every course in the LMS. The full format, every field and every check message are in [docs/authoring.md](docs/authoring.md). `content check` and `content new` need no `.env`. `sync` needs the stack running and the service user's key and secret in `.env` (`LMS_HOSTNAME`, `LMS_API_KEY`, `LMS_API_SECRET`, all created by `make init` and `make up`). No new keys.
 
 ```bash
-make tools CMD="sync --check"   # lists what would change; changes nothing; exits 1 if anything differs
-make tools CMD=sync             # checks the file first, then makes the LMS match git
+make tools CMD="content new my-course"    # a starter folder in content/my-course/ that already passes the check
+make tools CMD="content check"            # every problem in every course, offline (add a course key for one)
+make tools CMD="sync --check"             # lists what would change; changes nothing; exits 1 if anything differs
+make tools CMD=sync                       # checks first, then makes the LMS match git for every course
+make tools CMD="sync my-course"           # only that course
 ```
 
-- Run it again after you edit git: it updates the same records and creates no duplicates. With nothing to change it says `nothing to change`.
+- A course is `content/<course-key>/` with `course.yaml`, markdown in `guides/`, one file per quiz in `quizzes/` and pictures in `images/`. A lesson is a list of blocks (text, video, quiz) in the order you want. A commit that touches `content/` runs `content check` and fails on any problem (`make hooks` once per clone).
+- Every record has a `key`, and keys are unique across all courses. The key is how the sync finds the record, so you can rename a title freely, but changing a key makes a new record and detaches the old one. Keep keys as text. In YAML write `"no"` and `"yes"` in quotes, and write a video id as text.
+- A course with a problem is skipped and listed at the end, and the other courses still sync. Every output line starts with `[<course-key>]`.
+- Images in a guide are uploaded as public files with unguessable names. Do not put a secret in an image.
+
+- Run it again after you edit git: it updates the same records and creates no duplicates. With nothing to change it says `[<course-key>] nothing to change`.
 - Git wins. If someone edited a synced record in the LMS, `sync` prints `LMS has X, git has Y` and overwrites it. Use `--check` first to see those edits.
 - Nothing is deleted. A lesson, chapter, quiz or question you remove from git leaves the course and stays in the LMS. The command names each one it detaches.
-- If a request fails, the command stops, prints the record, the URL, the status and the reason, and exits 1. Run it again: it carries on where it stopped.
+- If a request fails, that course stops, with the record, the URL, the status and the reason; the other courses carry on and the command exits 1. Run it again: it carries on where it stopped.
 - The course is created and kept unpublished, and it is added to no batch. A learner reaches it only through an enrollment made at login. Progress is recalculated when the outline changes.
-- If you change a course title, `sync` prints the old and new title first. The Authentik group name must change too. It refuses a title that another course already has, or that equals `AUTHENTIK_ADMIN_GROUP`.
+- If you change a course title, `sync` prints the old and new title first. The Authentik group name must change too. A course whose title another course already has, or that equals `AUTHENTIK_ADMIN_GROUP`, is blocked and listed.
 
 ### Passing and the certificate (spec 0010)
 
@@ -153,7 +157,7 @@ The agent can read and write LMS content. Git is the source of truth, so an agen
 - `deploy/`: compose file, image build, version pins, container scripts.
 - `tools/`: Python package for setup scripts.
 - `apps/nile_auth/`: custom Frappe app: Authentik groups become LMS access at login (`hol-admins` admin, a group named exactly like a course enrolls the learner in that course only).
-- `content/`: courses. `brand/`: brand assets (do not edit). `docs/`: scope, specs, reviews.
+- `content/<course-key>/`: courses (see [docs/authoring.md](docs/authoring.md)). `brand/`: brand assets (do not edit). `docs/`: scope, specs, reviews.
 
 ## 8. Keeping this file current
 

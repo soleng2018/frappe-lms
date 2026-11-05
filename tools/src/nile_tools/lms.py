@@ -22,6 +22,7 @@ __all__ = [
     "list_records",
     "logged_user",
     "update_record",
+    "upload_file",
 ]
 
 READ_TRIES = 3
@@ -213,3 +214,20 @@ def _message(label: str, r: httpx.Response) -> Any:
         return r.json()["message"]
     except (ValueError, KeyError, TypeError):
         raise LmsError(f"{label}: {r.request.method} {r.request.url} sent no message") from None
+
+
+def upload_file(lms: Lms, file_name: str, data: bytes) -> str:
+    """Upload a public file, attached to nothing, and return the `file_url` the LMS gives it."""
+    label = f"upload {file_name}"
+    r = _send(
+        lms,
+        label,
+        "POST",
+        "/api/method/upload_file",
+        files={"file": (file_name, data)},
+        data={"file_name": file_name, "is_private": "0"},
+    )
+    url = _message(label, r).get("file_url")
+    if not isinstance(url, str) or not url:
+        raise LmsError(f"{label}: {r.request.method} {r.request.url} sent no file_url")
+    return url

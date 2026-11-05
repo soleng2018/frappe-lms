@@ -13,46 +13,16 @@ from pathlib import Path
 
 import pytest
 from test_data_model_integration import COMPOSE, REPO, _run_script, _sql
+from throwaway import question, write_course
 
 from nile_tools import config, lms
 from nile_tools.content import Course
-from nile_tools.contentfile import load_course
-from nile_tools.sync import run_sync
+from nile_tools.contentfile import load_catalog, load_course
+from nile_tools.sync import run_sync, sync_all
 
 pytestmark = pytest.mark.integration
 
 SCRIPTS = Path(__file__).parent / "live_scripts"
-
-COURSE_YAML = """\
-key: {p}-course
-title: Nile IT {p}
-short_introduction: Throwaway course for the content sync test.
-description: Made by the integration test & removed again.
-chapters:
-  - key: {p}-ch1
-    title: Concepts
-    lessons:
-      - {{key: {p}-video, type: video, title: Video, youtube: dQw4w9WgXcQ}}
-      - {{key: {p}-vq, type: quiz, title: Video quiz, quiz: {p}-q1}}
-  - key: {p}-ch2
-    title: Lab
-    lessons:
-      - {{key: {p}-lab, type: lab, title: Lab guide, body_file: labs/lab.md}}
-      - {{key: {p}-lq, type: quiz, title: Lab quiz, quiz: {p}-q2}}
-quizzes:
-  - key: {p}-q1
-    title: Nile IT quiz {p}
-    questions:
-      - key: {p}-q1a
-        text: First & foremost?
-        options: [{{text: "Yes", correct: true}}, {{text: "No"}}]
-  - key: {p}-q2
-    title: Nile IT quiz {p}
-    questions:
-      - key: {p}-q2a
-        text: Second?
-        options: [{{text: A, correct: true}}, {{text: B}}, {{text: C}}]
-"""
 
 
 def _script(name: str, prefix: str) -> str:
@@ -97,10 +67,16 @@ def sync(course: Course, *, check: bool = False) -> tuple[int, list[str]]:
 
 
 def test_sync_on_the_live_site_end_to_end(prefix: str, tmp_path: Path) -> None:
-    (tmp_path / "labs").mkdir()
-    (tmp_path / "labs" / "lab.md").write_text("# Lab\n\nDo the thing & report back.\n")
-    (tmp_path / "course.yaml").write_text(COURSE_YAML.format(p=prefix))
-    course = load_course(tmp_path)
+    p = prefix
+    folder = write_course(
+        tmp_path,
+        p,
+        title=f"Nile IT {p}",
+        quiz_titles=(f"Nile IT quiz {p}", f"Nile IT quiz {p}"),
+        q1_questions=question(f"{p}-q1a", "First & foremost?", "Yes", "No"),
+        q2_questions=question(f"{p}-q2a", "Second?", "A", "B", "C"),
+    )
+    course = load_course(folder)
 
     # AC-1, AC-4: the whole course, every record keyed, bodies as spec 0004 says.
     code, said = sync(course)
@@ -169,3 +145,73 @@ def test_sync_on_the_live_site_end_to_end(prefix: str, tmp_path: Path) -> None:
         "NULL",
     )
     assert sync(slim) == (0, ["nothing to change"])
+
+
+PNG = b"\x89PNG\r\n\x1a\n" + b"live" * 8
+
+
+def test_two_courses_sync_with_a_mixed_lesson_and_an_image_then_change_nothing(
+    prefix: str, tmp_path: Path
+) -> None:
+    """Spec 0011 AC-2, AC-4, AC-7 live: two courses, one lesson mixing blocks, run twice."""
+    p = prefix
+    write_course(
+        tmp_path,
+        p,
+        title=f"Nile IT {p}",
+        quiz_titles=(f"Nile IT quiz {p}", f"Nile IT quiz {p}"),
+        q1_questions=question(f"{p}-q1a", "First?", "Yes", "No"),
+        q2_questions=question(f"{p}-q2a", "Second?", "A", "B"),
+    )
+    two = tmp_path / f"{p}-two"
+    (two / "guides").mkdir(parents=True)
+    (two / "quizzes").mkdir()
+    (two / "images").mkdir()
+    (two / "images" / "shot.png").write_bytes(PNG)
+    (two / "guides" / "intro.md").write_text("# Intro\n\n![a screen](../images/shot.png)\n")
+    (two / "quizzes" / "q.yaml").write_text(
+        f"key: {p}-two-q\ntitle: Two quiz {p}\nquestions:\n"
+        + question(f"{p}-two-q1", "Seen it?", "Yes", "No")
+        + "\n"
+    )
+    (two / "course.yaml").write_text(
+        f"""format: 1
+key: {p}-two
+title: Nile IT two {p}
+short_introduction: s
+description: d
+chapters:
+  - key: {p}-two-ch
+    title: Only chapter
+    lessons:
+      - key: {p}-two-l
+        title: Mixed
+        blocks:
+          - video: dQw4w9WgXcQ
+          - text: guides/intro.md
+          - quiz: {p}-two-q
+"""
+    )
+    catalog = load_catalog(tmp_path)
+    assert not catalog.problems
+    out: list[str] = []
+    try:
+        kwargs = {"only": None, "check": False, "say": out.append, "err": out.append}
+        assert sync_all(connect(), catalog, **kwargs) == 0, out  # type: ignore[arg-type]
+        body = _sql(f"select body from `tabCourse Lesson` where nile_key = '{p}-two-l'")[0][
+            0
+        ].replace("\\n", "\n")
+        quiz = _sql(f"select name from `tabLMS Quiz` where nile_key = '{p}-two-q'")[0][0]
+        url = _sql(f"select file_url from tabFile where file_name like '{p}-two-%-shot.png'")[0][0]
+        assert body == (
+            f'{{{{ YouTubeVideo("dQw4w9WgXcQ") }}}}\n\n# Intro\n\n![a screen]({url})\n\n'
+            f'{{{{ Quiz("{quiz}") }}}}'
+        )
+        out.clear()
+        assert sync_all(connect(), catalog, **kwargs) == 0, out  # type: ignore[arg-type]
+        assert f"[{p}-two] nothing to change" in out and f"[{p}-course] nothing to change" in out
+        files = _sql(f"select count(*) from tabFile where file_name like '{p}-two-%'")
+        assert files == [["1"]]
+    finally:
+        for (name,) in _sql(f"select name from tabFile where file_name like '{p}-two-%'"):
+            _sql(f"delete from tabFile where name = '{name}'")

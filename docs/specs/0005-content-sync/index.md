@@ -3,6 +3,7 @@
 **Date**: 2026-11-03
 **Status**: Accepted
 **Superseded in part**: by [0009](../0009-course-access-from-groups/index.md): the course is now created and kept unpublished (AC-1), and AC-8 (every batch gets the course) no longer applies.
+**Superseded in part**: by [0011](../0011-guide-format-and-full-authoring/index.md) once built: the content file format, the loader, and the one course scope (the Content file section, AC-3's loader rules, and the video, lab and quiz lesson types). The planner, client, and invariants stay.
 
 ## Summary
 

@@ -13,12 +13,12 @@ from pathlib import Path
 import httpx
 import pytest
 from test_content_sync_integration import (  # noqa: F401  (site_is_up is an autouse fixture)
-    COURSE_YAML,
     connect,
     site_is_up,
     sync,
 )
 from test_data_model_integration import REPO, _run_script, _site, _sql
+from throwaway import question, write_course
 
 from nile_tools import config, lms
 from nile_tools.content import Course
@@ -50,10 +50,16 @@ def fx(tmp_path: Path) -> Iterator[Fixture]:
     password = secrets.token_urlsafe(16)
     _run_script(_script("setup", prefix, password))
     try:
-        (tmp_path / "labs").mkdir()
-        (tmp_path / "labs" / "lab.md").write_text("# Lab\n\nDo the thing & report back.\n")
-        (tmp_path / "course.yaml").write_text(COURSE_YAML.format(p=prefix))
-        yield Fixture(prefix, load_course(tmp_path), password)
+        p = prefix
+        folder = write_course(
+            tmp_path,
+            p,
+            title=f"Nile IT {p}",
+            quiz_titles=(f"Nile IT quiz {p}", f"Nile IT quiz {p}"),
+            q1_questions=question(f"{p}-q1a", "First & foremost?", "Yes", "No"),
+            q2_questions=question(f"{p}-q2a", "Second?", "A", "B", "C"),
+        )
+        yield Fixture(prefix, load_course(folder), password)
     finally:
         _run_script(_script("cleanup", prefix))
         assert _sql(f"select count(*) from `tabLMS Course` where nile_key like '{prefix}-%'") == [

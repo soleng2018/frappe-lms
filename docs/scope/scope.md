@@ -33,7 +33,7 @@ _The Frappe links have not been read by `/scope`; `/architect` should read the o
 | 8 | Content sync, one course | Slice 1 | done |
 | 9 | Quiz pass rules & certificate | Slice 1 | done |
 | 10 | Branding & theme | Slice 2 | planned |
-| 11 | Guide format & full authoring | Slice 2 | planned |
+| 11 | Guide format & full authoring | Slice 2 | in-progress |
 | 12 | Manager progress view | Slice 3 | planned |
 | 13 | Monthly report | Slice 3 | planned |
 | 14 | Backup & restore | Slice 4 | planned |
@@ -217,10 +217,21 @@ Apply the Nile brand colors and logos from the Nile design system in `brand/` to
 **Done when:** the app and the certificate use the brand colors, Inter font, and unaltered logos, set by script so they survive a rebuild, and text on every brand background is readable. The login page is covered only if Authentik branding is done by the same script.
 - [ ] Design it (spec): `/architect branding & theme`
 
-### 11. Guide format & full authoring · needs a decision
+### 11. Guide format & full authoring
 Settle the guide and quiz file format (markdown for text, structured files for quizzes and ordering) and extend the sync to many courses, images, and checks.
 **Done when:** a documented format lets an author add a new course by committing files, the sync reports errors in bad files before pushing, and several courses sync cleanly.
-- [ ] Design it (spec): `/architect guide format & full authoring`
+spec [0011](../specs/0011-guide-format-and-full-authoring/index.md) · code in `tools/src/nile_tools/`, `content/`, `docs/authoring.md`
+- [x] Design it (spec): `/architect guide format & full authoring`
+- [ ] Build it: `/develop guide format & full authoring`
+  - [x] Probe the live site: combined lesson body, public images, explanation field, key uniqueness (AC-2, AC-4, AC-11)
+  - [x] Thin thread: lessons as blocks, one course in `content/nile-workshop/`, live `nothing to change` (AC-1, AC-2, AC-8)
+  - [ ] Quiz files, explanations, the catalog, cross course checks and `content check` (AC-1, AC-3, AC-5, AC-11)
+  - [x] Many course sync with isolation, and images with upload and link rewrite (AC-4, AC-7)
+  - [x] `content new`, the commit hook, `docs/authoring.md`, README, and a two course live test (AC-6, AC-9, AC-10)
+- [ ] Verify it: `/check verify guide format & full authoring`
+- [ ] Test it: `/test guide format & full authoring`
+- [ ] Review it (fresh model): `/check review guide format & full authoring`
+- [ ] Document it: `/document guide format & full authoring`
 
 ## Slice 3: managers
 

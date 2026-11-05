@@ -9,9 +9,11 @@ repos:
         # Frappe generates these files
         exclude: ^apps/nile_auth/.*\.json$
       - id: trailing-whitespace
-        exclude: ^apps/nile_auth/.*\.json$
+        # Markdown hard breaks end in two spaces, and stripping them would change a lesson body
+        exclude: ^(apps/nile_auth/.*\.json|content/.*\.md)$
       - id: check-merge-conflict
       - id: check-added-large-files
+        args: [--maxkb=5000] # an allowed course image is up to 5 MB
       - id: detect-private-key
   - repo: https://github.com/shellcheck-py/shellcheck-py
     rev: v0.11.0.1-1
@@ -51,6 +53,13 @@ repos:
         entry: uv run --frozen --directory tools mypy
         language: system
         files: ^tools/
+        pass_filenames: false
+        require_serial: true
+      - id: content-check
+        name: content check
+        entry: uv run --frozen --project tools python -m nile_tools.cli content check
+        language: system
+        files: ^content/
         pass_filenames: false
         require_serial: true
       - id: compose-config

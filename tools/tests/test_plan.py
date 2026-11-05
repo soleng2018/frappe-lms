@@ -4,16 +4,16 @@ from copy import deepcopy
 from dataclasses import replace
 from typing import Any
 
+from courses import LabLesson, QuizLesson, VideoLesson
+
 from nile_tools import plan
 from nile_tools.content import (
     Chapter,
     Course,
-    LabLesson,
     Option,
     Question,
     Quiz,
-    QuizLesson,
-    VideoLesson,
+    lesson_quiz_key,
 )
 from nile_tools.plan import (
     Detach,
@@ -64,7 +64,7 @@ def course() -> Course:
 def synced(c: Course) -> Found:
     """The LMS state after a perfect sync of `c`, with names `N-<key>`."""
     lessons = [(ch.key, x) for ch in c.chapters for x in ch.lessons]
-    quiz_of = {x.key: x.quiz_key for _, x in lessons if isinstance(x, QuizLesson)}
+    quiz_of = {x.key: k for _, x in lessons if (k := lesson_quiz_key(x))}
     doc_course = {"name": "N-c", "nile_key": c.key, **plan._course_fields(c)}
     doc_course["chapters"] = [{"chapter": f"N-{ch.key}"} for ch in c.chapters]
     chapters = tuple(
