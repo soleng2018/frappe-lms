@@ -117,6 +117,6 @@ def delete(ak: Authentik, path: str) -> None:
     _call(ak, "DELETE", path)
 
 
-def set_password(ak: Authentik, user_pk: object, password: str) -> None:
+def set_password(ak: Authentik, user_pk: int | str, password: str) -> None:
     """Set a user's password; the answer has no body."""
     _call(ak, "POST", f"/core/users/{user_pk}/set_password/", json={"password": password})

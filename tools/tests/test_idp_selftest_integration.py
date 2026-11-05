@@ -64,9 +64,8 @@ def test_setup_check_and_selftest_pass_leave_nothing_and_print_no_secret(values,
     assert cli.idp_selftest(REPO) == 0
     captured = capsys.readouterr()
     out = captured.out + captured.err
-    assert [ln for ln in out.splitlines() if ln.startswith("PASS")].count(
-        next(ln for ln in out.splitlines() if ln.startswith("PASS student lands"))
-    ) == 1
+    passes = [ln for ln in out.splitlines() if ln.startswith("PASS student lands")]
+    assert len(passes) == 1, out
     assert not [ln for ln in out.splitlines() if ln.startswith("FAIL")], out
     for secret in _secrets(values):
         assert secret not in out

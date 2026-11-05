@@ -127,7 +127,7 @@ spec [0008](../specs/0008-idp-login/index.md) · code in `tools/src/nile_tools/`
   - [x] Landing on `/lms`, `idp selftest`, the manual admin sign in, and README with the break glass steps (AC-3, AC-10, AC-11, AC-12)
 - [x] Verify it: `/check verify IDP login`
 - [x] Test it: `/test IDP login`
-- [ ] Review it (fresh model): `/check review IDP login`
+- [x] Review it (fresh model): `/check review IDP login`
 - [ ] Document it: `/document IDP login`
 
 ### 7. Group to role mapping · in-progress

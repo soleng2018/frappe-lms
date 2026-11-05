@@ -2,7 +2,9 @@
 
 import secrets
 from collections.abc import Callable, Mapping
+from contextlib import ExitStack
 from dataclasses import dataclass
+from typing import Any
 from urllib.parse import urljoin, urlsplit
 
 import httpx
@@ -34,6 +36,31 @@ class Login:
     browser: httpx.Client
 
 
+def _plain(url: object) -> str:
+    """Return a URL without its query or fragment (they can carry a state or a code)."""
+    parts = urlsplit(str(url))
+    return f"{parts.scheme}://{parts.netloc}{parts.path}"
+
+
+def _location(response: httpx.Response) -> str:
+    """Return the redirect target of a response, or raise SelftestError naming the URL."""
+    target = response.headers.get("location")
+    if not target:
+        raise SelftestError(f"{_plain(response.url)} answered a redirect with no location")
+    return target
+
+
+def _json(response: httpx.Response) -> dict[str, Any]:
+    """Return a JSON object answer, or raise SelftestError naming the URL."""
+    try:
+        body = response.json()
+    except ValueError:
+        body = None
+    if not isinstance(body, dict):
+        raise SelftestError(f"{_plain(response.url)} did not answer a JSON object")
+    return body
+
+
 def _stage_body(component: str, username: str, password: str, url: str) -> dict[str, str]:
     """Answer one Authentik flow stage; only the identification and password stages are known."""
     if component == "ak-stage-identification":
@@ -55,21 +82,22 @@ def _run_flow(
     challenge = browser.get(url, params={"query": query}, headers=headers)
     for _ in range(MAX_STAGES):
         if challenge.status_code in _REDIRECTS:  # Authentik sends a finished stage back to the get
-            challenge = browser.get(urljoin(url, challenge.headers["location"]), headers=headers)
+            challenge = browser.get(urljoin(url, _location(challenge)), headers=headers)
             continue
-        body = challenge.json()
+        body = _json(challenge)
         component = str(body.get("component", ""))
         if component == "xak-flow-redirect":
+            if not body.get("to"):
+                raise SelftestError(f"Authentik flow at {url} sent a redirect with no target")
             return urljoin(url, str(body["to"]))
         if body.get("response_errors"):
             raise SelftestError(f"Authentik refused the selftest user at {url} ({component})")
         answer = _stage_body(component, username, password, url)
         posted = browser.post(url, params={"query": query}, json=answer, headers=headers)
-        if (
-            posted.status_code not in _REDIRECTS
-        ):  # Authentik answers a post with a redirect to a get
+        # Authentik answers a post with a redirect to a get
+        if posted.status_code not in _REDIRECTS:
             raise SelftestError(f"POST {url} answered HTTP {posted.status_code}")
-        challenge = browser.get(urljoin(url, posted.headers["location"]), headers=headers)
+        challenge = browser.get(urljoin(url, _location(posted)), headers=headers)
     raise SelftestError(f"Authentik flow at {url} did not finish after {MAX_STAGES} stages")
 
 
@@ -90,14 +118,16 @@ def drive_login(
             r = browser.get(url)
             if r.status_code not in _REDIRECTS:
                 raise SelftestError(f"GET {url} answered HTTP {r.status_code}, not a redirect")
-            target = urljoin(url, r.headers["location"])
+            target = urljoin(url, _location(r))
             if urlsplit(target).netloc == lms_host:
                 final = browser.get(target)  # Frappe takes the code here, with the real backend
                 return Login(final.status_code, final.headers.get("location"), browser)
             flow = idp.flow_target(target)
             url = _run_flow(browser, authentik_host, *flow, username, password) if flow else target
     except httpx.HTTPError as e:
-        raise SelftestError(f"selftest sign in failed: {type(e).__name__}") from None
+        raise SelftestError(
+            f"selftest sign in failed: {type(e).__name__} at {_plain(e.request.url)}"
+        ) from None
     raise SelftestError(f"the sign in did not reach {lms_host} after {MAX_HOPS} redirects")
 
 
@@ -147,9 +177,7 @@ def _remove_frappe(connection: Lms) -> list[str]:
         lms.delete_record(connection, COURSE, course["name"])
         removed.append(f"course {course['name']}")
     for email in emails:
-        if email.startswith(idp.TEST_PREFIX) and lms.list_records(
-            connection, USER, filters=[["name", "=", email]]
-        ):
+        if lms.list_records(connection, USER, filters=[["name", "=", email]]):
             lms.delete_record(connection, USER, email)
             removed.append(f"frappe user {email}")
     return removed
@@ -177,11 +205,15 @@ def _observe(
         return idp.Observed(login.status, where, None, False)
     user = lms.get_record(connection, USER, email)
     enrolled = lms.list_records(connection, ENROLLMENT, filters=[["member", "=", email]])
-    me = browser.get(f"https://{lms_host}/api/method/frappe.auth.get_logged_user")
+    me_url = f"https://{lms_host}/api/method/frappe.auth.get_logged_user"
+    try:
+        me = browser.get(me_url)
+    except httpx.HTTPError as e:
+        raise SelftestError(f"selftest check failed: {type(e).__name__} at {me_url}") from None
     return idp.Observed(
         login.status,
         where,
-        me.json().get("message") if me.status_code == 200 else None,
+        _json(me).get("message") if me.status_code == 200 else None,
         True,
         tuple(r["role"] for r in user.get("roles", [])),
         tuple(sorted(r["course"] for r in enrolled)),
@@ -216,9 +248,11 @@ def selftest(
     _preflight(ak, connection)
     ok = _cleanup(ak, connection, say, "cleaned leftover")
     secret = password or f"{secrets.token_urlsafe(20)}-Aa1!"
-    config.install_masking([secret])
+    env_secrets = [values[k.name] for k in config.KEYS if k.secret and values.get(k.name)]
+    config.install_masking([secret, *env_secrets])
     lms_host, ak_host = values["LMS_HOSTNAME"], values["AUTHENTIK_HOSTNAME"]
     verdicts: list[idp.Verdict] = []
+    stack = ExitStack()
     try:
         users = {}
         for username in (idp.TEST_STUDENT, idp.TEST_STRANGER):
@@ -247,17 +281,18 @@ def selftest(
             },
         )
         student_email = idp.sample_email(idp.TEST_STUDENT)
-        student = browser()
+        student = stack.enter_context(browser())
         login = drive_login(student, lms_host, ak_host, idp.TEST_STUDENT, secret)
         seen = _observe(connection, student, lms_host, student_email, login)
         name = str(course["name"])
         verdicts += idp.judge_student(seen, student_email, name, idp.TEST_COURSE_TITLE, lms_host)
-        stranger = browser()
+        stranger = stack.enter_context(browser())
         login = drive_login(stranger, lms_host, ak_host, idp.TEST_STRANGER, secret)
         stranger_email = idp.sample_email(idp.TEST_STRANGER)
         seen = _observe(connection, stranger, lms_host, stranger_email, login)
         verdicts += idp.judge_stranger(seen)
     finally:
+        stack.close()
         ok = _cleanup(ak, connection, say, "removed") and ok
     for v in verdicts:
         say(f"{v.level} {v.message}")

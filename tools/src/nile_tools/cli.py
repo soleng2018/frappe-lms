@@ -216,6 +216,7 @@ def idp_selftest(root: Path) -> int:
     values = config.load_env(root).values
 
     def stop(_signum: int, _frame: object) -> None:
+        signal.signal(signal.SIGTERM, signal.SIG_IGN)  # a second one must not cut the cleanup
         raise KeyboardInterrupt  # runs the cleanup in `finally`, as for Ctrl+C
 
     signal.signal(signal.SIGTERM, stop)
@@ -228,7 +229,10 @@ def idp_selftest(root: Path) -> int:
             print,
         )
     except KeyboardInterrupt:
-        print("ERROR selftest interrupted; its items were cleaned up", file=sys.stderr)
+        print(
+            "ERROR selftest interrupted; cleanup ran, and the next run sweeps any leftover",
+            file=sys.stderr,
+        )
         return 1
     except (AuthentikError, LmsError, idp.ConfigProblem, idp.Refused, SelftestError) as e:
         print(f"ERROR {e}", file=sys.stderr)

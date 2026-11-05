@@ -352,8 +352,29 @@ def test_drive_login_names_the_host_when_it_cannot_connect():
         raise httpx.ConnectError("no")
 
     client = httpx.Client(transport=httpx.MockTransport(down))
-    with pytest.raises(SelftestError, match="ConnectError"):
+    with pytest.raises(SelftestError, match=f"ConnectError at https://{LMS_HOST}/login"):
         idp_selftest.drive_login(client, LMS_HOST, AK, "u", "p")
+
+
+def test_drive_login_names_the_url_for_a_redirect_with_no_location():
+    def answer(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/login":
+            return httpx.Response(
+                200, text=f'<a href="https://{AK}/application/o/authorize/?a=1">x</a>'
+            )
+        return httpx.Response(302)
+
+    client = httpx.Client(transport=httpx.MockTransport(answer))
+    with pytest.raises(SelftestError, match="no location"):
+        idp_selftest.drive_login(client, LMS_HOST, AK, "u", "p")
+
+
+def test_run_flow_names_the_url_for_an_answer_that_is_not_json():
+    client = httpx.Client(
+        transport=httpx.MockTransport(lambda r: httpx.Response(502, text="<html>bad</html>"))
+    )
+    with pytest.raises(SelftestError, match="did not answer a JSON object"):
+        idp_selftest._run_flow(client, AK, "flow", "a=1", "u", "p")
 
 
 # --- the pure parts ---

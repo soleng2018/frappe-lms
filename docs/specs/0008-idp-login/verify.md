@@ -54,4 +54,4 @@ _Build task 1 findings from the live probe (Authentik 2026.8.3, Frappe version-1
 
 ## Manual
 
-- [x] Sign in with a real browser as a member of `hol-admins` → lands on `/lms`, and the Desk opens with Moderator, Course Creator and Desk User, no LMS Student → AC-3, AC-10. Not automated: a test account in `hol-admins` would also get Cloudflare Access. Done 2026-11-05 by the operator as shiv@nilesecure.com: log `outcome=ok mode=admin`, the user is a System User with exactly those three roles, no enrollment, and landed on `/lms`.
+- [x] Sign in with a real browser as a member of `hol-admins` → lands on `/lms`, and the Desk opens with Moderator, Course Creator and Desk User, no LMS Student → AC-3, AC-10. Not automated: a test account in `hol-admins` would also get Cloudflare Access. Done 2026-11-04 by an operator in `hol-admins`: log `outcome=ok mode=admin`, the user is a System User with exactly those three roles, no enrollment, and landed on `/lms`.
