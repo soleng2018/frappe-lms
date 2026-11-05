@@ -122,8 +122,10 @@ def _login(provider: str, code: str, state: str, seen: dict) -> str:
 
 	managed = frappe.get_all("LMS Course", filters={"nile_key": ["is", "set"]}, fields=["name", "title"])
 	courses = [(row.name, row.title) for row in managed]
-	existing = frappe.db.exists("User", email)
-	known = bool(existing) and _is_known_learner(email)
+	# Look the user up by name and by the email field: Administrator and Guest are named by word,
+	# not by email, so an Authentik account that carries their email must still meet the protected check.
+	existing = frappe.db.exists("User", email) or frappe.db.get_value("User", {"email": email}, "name")
+	known = bool(existing) and _is_known_learner(existing)
 	decision = decide(groups, admin_group, courses, known)
 	seen["mode"] = mode(decision)
 	seen["group"] = decision.course_group

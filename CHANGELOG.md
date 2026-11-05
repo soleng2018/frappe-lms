@@ -38,6 +38,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `create-site` stops with "must differ" before it writes any site setting when `LMS_MCP_USER` matches `LMS_SERVICE_USER`, ignoring upper and lower case.
 
 ### Fixed
+- A login from an Authentik account that carries the email of `Administrator` now gets the protected 403 page and a `refused_protected` log line. Before, the login looked the user up by name only, tried to insert a second user and showed the retry page (`nile_auth` 0.6.3).
 - Two different new learners signing in at the same moment could deadlock on the User insert, and one got the retry page. The login now takes a named lock per person instead of a row lock, and runs the provisioning again when the database picks it as a deadlock victim (`nile_auth` 0.6.2).
 - The login log said `ok` for a callback whose state had expired between the check and Frappe's last step. It now says `bad_state`.
 - An admin with no course group now loses any leftover course enrollment at login, as spec 0009 says.
