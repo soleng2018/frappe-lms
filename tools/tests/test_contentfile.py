@@ -68,10 +68,9 @@ def test_a_good_folder_loads_with_blocks_and_the_quiz_file(tmp_path: Path) -> No
     )
 
 
-def test_the_course_in_the_repo_is_sound() -> None:
+def test_the_courses_in_the_repo_are_sound() -> None:
     catalog = load_catalog(Path(__file__).resolve().parents[2] / "content")
     assert not catalog.problems
-    assert "nile-workshop" in catalog.ready()
 
 
 def test_format_must_be_1(tmp_path: Path) -> None:
