@@ -29,6 +29,7 @@ make init      # create .env from the sample
 make check     # check the config file (not code)
 make up        # check, build, start the stack
 make tools CMD=<command>   # run a tools command in the tools container
+make verify-branding       # prove the Nile branding on the live site
 ```
 
 ## Specs
