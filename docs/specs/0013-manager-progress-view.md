@@ -1,7 +1,7 @@
 # 0013. Show managers each learner's progress in two Desk reports
 
 **Date**: 2026-11-05
-**Status**: In Progress
+**Status**: Accepted
 
 ## Summary
 

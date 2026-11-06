@@ -22,6 +22,9 @@ and [spec 0006](../../docs/specs/0006-group-to-role-mapping/index.md) (login).
 - `nile_auth/groups.py`: `decide()`, the pure group classifier. No Frappe, tested in `tools/tests/test_groups.py`.
 - `nile_auth/login.py`: `custom`, which replaces Frappe's OIDC callback (`hooks.py`
   `override_whitelisted_methods`), and `provision`.
+- `nile_auth/progress.py`: the pure progress and quiz rules shared by the two manager reports (Learner
+  Progress and Quiz Scores). `progress_data.py` fetches the lists and checks access; the reports live in
+  `nile_auth/report/` ([spec 0013](../../docs/specs/0013-manager-progress-view.md)).
 - `nile_auth/fixtures/`: the custom fields and the Moderator delete permission on LMS Quiz Submission.
   Applied by `bench migrate`.
 

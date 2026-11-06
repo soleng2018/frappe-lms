@@ -126,10 +126,6 @@ def assemble(
 	users = {u["name"]: u for u in data["users"]}
 	outline = _outline_by_course([r for r in data["outline"] if r["course"] in courses])
 
-	lesson_courses: dict[str, list[str]] = defaultdict(list)
-	for course, lessons in outline.items():
-		for lesson in lessons:
-			lesson_courses[lesson].append(course)
 	quizzes_by_course: dict[str, list[dict[str, Any]]] = defaultdict(list)
 	for course, lessons in outline.items():
 		by_lesson = _group(data["quizzes"], "lesson")

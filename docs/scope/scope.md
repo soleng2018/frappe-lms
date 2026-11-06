@@ -34,7 +34,7 @@ _The Frappe links have not been read by `/scope`; `/architect` should read the o
 | 9 | Quiz pass rules & certificate | Slice 1 | done |
 | 10 | Branding & theme | Slice 2 | done |
 | 11 | Guide format & full authoring | Slice 2 | done |
-| 12 | Manager progress view | Slice 3 | in-progress |
+| 12 | Manager progress view | Slice 3 | done |
 | 13 | Monthly report | Slice 3 | planned |
 | 14 | Backup & restore | Slice 4 | planned |
 | 15 | Outbound email | Slice 4 | dropped |
@@ -244,7 +244,7 @@ spec [0011](../specs/0011-guide-format-and-full-authoring/index.md) · code in `
 
 ## Slice 3: managers
 
-### 12. Manager progress view · in-progress
+### 12. Manager progress view · done
 Admins in `hol-admins` see each student's progress, quiz scores, and certificate status across all courses.
 **Done when:** an admin can list students and see who is not started, in progress, or certified; a student cannot see this view.
 spec [0013](../specs/0013-manager-progress-view.md) · code in `apps/nile_auth/nile_auth/nile_auth/report/`
@@ -255,9 +255,9 @@ spec [0013](../specs/0013-manager-progress-view.md) · code in `apps/nile_auth/n
   - [x] Quiz Scores report and links (AC-8, AC-9, AC-11)
   - [x] Integration tests, README admin steps (AC-1 to AC-11)
 - [x] Verify it: `/check verify manager progress view`
-- [ ] Test it: `/test manager progress view`
+- [x] Test it: `/test manager progress view`
 - [x] Review it (fresh model): `/check review manager progress view`
-- [ ] Document it: `/document manager progress view`
+- [x] Document it: `/document manager progress view`
 
 ### 13. Monthly report · needs a decision
 An on demand report page with a CSV export that summarizes a chosen month: completions, scores, and who is behind.
