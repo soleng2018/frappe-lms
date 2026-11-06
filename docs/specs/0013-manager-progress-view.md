@@ -180,7 +180,7 @@ Filter inputs: `course` is a Link to LMS Course, `status` is a Select (Not start
 - Outline change: a completed lesson removed from the outline is not counted, and Progress % never goes over 100, verifies **AC-4**.
 - Quiz states: Passed, Locked (3 attempts, none passing), In progress, and Not attempted rows, using the quiz's current pass mark after it is raised, verifies **AC-8**.
 - Exclusions: Administrator, the service user, the MCP user, an unmanaged course, and a user with no records never appear, verifies **AC-2**.
-- Links: a Locked row links to the Quiz Submission list filtered to that learner and quiz, verifies **AC-9**.
+- Links: a Locked row links to the Quiz Submission list filtered to that learner and quiz, verifies **AC-9**. The report JS runs under Node with a stubbed `frappe` (`tools/tests/test_report_js.py`, also covers the **AC-7** Course dropdown filter). It was also clicked in the browser on 2026-11-05 as an admin: a Locked row opened the Quiz Submission list filtered to that learner and quiz (3 attempts).
 - Auth: a learner session calling either report gets 403 and no rows; a member of `hol-admins` gets rows, verifies **AC-1**.
 - Empty: no managed course, or a filter that matches nothing, returns an empty table without error, verifies **AC-11**.
 - Roles: both Report records carry exactly Moderator and System Manager and `ref_doctype` `LMS Course`, verifies **AC-1**.
