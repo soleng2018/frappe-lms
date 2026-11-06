@@ -17,6 +17,14 @@ chapters:
         title: Setup PSK
         blocks:
           - text: guides/psk.md
+      - key: nca-l-wired-mac-auth-admin-approved
+        title: Wired MAC Auth - Admin Approved
+        blocks:
+          - text: guides/wired-mac-auth-admin-approved.md
+      - key: nca-l-wired-fingerprint
+        title: Setup Wired Fingerprint
+        blocks:
+          - text: guides/wired-fingerprint.md
       - key: nca-l-wireless-dot1x
         title: Setup Wireless 802.1X
         blocks:
@@ -33,14 +41,6 @@ chapters:
         title: Setup PSK-SSO
         blocks:
           - text: guides/psk-sso.md
-      - key: nca-l-wired-dot1x
-        title: Setup Wired 802.1X
-        blocks:
-          - text: guides/wired-dot1x.md
-      - key: nca-l-wired-fingerprint
-        title: Setup Wired Fingerprint
-        blocks:
-          - text: guides/wired-fingerprint.md
       - key: nca-l-webhooks
         title: Setup Webhooks (myNile)
         blocks:
