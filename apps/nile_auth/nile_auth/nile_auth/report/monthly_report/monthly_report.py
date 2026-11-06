@@ -4,7 +4,7 @@ import frappe
 from frappe import _
 from frappe.utils import getdate
 
-from nile_auth.monthly import monthly_rows
+from nile_auth.monthly import BadFilter, monthly_rows
 from nile_auth.progress_data import excluded_users, fetch, require_report_access, throw_bad_filter
 
 COLUMNS = [
@@ -79,6 +79,10 @@ def execute(filters=None):
 	filters = filters or {}
 	require_report_access()
 	try:
+		enrolled_only = bool(int(filters.get("enrolled_only") or 0))
+	except ValueError:
+		throw_bad_filter(ValueError("Currently enrolled only must be 0 or 1"))
+	try:
 		rows, totals = monthly_rows(
 			fetch,
 			excluded_users(),
@@ -87,8 +91,8 @@ def execute(filters=None):
 			course=filters.get("course"),
 			result=filters.get("result"),
 			learner=filters.get("learner"),
-			enrolled_only=bool(int(filters.get("enrolled_only") or 0)),
+			enrolled_only=enrolled_only,
 		)
-	except ValueError as error:
+	except BadFilter as error:
 		throw_bad_filter(error)
 	return COLUMNS, rows, None, None, summary(totals)

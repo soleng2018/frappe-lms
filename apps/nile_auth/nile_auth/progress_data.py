@@ -1,5 +1,7 @@
 """Fetch the plain lists the progress rules need, and run the access check (spec 0013)."""
 
+from typing import NoReturn
+
 import frappe
 from frappe import _
 
@@ -81,6 +83,6 @@ def load_rows() -> tuple[list[dict], list[dict]]:
 	return assemble(fetch, excluded_users())
 
 
-def throw_bad_filter(error: ValueError) -> None:
+def throw_bad_filter(error: ValueError) -> NoReturn:
 	"""Turn a filter validation error into a Frappe validation message."""
 	frappe.throw(_(str(error)), frappe.ValidationError)

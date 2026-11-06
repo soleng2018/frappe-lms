@@ -20,9 +20,9 @@ try:
     out["lessons"], out["quizzes"], out["plain"] = len(lessons), len(quizzes), len(plain)
     for q in (q1, q2):
         frappe.db.set_value("LMS Quiz", q, {"passing_percentage": 80, "max_attempts": 3})
-    # only the two quizzes may matter, so make the other quizzes of the course unlimited and unattempted
-    others = [q["name"] for q in quizzes[2:]]
-    out["others"] = len(others)
+    # These checks are built for a course with exactly two quizzes. The test fails with a clear
+    # message if content adds a third (see out["others"]).
+    out["others"] = len(quizzes) - 2
 
     def user(kind, first=None, roles=("LMS Student",), system=False):
         email = f"{P}-{kind}@example.com"
@@ -50,7 +50,6 @@ try:
     for l in plain: prog(failed, l, "2026-10-03 10:00:00")
     sub(failed, q1, 85, "2026-10-04 10:00:00")
     for d in (5, 6, 7): sub(failed, q2, 60, f"2026-10-0{d} 10:00:00")
-    for q in others: sub(failed, q, 90, "2026-10-08 10:00:00")
     enroll(behind, "2026-10-02 10:00:00")
     if plain: prog(behind, plain[0], "2026-10-03 10:00:00")
     cert(certed, "2026-10-20", "2026-10-20 10:00:00")
@@ -65,7 +64,6 @@ try:
     out["sep"] = {k: [r["result"], str(r["outcome"])] for k, r in sep.items()}
     out["summary_labels"] = [s["label"] for s in oct_res["report_summary"]]
     # the current month matches Learner Progress
-    cur, _ = rows("")  # blank is the last full month; use the real current month instead
     from frappe.utils import getdate
     today = getdate()
     this = f"{today.year}-{today.month:02d}"

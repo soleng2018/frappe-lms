@@ -527,3 +527,12 @@ def test_bad_filters_fail_before_any_fetch() -> None:
         monthly_rows(fetch, (), TODAY, month="2027-01")
     with pytest.raises(ValueError, match="Result"):
         monthly_rows(fetch, (), TODAY, result="x")
+
+
+def test_a_duplicate_complete_row_counts_the_lesson_only_in_its_earliest_month() -> None:
+    both = done("a@x.io", SEP5, "l1") + done("a@x.io", OCT5, "l1")
+    data = world(
+        enrollments=[{"member": "a@x.io", "course": "c1", "creation": SEP5}], progress=both
+    )
+    assert by_user(data, SEP)["a@x.io"]["lessons_completed"] == 1
+    assert by_user(data, OCT)["a@x.io"]["lessons_completed"] == 0

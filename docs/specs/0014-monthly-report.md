@@ -146,7 +146,7 @@ Row key: (User, managed course). One hidden numeric field, `attempt_score_sum`, 
 | Action | Value produced / displayed | Source |
 |---|---|---|
 | Run | Window `start`, `next_start` (the cutoff) | the `month` filter; blank means last full month from today's date, passed into the pure function as a parameter (`frappe.utils.getdate()` at the edge) |
-| Run | Dropdown months | the report JS builds the current month and the 24 before it from `frappe.datetime.get_today()` |
+| Run | Dropdown months | the report JS builds the current month and the 24 before it from `frappe.datetime.now_date()` |
 | Run | Time zone | dates as stored by the server, no conversion (same as 0013) |
 | Rows | Who has a row | the shared row key function in `progress.py` (spec 0013 AC-2), then the earliest `creation` of the learner's Enrollment, Course Progress rows, and Certificates for the course must be before the cutoff; for a Certificate the earlier of `creation` and `issue_date` |
 | Rows | Excluded users, managed courses | as 0013: `Administrator`, site config `nile_service_user`, `nile_mcp_user`; LMS Course `nile_key` |

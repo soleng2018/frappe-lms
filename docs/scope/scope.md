@@ -273,7 +273,7 @@ spec [0014](../specs/0014-monthly-report.md) · code in `apps/nile_auth/nile_aut
 - [x] Verify it: `/check verify monthly report`
 - [x] Test it: `/test monthly report`
 - [x] Review it (fresh model): `/check review monthly report`
-- [ ] Document it: `/document monthly report`
+- [x] Document it: `/document monthly report`
 
 ## Slice 4: running it safely
 

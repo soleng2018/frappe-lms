@@ -36,6 +36,7 @@ __all__ = [
 	"RESULTS",
 	"RESULT_BEHIND",
 	"RESULT_DONE",
+	"BadFilter",
 	"Window",
 	"as_of",
 	"build_rows",
@@ -44,6 +45,11 @@ __all__ = [
 	"parse_month",
 	"totals",
 ]
+
+
+class BadFilter(ValueError):
+	"""A filter value the report cannot use (a bad month or result)."""
+
 
 RESULT_DONE = "Done"
 RESULT_BEHIND = "Behind"
@@ -85,10 +91,10 @@ def parse_month(value: str | None, today: date) -> Window:
 		start = (this_month - timedelta(days=1)).replace(day=1)
 		return Window(start, this_month)
 	if not _MONTH.match(text):
-		raise ValueError("Month must look like 2026-10 (year, a dash, month 01 to 12)")
+		raise BadFilter("Month must look like 2026-10 (year, a dash, month 01 to 12)")
 	start = date(int(text[:4]), int(text[5:]), 1)
 	if start > this_month:
-		raise ValueError("Month cannot be after the current month")
+		raise BadFilter("Month cannot be after the current month")
 	return Window(start, _month_after(start))
 
 
@@ -123,7 +129,7 @@ def as_of(data: dict[str, list[dict[str, Any]]], window: Window) -> dict[str, li
 
 
 def _replay(attempts: list[dict[str, Any]], allowed: int, pass_mark: int) -> tuple[str, datetime | None]:
-	"""Return the final quiz state and the creation of the attempt that first settled it (Passed or Locked)."""
+	"""Return the final quiz state and when the attempt that first settled it (Passed or Locked) was made."""
 	best: int | None = None
 	settled_at: datetime | None = None
 	for used, attempt in enumerate(attempts, 1):
@@ -155,9 +161,8 @@ def _row(
 	quiz_lessons = {q["lesson"] for q in quizzes}
 	plain = [lesson for lesson in lessons if lesson not in quiz_lessons]
 
-	# Lessons: the first Complete row before the cutoff, and which lessons were completed in the month.
+	# Lessons: the first Complete row before the cutoff.
 	complete_at: dict[str, datetime] = {}
-	completed_in_month: set[str] = set()
 	for row in progress:
 		lesson = row["lesson"]
 		if row["status"] != LESSON_COMPLETE or lesson not in in_outline:
@@ -166,8 +171,8 @@ def _row(
 		if created >= window.cut:
 			continue
 		complete_at[lesson] = min(created, complete_at.get(lesson, created))
-		if created >= window.first:
-			completed_in_month.add(lesson)
+	# A lesson counts in the month of its earliest Complete row, so a duplicate row never counts twice.
+	completed_in_month = {lesson for lesson, at in complete_at.items() if at >= window.first}
 
 	# Quizzes: replay the attempts made before the cutoff.
 	states: list[str] = []
@@ -275,7 +280,7 @@ def build_rows(
 
 def _check_result(result: str | None) -> None:
 	if result and result not in RESULTS:
-		raise ValueError(f"Result must be one of: {', '.join(RESULTS)}")
+		raise BadFilter(f"Result must be one of: {', '.join(RESULTS)}")
 
 
 def filter_rows(

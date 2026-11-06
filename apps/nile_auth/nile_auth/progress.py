@@ -104,7 +104,7 @@ def attempt_score(attempt: dict[str, Any]) -> int:
 	return int(attempt["percentage"] or 0)
 
 
-def latest(values: Iterable[Any]) -> Any:
+def _latest(values: Iterable[Any]) -> Any:
 	present = [v for v in values if v is not None]
 	return max(present) if present else None
 
@@ -205,7 +205,7 @@ def assemble(
 			best = max((attempt_score(a) for a in attempts), default=None)
 			pass_mark = q["passing_percentage"] or 0
 			allowed = q["max_attempts"] or 0
-			last = latest(a["creation"] for a in attempts)
+			last = _latest(a["creation"] for a in attempts)
 			sub_times.append(last)
 			if best is not None:
 				attempted_bests.append(best)
@@ -244,7 +244,7 @@ def assemble(
 				"quizzes_passed": passed,
 				"quizzes_total": len(quizzes_by_course.get(course, [])),
 				"avg_best": avg,
-				"last_activity": latest([*(p["modified"] for p in prog), *sub_times]),
+				"last_activity": _latest([*(p["modified"] for p in prog), *sub_times]),
 				"certificate": cert["name"] if cert else None,
 				"issue_date": cert["issue_date"] if cert else None,
 				"published": ("Yes" if cert["published"] else "No") if cert else None,
