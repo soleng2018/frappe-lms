@@ -40,7 +40,7 @@ Before starting this lab, clear out the 802.1X credentials and device record lef
 
 - Navigate to **Network Setup → Access Management** and click the **+** icon at the top right of the table to create another rule.
 - In the **Add device** dialog, fill in the rule:
-  - Under **Select***, choose `ALL`.
+  - Under **Select***, choose `Allow All MACs`.
   - Under **Select segment**, choose `Guest`.
   - Set **Status*** to `Approved`.
   - Click **SUBMIT**.

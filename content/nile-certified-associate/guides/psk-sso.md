@@ -36,16 +36,34 @@ Create a PSK-based SSID with SSO integration enabled, validate device connectivi
   - **Type:** `Personal`
   - **Security:** `WPA2`
   - **Pre-shared key:** `12345678`
-  - Enable the **SSO checkbox**.
+  - **SSO:** Enable the checkbox
   - **Segment:** `PSK-SSO-Segment` (the segment created earlier).
+  - Click **Save**
 
 ### Step 4: Wireless Client Onboarding
 
 - Connect a wireless client to the new SSID.
 - You should see the SSO onboarding page.
-- Log in with the below Okta credentials to authenticate the device:
-  - **Username:** `lab@nilenetworks.com`
-  - **Password:** `Nile@123`
+- Log in with the username and password you were given when you reserved the lab to authenticate the device.
+
+> **⚠️ CRITICAL: READ THIS BEFORE YOU LOG IN**
+>
+> On Windows, after you sign in on the SSO page you will be sent **back to the same login page**. This is a known issue with the identity provider (IDP). It is **not** a Nile problem, and **your login has already worked**.
+>
+> - **Do NOT log in a second time.**
+> - Click the **Wi-Fi icon** in the taskbar.
+> - Under **ACME SSO**, click **Open browser and connect** again.
+> - The device is then onboarded.
+>
+> ![Windows Wi-Fi panel showing ACME SSO with the "Open browser and connect" link, next to the SSO login page](../images/psk-sso-open-browser-and-connect.png)
+
+> **ℹ️ NOTE: Your device may already be SSO authenticated**
+>
+> If so, you will not see the SSO login page again. In that case, force the device to authenticate again from the Nile Portal:
+>
+> - Navigate to **Nile Portal → Devices**.
+> - Click on your device.
+> - On the device details page, select **Actions → Force SSO**.
 
 ### Step 5: Force SSO (Admin View)
 

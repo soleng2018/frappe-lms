@@ -17,7 +17,7 @@ Create a Guest Wi-Fi SSID with a custom captive portal, configure it with an ext
 - Click on ➕ icon to Add a new external DHCP server:
   - **Name** - `External DHCP` (put a name of your choice)
   - **Geo scope** - `HOL`
-  - **Host** - `172.16.253.2`
+  - **Host 1** - `172.16.253.2`
   - **Subnets** - Click on ➕ icon to add a second new subnet
     - **Subnet** - `192.168.19.0/24`
     - **Router** - `192.168.19.1`
@@ -44,10 +44,9 @@ Create a Guest Wi-Fi SSID with a custom captive portal, configure it with an ext
 - Create a new segment named `Guest`:
   - Select the **Service Area**.
   - Choose **HoL** and Click **OK**
-  - Set Authentication source to `Guest Portal` (the name of your guest portal created in the previous step)
+  - Set Authentication source to `ACME Guest Portal` (the name of your guest portal created in the previous step)
   - Select the **DHCP scope (External DHCP or your DHCP server name)** for the clients.
   - Select the **Subnet 192.168.19.0/24** that was created in the previous Step
-  - Click **Verify DHCP**
   - Click **Save**
 
 ### Step 4: Wireless SSID Configuration

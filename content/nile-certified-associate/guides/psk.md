@@ -34,11 +34,12 @@ Configure a secure PSK (Pre-Shared Key) SSID on the Nile Portal, connect a test 
 - Navigate to **Network Setup → Wireless**.
 - Click on the ➕ icon to add a new SSID.
 - Configure the following:
-  - **SSID Name:** Define anything you like, ensure it is unique to you. e.g, `ACME IOT` (use your own company/tenant name)
+  - **SSID Name:** `ACME IOT`
   - **Type:** `Personal`
   - **Security:** `WPA2`
   - **Pre-shared key:** `12345678`
-  - **Segment:** `IOT-Seg` (or any other name you may have used)
+  - **Segment:** `IOT-Seg`
+  - Click **Save**
 
 ### Step 4: Connectivity Testing
 
@@ -52,8 +53,6 @@ Configure a secure PSK (Pre-Shared Key) SSID on the Nile Portal, connect a test 
 - Navigate to **Devices → Click on your Wireless Client**
 - Click on **RUN TEST** (top right hand corner of the screen)
 - Take Note of the **Ping and ARP ping** status
-- Disconnect the client and enter an incorrect pre-shared key
-- Navigate to the **Dashboard** and note down what you see
 
 ### Step 6: Testing Incorrect PSK Behavior
 
