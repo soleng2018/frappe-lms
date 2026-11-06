@@ -9,16 +9,17 @@ Enable end users to create support tickets directly from the my.nilesecure.com (
 ### Step 1: Configure Nile Portal
 
 - Log in to the Nile portal as an admin.
-- Navigate to **Settings → Global Settings → Integration**.
+- Navigate to **Global Settings → Integration**.
 - Click `"+ Setup Integration"`.
 - Click `"Web hook"`.
 
 ### Step 2: Provide Webhook Information
 
 - Provide the necessary information as below:
-  - **Name:** `Any name`
-  - **URL** - `https://automation.nilenetworks.com/webhook/mynile`
+  - **Name:** `ACME Webhook`
   - **Token** - `5110d57f-af94-47fb-9914-a2526af116ef`
+  - **URL** - `https://automation.nilenetworks.com/webhook/mynile`
+- Click **TEST CONNECTION** and confirm the test succeeds.
 - Click **Next**.
 - Toggle `My Nile Incidents` to **ON**.
 

@@ -66,6 +66,7 @@ Create a Guest Wi-Fi SSID with a custom captive portal, configure it with an ext
   - Upload your company logo
   - Set background image
   - Choose brand colors
+  - Click the **PREVIEW** button to verify the changes, then click **SAVE**
 
 ### Step 6: Connectivity Testing
 

@@ -8,7 +8,8 @@ Automatically onboard a wired device based on its fingerprint (OS/device type) b
 
 ### Step 1: Pre-Lab Cleanup (Reset Previous Lab State)
 
-- Navigate to **Network Setup → Access Management** and select all the devices using the checkbox on the left.
+- Navigate to **Network Setup → Access Management**.
+- Select all the devices using the checkbox on the left.
 - Click the **delete** icon and confirm by clicking **YES**.
 
 ### Step 2: Segment Reuse & Update
@@ -20,19 +21,19 @@ Automatically onboard a wired device based on its fingerprint (OS/device type) b
 
 - Navigate to **Network Setup → Access Management** and click the **+** icon at the top right of the table to create a new rule.
 - In the **Add device** dialog, fill in the rule:
-  - Under **Select***, choose `Fingerprint`.
+  - Under **Select**, choose `Fingerprint`.
   - Under **Select segment**, choose `IOT-Seg`.
-  - Under **Fingerprint***, select `Mac OS X or macOS` (or `Windows OS`, depending on your device).
-  - Set **Status*** to `Approved`.
+  - Under **Fingerprint**, select `Mac OS X or macOS` (or `Windows OS`, depending on your device).
+  - Set **Status** to `Approved`.
   - Click **SUBMIT**.
 
 ### Step 4: Catch-All Rule Setup
 
 - Navigate to **Network Setup → Access Management** and click the **+** icon at the top right of the table to create another rule.
 - In the **Add device** dialog, fill in the rule:
-  - Under **Select***, choose `Allow All MACs`.
+  - Under **Select**, choose `Allow All MACs`.
   - Under **Select segment**, choose `Guest`.
-  - Set **Status*** to `Approved`.
+  - Set **Status** to `Approved`.
   - Click **SUBMIT**.
 - This catch-all rule ensures any device that doesn't match the fingerprint rule still gets placed into the **Guest** segment instead of being left unapproved.
 
