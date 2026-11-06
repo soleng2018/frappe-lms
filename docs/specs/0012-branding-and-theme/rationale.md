@@ -76,7 +76,7 @@ The app stylesheet is last because it is the one uncertain part. The scope propo
 
 ## Probe results
 
-_Task 1 is recorded below. Task 8 adds to this section when it runs._
+_Task 1 is recorded below. Task 8 adds to this section when it runs. Task 5a adds its File record probe._
 
 ### Task 1: renderer probe (2026-11-05, live backend, Frappe v16.54.0, wkhtmltopdf 0.12.6.1 patched qt)
 
@@ -87,6 +87,15 @@ Method: a scratch Print Format for LMS Certificate rendered with `frappe.get_pri
 - **One page held** with a page box of 11 inches by 8.45 inches and the wrapper padding and width reset by the template CSS.
 - **Escaping held.** A name written as `Ada <b>Lovelace</b>` printed as plain text through `| e`.
 - **Inter was not installed yet**, so the PDF used DejaVu Sans. Task 2 installs Inter.
+
+### Task 5a: File record for the shield (2026-11-05, live backend, Frappe v16.54.0, rolled back)
+
+Method: insert a File row with `file_url` `/assets/nile_auth/images/icon.png` inside a transaction, delete it, check the file on disk, roll back.
+
+- **A plain insert is refused.** `validate_file_path` throws `Cannot access file path /assets/...` (first from `before_insert` through `get_content`, then again in `validate`), because the path is outside the site files folder.
+- **Two flags fix it.** `doc.flags.copy_from_existing_file = True` makes `before_insert` skip the blob handling, and `doc.flags.ignore_validate = True` skips `validate`. The insert then succeeds. `ignore_file_validate` is not a Frappe flag and did nothing.
+- **Delete is safe.** Deleting that row left `icon.png` on disk (checked before and after).
+- **Live result.** After `make up` the guest `get_branding` call returns the shield as `banner_image.file_url`, and a second `make up` prints `Site identity unchanged`.
 
 ### Task 8: app stylesheet probe (2026-11-05, signed in look with a throwaway student)
 

@@ -6,7 +6,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import frappe
 
-from nile_auth.branding import APP_NAME, ICON_URL, IMAGE_FILES, LOGO_URL, PRINT_FORMAT_NAME
+from nile_auth.branding import ICON_URL, IMAGE_FILES, PRINT_FORMAT_NAME, SITE_IDENTITY, changed_values
 from nile_auth.mcp_user import MCP_ROLES, mcp_user_problems
 
 # Roles the content sync needs (names confirmed against LMS v2.68.0 in spec 0004).
@@ -139,11 +139,6 @@ def _read_app_file(*parts: str) -> str:
 		sys.exit(f"ERROR: the file {path} is missing. Nothing was changed.")
 
 
-def _changed(current: dict, wanted: dict) -> dict:
-	"""Return only the wanted values that differ from the current ones."""
-	return {key: value for key, value in wanted.items() if current.get(key) != value}
-
-
 def ensure_certificate_format():
 	"""Spec 0012 AC-6: create or update the Print Format from the shipped files and make it the default.
 
@@ -173,7 +168,7 @@ def ensure_certificate_format():
 	updated = []
 	if frappe.db.exists("Print Format", PRINT_FORMAT_NAME):
 		doc = frappe.get_doc("Print Format", PRINT_FORMAT_NAME)
-		diff = _changed(doc.as_dict(), wanted)
+		diff = changed_values(doc.as_dict(), wanted)
 		if diff:
 			doc.update(diff)
 			doc.flags.ignore_permissions = True
@@ -211,21 +206,45 @@ def ensure_certificate_format():
 	print(f"Print Format {PRINT_FORMAT_NAME} updated ({', '.join(updated)})")
 
 
+def _ensure_icon_file_record():
+	"""Create the one File record the LMS sidebar needs for the shield; return True if it inserted.
+
+	The sidebar draws banner_image only when a File row has that file_url (get_branding looks it up).
+	The file lives in the app's public folder, so Frappe's path checks refuse it. copy_from_existing_file
+	skips the blob handling and ignore_validate skips the path check (probed in spec 0012, rationale.md).
+	Deleting the row never touches the file on disk.
+	"""
+	if frappe.db.exists("File", {"file_url": ICON_URL}):
+		return False
+	doc = frappe.get_doc(
+		{"doctype": "File", "file_name": os.path.basename(ICON_URL), "file_url": ICON_URL, "is_private": 0}
+	)
+	doc.flags.copy_from_existing_file = True
+	doc.flags.ignore_validate = True
+	doc.insert(ignore_permissions=True)
+	return True
+
+
 def ensure_site_identity():
-	"""Spec 0012 AC-5: set the app name, logo and favicon in Website Settings. Touches only those four."""
+	"""Spec 0012 AC-5: set the app name, logos and favicon in Website Settings, plus the shield File record.
+
+	Touches only those four fields and that one File record. A second run changes nothing.
+	"""
 	for file_name in IMAGE_FILES:
 		path = frappe.get_app_path("nile_auth", "public", "images", file_name)
 		if not os.path.isfile(path):
 			sys.exit(f"ERROR: the brand file {path} is missing from the image. Nothing was changed.")
 
-	wanted = {"app_name": APP_NAME, "app_logo": LOGO_URL, "banner_image": LOGO_URL, "favicon": ICON_URL}
-	current = {key: frappe.db.get_single_value("Website Settings", key) for key in wanted}
-	diff = _changed(current, wanted)
-	if not diff:
-		print("Site identity unchanged")
-		return
+	current = {key: frappe.db.get_single_value("Website Settings", key) for key in SITE_IDENTITY}
+	diff = changed_values(current, SITE_IDENTITY)
+	updated = list(diff)
 	for key, value in diff.items():
 		frappe.db.set_single_value("Website Settings", key, value)
+	if _ensure_icon_file_record():
+		updated.append("shield File record")
+	if not updated:
+		print("Site identity unchanged")
+		return
 	frappe.clear_cache()
 	frappe.db.commit()
-	print(f"Site identity updated ({', '.join(diff)})")
+	print(f"Site identity updated ({', '.join(updated)})")

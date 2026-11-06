@@ -221,7 +221,7 @@ spec [0012](../specs/0012-branding-and-theme/index.md) · code in `apps/nile_aut
   - [x] Probe the renderer, then install Inter and copy the brand files into the image (AC-1, AC-3, AC-4)
   - [x] The thin certificate: template, setup function, default format, render proof (AC-1, AC-2, AC-6, AC-7, AC-8)
   - [x] App name, logo and favicon by script, and `verify branding` (AC-5, AC-10)
-  - [x] Contrast test, then the live probe and the app stylesheet, or record the gap (AC-9, AC-11) (sidebar logo decided, build task 5a in spec 0012)
+  - [x] Contrast test, then the live probe and the app stylesheet, or record the gap (AC-9, AC-11) (sidebar logo built, task 5a in spec 0012)
   - [x] README and scope row (AC-12)
 - [ ] Verify it: `/check verify branding & theme`
 - [ ] Test it: `/test branding & theme`

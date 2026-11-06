@@ -8,7 +8,9 @@ from nile_tools.verify_branding import (
     Wanted,
     judge_default_format,
     judge_file,
+    judge_icon_file_record,
     judge_print_format,
+    judge_sidebar_logo,
     judge_site_identity,
     judge_stylesheet,
     judge_stylesheet_linked,
@@ -76,3 +78,33 @@ def test_stylesheet_link_judge() -> None:
     url = WANTED.stylesheet_url
     assert judge_stylesheet_linked(f'<link href="{url}">', url).level == "PASS"
     assert judge_stylesheet_linked("<html></html>", url).level == "FAIL"
+
+
+def test_icon_file_record_judge() -> None:
+    url = WANTED.icon_url
+    assert judge_icon_file_record([{"name": "a"}], url).level == "PASS"
+    assert judge_icon_file_record([], url).level == "FAIL"
+    assert judge_icon_file_record([{"name": "a"}, {"name": "b"}], url).level == "FAIL"
+
+
+def test_sidebar_logo_judge() -> None:
+    url = WANTED.icon_url
+    assert judge_sidebar_logo({"message": {"banner_image": {"file_url": url}}}, url).level == "PASS"
+    wide = {"message": {"banner_image": {"file_url": WANTED.logo_url}}}
+    assert judge_sidebar_logo(wide, url).level == "FAIL"
+    # No File record: LMS returns the bare value or nothing, never a file_url.
+    assert judge_sidebar_logo({"message": {"banner_image": None}}, url).level == "FAIL"
+    assert judge_sidebar_logo({}, url).level == "FAIL"
+
+
+def test_site_identity_wants_the_shield_on_the_sidebar_and_the_wide_logo_elsewhere() -> None:
+    assert branding.SITE_IDENTITY["banner_image"] == branding.ICON_URL
+    assert branding.SITE_IDENTITY["favicon"] == branding.ICON_URL
+    assert branding.SITE_IDENTITY["app_logo"] == branding.LOGO_URL
+
+
+def test_changed_values_returns_only_the_differences() -> None:
+    wanted = {"a": 1, "b": 2}
+    assert branding.changed_values({"a": 1, "b": 9}, wanted) == {"b": 2}
+    assert branding.changed_values({"a": 1, "b": 2}, wanted) == {}
+    assert branding.changed_values({}, wanted) == wanted

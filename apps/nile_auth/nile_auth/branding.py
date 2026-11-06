@@ -20,6 +20,15 @@ IMAGE_FILES = (LOGO_FILE, ICON_FILE)
 # True: the probe showed the nginx include works (the LMS page cannot use a Frappe hook).
 STYLESHEET_BUILT = True
 
+# The four Website Settings values ensure_site_identity keeps. banner_image is the square shield because
+# the LMS sidebar draws it in a 32 by 32 pixel square; app_logo stays the wide logo.
+SITE_IDENTITY = {
+	"app_name": APP_NAME,
+	"app_logo": LOGO_URL,
+	"banner_image": ICON_URL,
+	"favicon": ICON_URL,
+}
+
 # Brand tokens (brand/tokens.css).
 NILE_BLUE = "#0E4EAF"
 BRIGHT_NILE_BLUE = "#2070E1"
@@ -54,11 +63,18 @@ __all__ = [
 	"LOGO_URL",
 	"MIN_CONTRAST",
 	"PRINT_FORMAT_NAME",
+	"SITE_IDENTITY",
 	"STYLESHEET_BUILT",
 	"STYLESHEET_URL",
 	"TEXT_PAIRS",
+	"changed_values",
 	"contrast_ratio",
 ]
+
+
+def changed_values(current: dict, wanted: dict) -> dict:
+	"""Return only the wanted values that differ from the current ones."""
+	return {key: value for key, value in wanted.items() if current.get(key) != value}
 
 
 def _channel(value: int) -> float:
