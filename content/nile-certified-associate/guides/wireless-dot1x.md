@@ -85,7 +85,8 @@ Configure a secure wireless SSID with 802.1X authentication using RADIUS, and va
   - This shows every **EAP message** exchanged between the client (HE), the Nile access device (AS), and the authentication server during 802.1X authentication.
   - For a successful authentication, you'll see a sequence of EAP Request/Response messages (e.g. EAP PEAP) ending in a **"Station Authorized"** event.
   - For the failed attempt with bad credentials, compare the trace to see where the exchange differs or terminates.
-- Explore the **"Radius Transactions"** tab to see the raw RADIUS attributes exchanged, which is useful for diagnosing authentication and authorization issues at a deeper level.
+- Use the **"Auth Trace"** tab, not the **"Radius Transactions"** tab, to diagnose authentication issues in this lab.
+  - The **"Radius Transactions"** tab is used to see the **Nile RADIUS** logs. In this lab, authentication goes to your own RADIUS server (`myRADIUS`), so those logs are not where you will find the result.
 
 ## ✅ Verification Criteria
 

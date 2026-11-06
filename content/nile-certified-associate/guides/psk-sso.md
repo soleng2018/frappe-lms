@@ -32,8 +32,8 @@ Create a PSK-based SSID with SSO integration enabled, validate device connectivi
 - Navigate to **Network Setup → Wireless**.
 - Click on the ➕ icon to add a new SSID.
 - Configure the following:
-  - **SSID Name:** `ACME SSO`
   - **Type:** `Personal`
+  - **SSID Name:** `ACME SSO`
   - **Security:** `WPA2`
   - **Pre-shared key:** `12345678`
   - **SSO:** Enable the checkbox

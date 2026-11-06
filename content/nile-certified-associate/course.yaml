@@ -17,6 +17,10 @@ chapters:
         title: Setup PSK
         blocks:
           - text: guides/psk.md
+      - key: nca-l-guest-network
+        title: Setup Guest Network
+        blocks:
+          - text: guides/guest-network.md
       - key: nca-l-wired-mac-auth-admin-approved
         title: Wired MAC Auth - Admin Approved
         blocks:
@@ -29,10 +33,6 @@ chapters:
         title: Setup Wireless 802.1X
         blocks:
           - text: guides/wireless-dot1x.md
-      - key: nca-l-guest-network
-        title: Setup Guest Network
-        blocks:
-          - text: guides/guest-network.md
       - key: nca-l-secure-guest-url-filtering
         title: Setup Secure Guest Service with URL Filtering
         blocks:
@@ -41,6 +41,10 @@ chapters:
         title: Setup PSK-SSO
         blocks:
           - text: guides/psk-sso.md
+      - key: nca-l-wips-rogue-ap
+        title: Detect a Rogue AP with WIPS
+        blocks:
+          - text: guides/wips-rogue-ap.md
       - key: nca-l-webhooks
         title: Setup Webhooks (myNile)
         blocks:
