@@ -1,0 +1,114 @@
+# Runs inside `bench console` (see test_monthly_report_integration.py); __P__ is the test prefix.
+# Builds learners with raw inserts dated in 2026-09 and 2026-10, runs Monthly Report, rolls back.
+import json, csv, io, frappe
+from frappe.desk.query_report import run
+out = {}
+P = "__P__"
+try:
+    frappe.set_user("Administrator")
+    course = frappe.get_all("LMS Course", filters={"nile_key": ["is", "set"]}, pluck="name")[0]
+    lessons = [r["lesson"] for r in frappe.db.sql(
+        "select lr.lesson from `tabChapter Reference` cr join `tabLesson Reference` lr on lr.parent=cr.chapter "
+        "where cr.parent=%s order by cr.idx, lr.idx", course, as_dict=True)]
+    quizzes = frappe.db.sql(
+        "select q.name, q.lesson from `tabLMS Quiz` q join `tabLesson Reference` lr on lr.lesson=q.lesson "
+        "join `tabChapter Reference` cr on lr.parent=cr.chapter where cr.parent=%s order by cr.idx, lr.idx",
+        course, as_dict=True)
+    q1, q2 = quizzes[0]["name"], quizzes[1]["name"]
+    quiz_lessons = {q["lesson"] for q in quizzes}
+    plain = [l for l in lessons if l not in quiz_lessons]
+    out["lessons"], out["quizzes"], out["plain"] = len(lessons), len(quizzes), len(plain)
+    for q in (q1, q2):
+        frappe.db.set_value("LMS Quiz", q, {"passing_percentage": 80, "max_attempts": 3})
+    # only the two quizzes may matter, so make the other quizzes of the course unlimited and unattempted
+    others = [q["name"] for q in quizzes[2:]]
+    out["others"] = len(others)
+
+    def user(kind, first=None, roles=("LMS Student",), system=False):
+        email = f"{P}-{kind}@example.com"
+        frappe.get_doc({"doctype": "User", "email": email, "first_name": first or f"{P}{kind}", "enabled": 1,
+            "user_type": "System User" if system else "Website User", "send_welcome_email": 0,
+            "roles": [{"role": r} for r in roles]}).insert(ignore_permissions=True)
+        return email
+
+    n = 0
+    def raw(doctype, when, **vals):
+        global n
+        n += 1
+        cols = {"name": f"{P}-{doctype[:4]}-{n}", "creation": when, "modified": when,
+                "owner": "Administrator", "modified_by": "Administrator", "docstatus": 0, "idx": 0, **vals}
+        keys = ",".join(f"`{k}`" for k in cols)
+        frappe.db.sql(f"insert into `tab{doctype}` ({keys}) values ({','.join(['%s'] * len(cols))})", list(cols.values()))
+    def prog(m, lesson, when): raw("LMS Course Progress", when, member=m, course=course, lesson=lesson, status="Complete")
+    def sub(m, quiz, pct, when): raw("LMS Quiz Submission", when, member=m, quiz=quiz, course=course, percentage=pct)
+    def enroll(m, when): raw("LMS Enrollment", when, member=m, course=course, member_type="Student", role="Member")
+    def cert(m, issue, when): raw("LMS Certificate", when, member=m, course=course, issue_date=issue, published=1)
+
+    failed, behind, certed, evil = user("failed"), user("behind"), user("certed"), user("evil", "=1+1")
+    mod, student = user("mod", roles=("Moderator",), system=True), user("stud")
+    enroll(failed, "2026-09-02 10:00:00")
+    for l in plain: prog(failed, l, "2026-10-03 10:00:00")
+    sub(failed, q1, 85, "2026-10-04 10:00:00")
+    for d in (5, 6, 7): sub(failed, q2, 60, f"2026-10-0{d} 10:00:00")
+    for q in others: sub(failed, q, 90, "2026-10-08 10:00:00")
+    enroll(behind, "2026-10-02 10:00:00")
+    if plain: prog(behind, plain[0], "2026-10-03 10:00:00")
+    cert(certed, "2026-10-20", "2026-10-20 10:00:00")
+    cert(evil, "2026-10-21", "2026-10-21 10:00:00")
+
+    def rows(month, **f):
+        res = run("Monthly Report", filters={"month": month, **f})
+        return {r["learner"].split("-")[1].split("@")[0]: r for r in res["result"] if r["learner"].startswith(P)}, res
+    oct_, oct_res = rows("2026-10")
+    sep, _ = rows("2026-09")
+    out["oct"] = {k: {x: str(v) for x, v in r.items()} for k, r in oct_.items()}
+    out["sep"] = {k: [r["result"], str(r["outcome"])] for k, r in sep.items()}
+    out["summary_labels"] = [s["label"] for s in oct_res["report_summary"]]
+    # the current month matches Learner Progress
+    cur, _ = rows("")  # blank is the last full month; use the real current month instead
+    from frappe.utils import getdate
+    today = getdate()
+    this = f"{today.year}-{today.month:02d}"
+    cur, _ = rows(this)
+    lp = {r["learner"].split("-")[1].split("@")[0]: r for r in run("Learner Progress")["result"] if r["learner"].startswith(P)}
+    out["match"] = {k: [str(cur[k]["lessons_done"]) == str(lp[k]["lessons_done"]), cur[k]["enrolled"] == lp[k]["enrolled"],
+                        cur[k]["enabled"] == lp[k]["enabled"], cur[k]["certificate"] == lp[k]["certificate"]] for k in lp}
+    out["same_rows"] = sorted(cur) == sorted(lp)
+    # bad filters
+    for label, f in (("bad_month", {"month": "2026-13"}), ("future", {"month": f"{today.year + 1}-01"}), ("bad_result", {"result": "x"})):
+        try:
+            run("Monthly Report", filters=f); out[label] = "ran"
+        except frappe.ValidationError:
+            out[label] = "ValidationError"
+    # access
+    for who, label in ((student, "student"), (mod, "moderator")):
+        frappe.set_user(who)
+        try:
+            r = run("Monthly Report", filters={"month": "2026-10"})
+            out[label] = f"ran:{len([x for x in r['result'] if x['learner'].startswith(P)])}"
+        except frappe.PermissionError:
+            out[label] = "PermissionError"
+    # CSV through the built in export, as the Moderator who is not a System Manager
+    frappe.set_user(mod)
+    out["mod_is_sysmgr"] = "System Manager" in frappe.get_roles(mod)
+    frappe.local.form_dict = frappe._dict(report_name="Monthly Report", file_format_type="CSV",
+        filters=json.dumps({"month": "2026-10"}), visible_idx="[]", custom_columns="[]",
+        include_indentation=0, include_filters=0, ignore_visible_idx=1)
+    try:
+        from frappe.desk.query_report import export_query
+        export_query()
+        content = frappe.response.get("filecontent", b"").decode()
+        table = list(csv.reader(io.StringIO(content)))
+        out["csv_header"] = table[0] if table else []
+        out["csv_cells_with_formula_start"] = [c for r in table for c in r if c[:1] in "=+-@" and c]
+        out["csv_has_evil"] = [c for r in table[1:] for c in r if "1+1" in c]
+    except Exception as e:
+        out["csv_error"] = type(e).__name__ + ": " + str(e)[:300]
+    frappe.set_user("Administrator")
+except Exception as e:
+    import traceback
+    out["error"] = type(e).__name__ + ": " + traceback.format_exc()[-900:]
+finally:
+    frappe.db.rollback()
+out["leftover"] = frappe.db.count("User", {"email": ["like", f"{P}-%"]})
+print("RESULT:" + json.dumps(out, default=str))
