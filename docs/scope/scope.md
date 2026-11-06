@@ -254,9 +254,9 @@ spec [0013](../specs/0013-manager-progress-view.md) · code in `apps/nile_auth/n
   - [x] Complete Learner Progress: flags, exclusions, quiz columns, activity, certificate, filters (AC-2, AC-3, AC-5, AC-6, AC-7, AC-11)
   - [x] Quiz Scores report and links (AC-8, AC-9, AC-11)
   - [x] Integration tests, README admin steps (AC-1 to AC-11)
-- [ ] Verify it: `/check verify manager progress view`
+- [x] Verify it: `/check verify manager progress view`
 - [ ] Test it: `/test manager progress view`
-- [ ] Review it (fresh model): `/check review manager progress view`
+- [x] Review it (fresh model): `/check review manager progress view`
 - [ ] Document it: `/document manager progress view`
 
 ### 13. Monthly report · needs a decision
