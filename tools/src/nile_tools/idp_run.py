@@ -276,7 +276,9 @@ def check(
         verdicts.append(idp.judge_groups(user, claims))
     flow_slug = _flow_slug(values)
     flow = authentik.get_one(ak, "/flows/instances/", slug=flow_slug)
-    bindings = len(authentik.find(ak, "/policies/bindings/", target=str(flow["pk"]))) if flow else 0
+    # Bindings hang off the flow's policy binding model id, which is not the flow's own pk.
+    target = str(flow.get("policybindingmodel_ptr_id") or flow["pk"]) if flow else ""
+    bindings = len(authentik.find(ak, "/policies/bindings/", target=target)) if flow else 0
     verdicts.append(idp.judge_authorization_flow(flow_slug, flow is not None, bindings))
     verdicts.append(idp.judge_email_lock(authentik.get(ak, "/admin/settings/")))
     found = lms.list_records(connection, SOCIAL_KEY, filters=[["name", "=", idp.FRAPPE_KEY_NAME]])
