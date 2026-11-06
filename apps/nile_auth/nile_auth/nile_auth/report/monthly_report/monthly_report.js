@@ -1,10 +1,30 @@
-// The Month list is the current month and the 24 before it. The server checks the value again.
+// The Month list is the current month and the 24 before it, as {value, label} pairs: the value
+// is YYYY-MM (what the server gets) and the label reads like "October 2026". The server checks
+// the value again.
+const MONTH_NAMES = [
+	"January",
+	"February",
+	"March",
+	"April",
+	"May",
+	"June",
+	"July",
+	"August",
+	"September",
+	"October",
+	"November",
+	"December",
+];
+
 function monthOptions() {
 	const [year, month] = frappe.datetime.now_date().split("-").map(Number);
 	const options = [];
 	for (let back = 0; back <= 24; back++) {
 		const d = new Date(year, month - 1 - back, 1);
-		options.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
+		options.push({
+			value: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`,
+			label: `${MONTH_NAMES[d.getMonth()]} ${d.getFullYear()}`,
+		});
 	}
 	return options;
 }
@@ -17,7 +37,7 @@ frappe.query_reports["Monthly Report"] = {
 			fieldtype: "Select",
 			options: monthOptions(),
 			// The last full month, which is the second entry.
-			default: monthOptions()[1],
+			default: monthOptions()[1].value,
 		},
 		{
 			fieldname: "course",
