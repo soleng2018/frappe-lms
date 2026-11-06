@@ -13,12 +13,13 @@ The Docker side of the project: one compose file, the image build, version pins,
 | versions.env | Version and digest pins. Committed on purpose, so git records what is deployed |
 | apps.json | Apps baked into the image (LMS by tag, `payments` by branch) |
 | fetch-upstream.sh | Checks out frappe_docker at the pinned tag into `deploy/.upstream/` (git ignored) |
+| nginx/nile-brand.conf | The `sub_filter` include that adds `nile-brand.css` to the LMS app page (the `frontend` container loads it) |
 | scripts/create-site.sh | One shot site setup. Idempotent, and drops a half made site on rerun |
 | scripts/restart-test.sh | Host side restart and crash proof, run by `make restart-test`. Acts only on the `nile-lms` project |
 
 ## Commands
 
-Run from the repo root: `make build`, `make up`, `make down`, `make ps`, `make logs`, `make restart-test`. Prove a deploy with `make tools CMD="verify deploy"`.
+Run from the repo root: `make build`, `make up`, `make down`, `make ps`, `make logs`, `make restart-test`. Prove a deploy with `make tools CMD="verify deploy"`, and the branding with `make verify-branding`.
 
 ## Conventions
 
@@ -26,6 +27,7 @@ Run from the repo root: `make build`, `make up`, `make down`, `make ps`, `make l
 - Pin images by digest and upstream sources by tag.
 - Every service uses the shared `json-file` log rotation.
 - `BUILD_NILE_AUTH_VERSION` in `versions.env` must equal the version in `apps/nile_auth/pyproject.toml`.
+- The image build copies `brand/nile-logo.png` and `brand/icon.png` unchanged into `apps/nile_auth/nile_auth/public/images/` (git ignored). Never edit `brand/`.
 
 ## Gotchas
 

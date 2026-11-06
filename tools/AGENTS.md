@@ -11,6 +11,7 @@ The `nile_tools` Python package: config handling, the `init` and `config check` 
 | src/nile_tools/config.py | The one key list (`KEYS`), the strict `.env` parser, validators, generators, sample rendering, secret masking |
 | src/nile_tools/checks.py | The checks behind `config check` |
 | src/nile_tools/verify.py | The `verify deploy` checks: pure judges over responses and the parsed compose file, and `long_running` |
+| src/nile_tools/verify_branding.py | The `verify branding` checks (Print Format, site identity, sidebar shield, brand file bytes, stylesheet). It reads the wanted values from `apps/nile_auth/nile_auth/branding.py` |
 | src/nile_tools/cli.py | The command line: `init`, `config`, `whoami`, `sync`, `verify` |
 | tests/ | Unit tests, plus `*_integration.py` files that need the running stack |
 
@@ -19,6 +20,7 @@ The `nile_tools` Python package: config handling, the `init` and `config check` 
 ```bash
 make tools CMD="config check"    # run any tools command in the container
 make tools CMD="config sample"   # print the .env.sample generated from the key list
+make verify-branding             # check the live branding (also runs the Inter check in the backend)
 ```
 
 ## Conventions
