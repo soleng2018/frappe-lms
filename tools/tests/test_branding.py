@@ -11,6 +11,7 @@ from nile_tools.verify_branding import (
     judge_print_format,
     judge_site_identity,
     judge_stylesheet,
+    judge_stylesheet_linked,
 )
 
 WANTED = Wanted(
@@ -69,3 +70,9 @@ def test_file_judge() -> None:
 def test_stylesheet_judge() -> None:
     assert judge_stylesheet("u", httpx.Response(200)).level == "PASS"
     assert judge_stylesheet("u", httpx.Response(404)).level == "FAIL"
+
+
+def test_stylesheet_link_judge() -> None:
+    url = WANTED.stylesheet_url
+    assert judge_stylesheet_linked(f'<link href="{url}">', url).level == "PASS"
+    assert judge_stylesheet_linked("<html></html>", url).level == "FAIL"

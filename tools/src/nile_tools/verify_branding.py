@@ -26,6 +26,7 @@ __all__ = [
     "judge_print_format",
     "judge_site_identity",
     "judge_stylesheet",
+    "judge_stylesheet_linked",
     "load_wanted",
     "run",
 ]
@@ -145,6 +146,13 @@ def judge_stylesheet(url: str, r: httpx.Response) -> Result:
     return Result("PASS", "stylesheet", f"{url} answers 200")
 
 
+def judge_stylesheet_linked(lms_page: str, url: str) -> Result:
+    """Check that the LMS app page links the stylesheet (the nginx include is working)."""
+    if url in lms_page:
+        return Result("PASS", "stylesheet link", f"/lms links {url}")
+    return Result("FAIL", "stylesheet link", f"/lms does not link {url} (the nginx include is off)")
+
+
 def _read(path: Path) -> bytes | None:
     try:
         return path.read_bytes()
@@ -220,6 +228,8 @@ def run(
         if all(isinstance(r, httpx.Response) and r.status_code == 200 for r in pages):
             texts = [r.text for r in pages if isinstance(r, httpx.Response)]
             results.extend(judge_site_identity(texts[0], texts[1], wanted))
+            if wanted.stylesheet_built:
+                results.append(judge_stylesheet_linked(texts[0], wanted.stylesheet_url))
         else:
             results.append(
                 Result("FAIL", "site identity", f"{base}/lms or /login did not answer 200")

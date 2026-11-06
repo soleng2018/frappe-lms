@@ -42,9 +42,29 @@ class FakeBase:
         self.calls.append("course")
 
 
+class FakeFrappeError(Exception):
+    """Stands in for the exception frappe.throw raises."""
+
+
+def _fake_frappe(monkeypatch: pytest.MonkeyPatch, app_dir: Path | None = None) -> None:
+    """A minimal frappe: throw raises, get_app_path points into `app_dir` when given."""
+    frappe = types.ModuleType("frappe")
+
+    def throw(message: str) -> None:
+        raise FakeFrappeError(message)
+
+    def get_app_path(app: str, *parts: str) -> str:
+        return str((app_dir or ROOT / "apps" / "nile_auth" / "nile_auth").joinpath(*parts))
+
+    frappe.throw = throw  # type: ignore[attr-defined]
+    frappe.get_app_path = get_app_path  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "frappe", frappe)
+
+
 @pytest.fixture
 def make(monkeypatch: pytest.MonkeyPatch) -> Callable[..., Any]:
     """Build a certificate object from the real subclass over the fake base."""
+    _fake_frappe(monkeypatch)
     for name in ("lms", "lms.lms", "lms.lms.doctype", "lms.lms.doctype.lms_certificate"):
         monkeypatch.setitem(sys.modules, name, types.ModuleType(name))
     base = types.ModuleType(BASE)
@@ -125,3 +145,35 @@ def test_the_app_version_and_the_image_pin_move_together() -> None:
     pin = re.search(r"^BUILD_NILE_AUTH_VERSION=(\S+)", env, re.M)
     assert app and pin
     assert app.group(1) == pin.group(1)
+
+
+def _certificate_module(monkeypatch: pytest.MonkeyPatch, app_dir: Path) -> Any:
+    make_fixture_base = types.ModuleType(BASE)
+    make_fixture_base.LMSCertificate = FakeBase  # type: ignore[attr-defined]
+    for name in ("lms", "lms.lms", "lms.lms.doctype", "lms.lms.doctype.lms_certificate"):
+        monkeypatch.setitem(sys.modules, name, types.ModuleType(name))
+    monkeypatch.setitem(sys.modules, BASE, make_fixture_base)
+    _fake_frappe(monkeypatch, app_dir)
+    monkeypatch.delitem(sys.modules, "nile_auth.certificate", raising=False)
+    return importlib.import_module("nile_auth.certificate")
+
+
+def test_logo_data_uri_inlines_an_allowed_brand_file(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Spec 0012 AC-4: the logo is read from the app and inlined, so a render fetches nothing."""
+    images = tmp_path / "public" / "images"
+    images.mkdir(parents=True)
+    (images / "nile-logo.png").write_bytes(b"\x89PNGdata")
+    uri = _certificate_module(monkeypatch, tmp_path).logo_data_uri("nile-logo.png")
+    assert uri == "data:image/png;base64,iVBOR2RhdGE="
+
+
+def test_logo_data_uri_refuses_other_files_and_names_a_missing_one(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    module = _certificate_module(monkeypatch, tmp_path)
+    with pytest.raises(FakeFrappeError, match="not one of"):
+        module.logo_data_uri("../../etc/passwd")
+    with pytest.raises(FakeFrappeError, match="missing from the image"):
+        module.logo_data_uri("nile-logo.png")

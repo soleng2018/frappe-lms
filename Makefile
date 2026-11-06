@@ -7,7 +7,7 @@ COMPOSE      = $(COMPOSE_BASE) --env-file deploy/versions.env --env-file .env
 COMPOSE_INIT = $(COMPOSE_BASE) --env-file deploy/versions.env --env-file .env.sample
 TOOLS_RUN    = run --rm --build --quiet-build --no-deps --user "$$(id -u):$$(id -g)" tools
 
-.PHONY: guard init check build up down logs ps tools restart-test hooks lint fmt test compose-config secrets
+.PHONY: guard init check build up down logs ps tools verify-branding restart-test hooks lint fmt test compose-config secrets
 guard:
 	@bad=""; for k in $$(sed -n 's/^\([A-Z][A-Z0-9_]*\)=.*/\1/p' .env.sample deploy/versions.env); do \
 	  if printenv "$$k" >/dev/null; then bad="$$bad $$k"; fi; done; \
@@ -31,6 +31,11 @@ logs: guard
 	$(COMPOSE) logs --tail=100
 tools: guard
 	$(COMPOSE) $(TOOLS_RUN) $(CMD)
+
+# Spec 0012: the branding checks. The tools container has no docker access, so Inter is checked here.
+verify-branding: guard
+	$(COMPOSE) exec -T backend fc-match -f 'Inter installed: %{family}\n' Inter | grep -x 'Inter installed: Inter'
+	$(COMPOSE) $(TOOLS_RUN) verify branding
 
 # Proves restart and crash recovery (spec 0007). Needs the Docker CLI and sudo on the host.
 restart-test: guard

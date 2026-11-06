@@ -17,8 +17,8 @@ STYLESHEET_URL = f"{ASSET_BASE}/css/nile-brand.css"
 # The images folder is filled by the image build, byte for byte from brand/.
 IMAGE_FILES = (LOGO_FILE, ICON_FILE)
 
-# Set true by build task 8 only when the live probe shows the LMS page can take the stylesheet.
-STYLESHEET_BUILT = False
+# True: the probe showed the nginx include works (the LMS page cannot use a Frappe hook).
+STYLESHEET_BUILT = True
 
 # Brand tokens (brand/tokens.css).
 NILE_BLUE = "#0E4EAF"

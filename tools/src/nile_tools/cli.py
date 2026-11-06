@@ -11,7 +11,7 @@ from pathlib import Path
 
 import httpx
 
-from nile_tools import authentik, checks, config, idp, idp_run, lms, verify
+from nile_tools import authentik, checks, config, idp, idp_run, lms, verify, verify_branding
 from nile_tools import idp_selftest as idp_selftest_run
 from nile_tools.authentik import AuthentikError
 from nile_tools.config import ConfigError
@@ -183,6 +183,14 @@ def verify_deploy(root: Path) -> int:
     return verify.run(root, config.load_env(root).values)
 
 
+def verify_branding_cmd(root: Path) -> int:
+    """Check the certificate format, site identity and brand files on the live site."""
+    values = config.load_env(root).values
+    for key in ("LMS_HOSTNAME", "LMS_API_KEY", "LMS_API_SECRET"):
+        _require(values, key)
+    return verify_branding.run(root, values)
+
+
 def _lms_from_env(values: Mapping[str, str]) -> lms.Lms:
     host, key, secret = (
         _require(values, k) for k in ("LMS_HOSTNAME", "LMS_API_KEY", "LMS_API_SECRET")
@@ -300,6 +308,7 @@ def _parser() -> argparse.ArgumentParser:
     ver = commands.add_parser("verify", help="prove the deployment is reachable and safe")
     ver_actions = ver.add_subparsers(dest="action", required=True)
     ver_actions.add_parser("deploy", help="run every check")
+    ver_actions.add_parser("branding", help="check the Nile certificate, identity and logos")
     ver_actions.add_parser("services", help="list the long running services, one per line")
     idp_cmd = commands.add_parser("idp", help="set up the Authentik sign in")
     idp_actions = idp_cmd.add_subparsers(dest="action", required=True)
@@ -344,6 +353,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             if args.action == "services":
                 print("\n".join(verify.long_running(verify.load_compose(root))))
                 return 0
+            if args.action == "branding":
+                return verify_branding_cmd(root)
             return verify_deploy(root)
         if args.command == "idp":
             if args.action == "password-login":

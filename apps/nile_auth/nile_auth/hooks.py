@@ -21,3 +21,6 @@ override_whitelisted_methods = {
 override_doctype_class = {
 	"LMS Certificate": "nile_auth.certificate.NileLMSCertificate",
 }
+
+# Spec 0012: the certificate template reads the Nile logo through this method (no URL is fetched).
+jinja = {"methods": ["nile_auth.certificate.logo_data_uri"]}

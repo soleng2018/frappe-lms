@@ -25,3 +25,6 @@ __pycache__/
 
 # Upstream checkout used as a build context
 deploy/.upstream/
+
+# Copied from brand/ by the image build (spec 0012)
+apps/nile_auth/nile_auth/public/images/

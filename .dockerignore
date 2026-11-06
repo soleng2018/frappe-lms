@@ -3,5 +3,8 @@
 .env.tmp
 *
 !apps/nile_auth
+!brand/nile-logo.png
+!brand/icon.png
+!deploy/nginx/nile-brand.conf
 **/__pycache__
 **/*.egg-info

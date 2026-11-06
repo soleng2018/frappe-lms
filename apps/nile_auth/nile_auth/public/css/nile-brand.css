@@ -1,0 +1,23 @@
+/* Spec 0012 AC-9: the Nile colors for the LMS app. Colors only: no shapes, no layout, no fonts.
+   Inter needs nothing here, the LMS app already bundles it.
+   The LMS (frappe-ui) paints its main button with the class bg-surface-gray-10 (near black) and its
+   blue button with bg-surface-blue-6. The rules below are limited to `button` so a tooltip or a badge
+   that shares a class keeps its look. White on Nile Blue is 7.7 to 1.
+   Nile Blue #0E4EAF, hover #0A3C87, pressed Deep Nile Blue #072F68. Light theme only. */
+button.bg-surface-gray-10,
+button.bg-surface-blue-6 {
+	background-color: #0E4EAF;
+	color: #FFFFFF;
+}
+button.bg-surface-gray-10:hover,
+button.bg-surface-blue-6:hover {
+	background-color: #0A3C87;
+}
+button.bg-surface-gray-10:active,
+button.bg-surface-blue-6:active {
+	background-color: #072F68;
+}
+/* Links. The stock light blue is under 4.5 to 1 on white. */
+:root:not([data-theme="dark"]) {
+	--ink-blue-link: #0E4EAF;
+}
