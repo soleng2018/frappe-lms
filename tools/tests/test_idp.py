@@ -49,7 +49,7 @@ class FakeAuthentik:
         table: dict[str, Any] = {
             "propertymappings/provider/scope/": self._maps(),
             "flows/instances/": [
-                {"pk": f"flow-{s}", "slug": s}
+                {"pk": f"flow-{s}", "policybindingmodel_ptr_id": f"pbm-{s}", "slug": s}
                 for s in (idp.IMPLICIT_CONSENT_SLUG, idp.INVALIDATION_SLUG, "own-flow")
             ],
             "policies/bindings/": [{"pk": "b1"}] * self.flow_bindings,
