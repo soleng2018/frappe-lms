@@ -35,7 +35,7 @@ _The Frappe links have not been read by `/scope`; `/architect` should read the o
 | 10 | Branding & theme | Slice 2 | done |
 | 11 | Guide format & full authoring | Slice 2 | done |
 | 12 | Manager progress view | Slice 3 | done |
-| 13 | Monthly report | Slice 3 | in-progress |
+| 13 | Monthly report | Slice 3 | done |
 | 14 | Backup & restore | Slice 4 | planned |
 | 15 | Outbound email | Slice 4 | dropped |
 | 16 | Health checks & error monitoring | Slice 4 | planned |
@@ -259,7 +259,7 @@ spec [0013](../specs/0013-manager-progress-view.md) · code in `apps/nile_auth/n
 - [x] Review it (fresh model): `/check review manager progress view`
 - [x] Document it: `/document manager progress view`
 
-### 13. Monthly report · in-progress
+### 13. Monthly report · done
 An on demand report page with a CSV export that summarizes a chosen month: completions, scores, and who is behind.
 **Done when:** an admin picks a month and sees the summary, downloads it as CSV, and the numbers match the progress view.
 spec [0014](../specs/0014-monthly-report.md) · code in `apps/nile_auth/nile_auth/nile_auth/report/monthly_report/`
@@ -270,9 +270,9 @@ spec [0014](../specs/0014-monthly-report.md) · code in `apps/nile_auth/nile_aut
   - [x] Month activity and chase columns, filters (AC-6 to AC-8, AC-12)
   - [x] Totals, month dropdown, CSV (AC-2, AC-9, AC-10)
   - [x] Integration tests, README admin steps (AC-1 to AC-12)
-- [ ] Verify it: `/check verify monthly report`
-- [ ] Test it: `/test monthly report`
-- [ ] Review it (fresh model): `/check review monthly report`
+- [x] Verify it: `/check verify monthly report`
+- [x] Test it: `/test monthly report`
+- [x] Review it (fresh model): `/check review monthly report`
 - [ ] Document it: `/document monthly report`
 
 ## Slice 4: running it safely
