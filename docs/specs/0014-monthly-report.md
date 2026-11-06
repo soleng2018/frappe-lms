@@ -1,7 +1,7 @@
 # 0014. Give managers one Monthly Report: who finished the lab, who is behind, and what happened that month
 
 **Date**: 2026-11-05
-**Status**: In Progress
+**Status**: Accepted
 
 ## Summary
 
