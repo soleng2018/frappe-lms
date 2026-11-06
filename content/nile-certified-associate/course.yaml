@@ -1,0 +1,47 @@
+# The Nile Certified Associate course: the NCA hands on labs, in the order of lms.nile.global.
+# Every key is the record's identity in the LMS: change a title freely, never change a key.
+format: 1
+key: nile-certified-associate
+title: Nile Certified Associate
+short_introduction: Hands on labs that take you from the lab rules to a working Nile network.
+description: Work through the NCA hands on labs in order, from the general guidelines to PSK, 802.1X, guest, wired and webhook setups, all configured in the Nile Portal.
+chapters:
+  - key: nca-ch-labs
+    title: Hands On Labs
+    lessons:
+      - key: nca-l-general-guidelines
+        title: General Guidelines
+        blocks:
+          - text: guides/general-guidelines.md
+      - key: nca-l-psk
+        title: Setup PSK
+        blocks:
+          - text: guides/psk.md
+      - key: nca-l-wireless-dot1x
+        title: Setup Wireless 802.1X
+        blocks:
+          - text: guides/wireless-dot1x.md
+      - key: nca-l-guest-network
+        title: Setup Guest Network
+        blocks:
+          - text: guides/guest-network.md
+      - key: nca-l-secure-guest-url-filtering
+        title: Setup Secure Guest Service with URL Filtering
+        blocks:
+          - text: guides/secure-guest-url-filtering.md
+      - key: nca-l-psk-sso
+        title: Setup PSK-SSO
+        blocks:
+          - text: guides/psk-sso.md
+      - key: nca-l-wired-dot1x
+        title: Setup Wired 802.1X
+        blocks:
+          - text: guides/wired-dot1x.md
+      - key: nca-l-wired-fingerprint
+        title: Setup Wired Fingerprint
+        blocks:
+          - text: guides/wired-fingerprint.md
+      - key: nca-l-webhooks
+        title: Setup Webhooks (myNile)
+        blocks:
+          - text: guides/webhooks.md

@@ -21,3 +21,8 @@ button.bg-surface-blue-6:active {
 :root:not([data-theme="dark"]) {
 	--ink-blue-link: #0E4EAF;
 }
+/* Bold text in a lesson body (the LMS wraps it in `.ProseMirror.prose`) is Nile Blue, so the menu
+   paths and button names in the labs stand out. Nile Blue on white is 7.7 to 1. Light theme only. */
+:root:not([data-theme="dark"]) .ProseMirror.prose strong {
+	color: #0E4EAF;
+}

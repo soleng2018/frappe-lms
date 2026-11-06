@@ -3,7 +3,8 @@
 [extend]
 useDefault = true
 
-[allowlist]
+[[allowlists]]
+description = "Paths a tree scan must skip"
 paths = [
   '''(^|/)\.env$''',
   '''(^|/)deploy/\.upstream/''',
@@ -13,3 +14,10 @@ paths = [
   '''\.mypy_cache/''',
   '''\.pytest_cache/''',
 ]
+
+# A `key:` line in a course file is a record identity (a slug), not a secret, but the generic API
+# key rule reads long slugs as one. Only that rule, only course files.
+[[allowlists]]
+description = "Course keys in content/<course>/course.yaml"
+targetRules = ["generic-api-key"]
+paths = ['''(^|/)content/[^/]+/course\.yaml$''']

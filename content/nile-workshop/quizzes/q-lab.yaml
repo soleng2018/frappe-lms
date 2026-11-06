@@ -1,8 +1,0 @@
-key: q-lab
-title: Lab quiz
-questions:
-  - key: q-lab-1
-    text: Did you finish the lab?
-    options:
-      - {text: "Yes", correct: true}
-      - {text: "No"}
