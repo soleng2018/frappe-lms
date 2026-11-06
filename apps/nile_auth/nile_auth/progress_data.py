@@ -45,11 +45,11 @@ def fetch(name: str) -> list[dict]:
 			as_dict=True,
 		)
 	if name == "enrollments":
-		return get("LMS Enrollment", fields=["member", "course"], limit_page_length=0)
+		return get("LMS Enrollment", fields=["member", "course", "creation"], limit_page_length=0)
 	if name == "progress":
 		return get(
 			"LMS Course Progress",
-			fields=["member", "course", "lesson", "status", "modified"],
+			fields=["member", "course", "lesson", "status", "modified", "creation"],
 			limit_page_length=0,
 		)
 	if name == "quizzes":

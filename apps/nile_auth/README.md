@@ -25,6 +25,9 @@ and [spec 0006](../../docs/specs/0006-group-to-role-mapping/index.md) (login).
 - `nile_auth/progress.py`: the pure progress and quiz rules shared by the two manager reports (Learner
   Progress and Quiz Scores). `progress_data.py` fetches the lists and checks access; the reports live in
   `nile_auth/report/` ([spec 0013](../../docs/specs/0013-manager-progress-view.md)).
+- `nile_auth/monthly.py`: the pure month rules of the Monthly Report. It imports the row set, outline and
+  quiz rules from `progress.py`, so both reports agree. The report is in `nile_auth/report/monthly_report/`
+  ([spec 0014](../../docs/specs/0014-monthly-report.md)).
 - `nile_auth/fixtures/`: the custom fields and the Moderator delete permission on LMS Quiz Submission.
   Applied by `bench migrate`.
 
