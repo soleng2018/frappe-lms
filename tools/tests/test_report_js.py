@@ -69,3 +69,14 @@ def test_other_states_are_not_linked_and_quiz_title_is_escaped() -> None:
     evil = {"learner": "a@x.com", "quiz": "q 1", "state": "Passed", "quiz_title": "<b>&"}
     out = _run("quiz_scores.js", "Quiz Scores", [["state", passed], ["quiz", evil]])
     assert out["cells"] == ["v", '<a href="/app/lms-quiz/q%201">&lt;b&gt;&amp;</a>']
+
+
+@pytest.mark.parametrize(
+    ("script", "name"),
+    [("quiz_scores.js", "Quiz Scores"), ("learner_progress.js", "Learner Progress")],
+)
+def test_learner_cell_shows_the_escaped_email_and_links_to_the_user(script: str, name: str) -> None:
+    """AC-9: the learner cell shows the email (not the full name) as a link to the User."""
+    data = {"learner": "a+b<x>@x.com", "full_name": "Ann"}
+    out = _run(script, name, [["learner", data], ["full_name", data]])
+    assert out["cells"] == ['<a href="/app/user/a%2Bb%3Cx%3E%40x.com">a+b&lt;x&gt;@x.com</a>', "v"]
