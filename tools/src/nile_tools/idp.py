@@ -40,6 +40,7 @@ __all__ = [
     "diff",
     "flow_target",
     "judge_application",
+    "judge_authorization_flow",
     "judge_bad_state",
     "judge_discovery",
     "judge_email_lock",
@@ -249,6 +250,19 @@ def judge_provider(provider: Mapping[str, Any] | None, wanted: Mapping[str, Any]
     if fields:
         return Verdict(FAIL, f"provider fields differ: {', '.join(fields)}; run `idp setup`")
     return Verdict(PASS, "provider fields are as wanted")
+
+
+def judge_authorization_flow(slug: str, flow_found: bool, bindings: int) -> Verdict:
+    """FAIL when the flow is missing; WARN when it holds policy bindings that can deny learners."""
+    if not flow_found:
+        return Verdict(FAIL, f"authorization flow '{slug}' does not exist in Authentik")
+    if bindings:
+        return Verdict(
+            WARN,
+            f"authorization flow '{slug}' has {bindings} policy binding(s); a policy there can "
+            "deny students at sign in (see AUTHENTIK_AUTHORIZATION_FLOW in the README)",
+        )
+    return Verdict(PASS, f"authorization flow '{slug}' has no policy bindings")
 
 
 def judge_groups(user: str | None, claims: Mapping[str, Any] | None) -> Verdict:

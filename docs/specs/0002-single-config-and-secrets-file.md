@@ -139,6 +139,7 @@ Generators: passwords and tokens use `secrets.token_urlsafe(24)`, regenerated un
 | `AUTHENTIK_HOSTNAME` | no | operator | no | Authentik hostname (URL is `https://` plus this) |
 | `AUTHENTIK_API_TOKEN` | yes | operator | no | Authentik master API token |
 | `AUTHENTIK_APP_SLUG` | no | default `nile-lms` | yes | Slug of the Authentik application the script creates |
+| `AUTHENTIK_AUTHORIZATION_FLOW` | no | default `default-provider-authorization-implicit-consent` | no | Slug of the Authentik authorization flow the LMS provider uses; must have no policy bindings that deny students (spec 0008 amendment) |
 | `AUTHENTIK_ADMIN_GROUP` | no | default `hol-admins` | no | Group that becomes admin (copied to site config by `create-site`) |
 | `TRAEFIK_NETWORK` | no | default `traefik` | no | External Docker network |
 | `TRAEFIK_ENTRYPOINT` | no | default `websecure` | no | Traefik entrypoint |

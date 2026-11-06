@@ -12,7 +12,7 @@ You need all of these before you start.
 | `make`, `git`, `curl`, `sha256sum` | The Makefile and the build scripts use them. |
 | An existing Traefik v3 container on an external Docker network (default name `traefik`) with a `websecure` entrypoint and a `letsencrypt` certificate resolver | Routes HTTPS to the LMS. This repo does not start Traefik. |
 | A public DNS name for the LMS (for example `guide.nile.global`) pointing at the host that runs Traefik | It becomes the Frappe site name and the Traefik host rule. It cannot change after the first start. |
-| A running Authentik with admin access, holding the `HOL: OpenID groups scope` property mapping, the `default-provider-authorization-implicit-consent` flow and a self signed certificate | Students and admins log in through it. `idp setup` stops with a named error if one of these is missing, and never edits them. |
+| A running Authentik with admin access, holding the `HOL: OpenID groups scope` property mapping, an authorization flow with no policy bindings (the default `default-provider-authorization-implicit-consent`, or your own, see `AUTHENTIK_AUTHORIZATION_FLOW`) and a self signed certificate | Students and admins log in through it. `idp setup` stops with a named error if one of these is missing, and never edits them. |
 | Internet access during the first build | Pulls the base images and clones Frappe, LMS and payments at pinned tags. |
 | `sudo` on the host and access to the Cloudflare dashboard of your zone | `make restart-test` kills container processes with `sudo kill -9`. The Cloudflare step in section 6 makes plain HTTP redirect to HTTPS. |
 | `uv` and Python 3.12 (only if you run the `tools` code or tests on the host) | Lint and unit tests. Not needed to run the stack. |
@@ -42,7 +42,7 @@ Everything lives in one file, `.env`, at the repo root. It is never committed an
 | `LMS_API_KEY`, `LMS_API_SECRET` | API credentials of the service user that the tools container uses. |
 | `LMS_MCP_API_KEY`, `LMS_MCP_API_SECRET` | API credentials of a separate MCP user for your AI agent (section 6). Not fixed: to rotate, edit both in `.env`, then `make up`. |
 
-**Defaults you may change:** `LMS_SERVICE_USER`, `LMS_MCP_USER` (default `nile-mcp@example.com`), `LMS_TIMEZONE` (default `America/Los_Angeles`, so Pacific time; use any IANA name), `AUTHENTIK_APP_SLUG`, `AUTHENTIK_ADMIN_GROUP`, `TRAEFIK_NETWORK`, `TRAEFIK_ENTRYPOINT`, `TRAEFIK_CERT_RESOLVER`.
+**Defaults you may change:** `LMS_SERVICE_USER`, `LMS_MCP_USER` (default `nile-mcp@example.com`), `LMS_TIMEZONE` (default `America/Los_Angeles`, so Pacific time; use any IANA name), `AUTHENTIK_APP_SLUG`, `AUTHENTIK_AUTHORIZATION_FLOW` (see "Students denied at sign in" below), `AUTHENTIK_ADMIN_GROUP`, `TRAEFIK_NETWORK`, `TRAEFIK_ENTRYPOINT`, `TRAEFIK_CERT_RESOLVER`.
 
 **Fixed after the first start** (never edit once the stack has run): `LMS_HOSTNAME`, `LMS_ADMIN_PASSWORD`, `LMS_ENCRYPTION_KEY`, `LMS_SERVICE_USER`, `LMS_MCP_USER`, `LMS_API_KEY`, `LMS_API_SECRET`, `DB_ROOT_PASSWORD`, `AUTHENTIK_APP_SLUG`. **Keep a private copy of `.env`**: if you lose it, the data in the volumes cannot be recovered, and `create-site` refuses to start with a different encryption key.
 
@@ -97,6 +97,23 @@ After `idp setup`, the only way into the LMS is the Authentik button. Everyone l
 3. `make tools CMD="idp password-login off"` closes it again. Running `idp setup` also closes it.
 
 Changing the login landing code needs a new image: `make up` after the `nile_auth` version bump.
+
+### Students denied at sign in (Authentik authorization flow)
+
+**Symptom:** a student clicks the Authentik button and Authentik shows "Permission denied" (or a similar access denied page) before they reach the LMS. Admins and staff may sign in fine.
+
+**Cause:** the provider that `idp setup` creates authorizes through an Authentik *authorization flow*, and a flow can carry policy bindings that run on every app open. In the shared Authentik of the HOL reservations system ([soleng2018/reservations](https://github.com/soleng2018/reservations), spec 0003 AC-17), learners are created on the Authentik path `hol/learners`, and access to the lab is limited to their reservation hours. To keep learners out of every other app, that system binds the expression policy `hol-learner-isolation` to the two default flows `default-provider-authorization-implicit-consent` and `default-provider-authorization-explicit-consent`. It returns False for every user on `hol/learners`. The policy reads only the user, not the app, so any app on a default flow denies learners. Out of the box this LMS used `default-provider-authorization-implicit-consent`, so it denied them too.
+
+**Fix:** point the LMS provider at an authorization flow that has no policy bindings, the same way the reservations system gives its own apps `hol-authorization`, `hol-lab-authorization` and `nile-authorization`:
+
+1. In Authentik, use an existing authorization flow with no stages and no policy bindings (for example `nile-authorization`), or create one: Flows, Create, designation **Authorization**, authentication **Require authenticated**, no stage or policy bindings.
+2. Set `AUTHENTIK_AUTHORIZATION_FLOW=<flow slug>` in `.env`. Unlike `AUTHENTIK_APP_SLUG` it may change later.
+3. Run `make tools CMD="idp setup"`. It prints `fixed provider: authorization_flow`.
+4. Run `make tools CMD="idp check"`. The line for the flow must say `PASS ... has no policy bindings`. A `WARN` means a policy is bound to that flow and can deny students again; `FAIL` means the slug does not exist.
+
+**This deployment:** `AUTHENTIK_AUTHORIZATION_FLOW=hol-lab-authorization` (the flow the reservations system already uses for HOL Labs, no stages, no policy bindings). Cross-check the slug against Authentik (Flows) whenever the reservations setup changes, and update `.env` if it is renamed; `idp check` warns if the flow gains a policy binding.
+
+Who may open the LMS is then decided by the LMS itself, not by the flow: the `nile_auth` app admits a student only if they belong to a course group. A student in no course group gets the 403 page and no Frappe user. The LMS provider has no group binding, so Authentik does not restrict it by reservation time. **Do not bind a reservation-hours policy to the LMS application** (for example `hol-labs-access`, or anything that reads the testbed group). The reservations app keeps a learner in that group only while their booking is current, so such a policy would lock students out after their slot ends, and they come back to the LMS to get their certificate.
 
 ## 5. Course content
 

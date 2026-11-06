@@ -211,6 +211,14 @@ KEYS: tuple[Key, ...] = (
         frozen=True,
     ),
     Key(
+        "AUTHENTIK_AUTHORIZATION_FLOW",
+        "AUTHENTIK",
+        "Slug of the Authentik authorization flow the LMS provider uses (no policy bindings)",
+        "default",
+        required_for="tools-authentik",
+        default="default-provider-authorization-implicit-consent",
+    ),
+    Key(
         "AUTHENTIK_ADMIN_GROUP",
         "AUTHENTIK",
         "Group that becomes admin",
