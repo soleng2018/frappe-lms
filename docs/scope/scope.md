@@ -11,7 +11,7 @@ _These are recommendations to keep your build orderly, not requirements. Skip an
 
 Read these before designing any feature. They are the original brief, not summaries.
 - Requirements and instructions: [requirements.md](../../requirements.md). Its Instructions hold hard limits: this Frappe install is dev, only delete containers and Authentik items you created, and the group `hol-admins` already exists.
-- Logos and design system: [brand/](../../brand/) (pulled from github.com/soleng2018/reservations). Used by Branding & theme (#10) and Outbound email (#15, for the email logo).
+- Logos and design system: [brand/](../../brand/) (pulled from github.com/soleng2018/reservations). Used by Branding & theme (#10) and, if revived from Deferred, Outbound email (for the email logo).
 - Sample compose file for Traefik labels: `/home/nova/lms/docker-compose.yaml` (it runs a different app).
 - Frappe LMS repo: https://github.com/frappe/lms
 - Frappe LMS docs: https://docs.frappe.io/learning/get-started/installation
@@ -32,12 +32,12 @@ _The Frappe links have not been read by `/scope`; `/architect` should read the o
 | 7 | Group to role mapping | Slice 1 | done |
 | 8 | Content sync, one course | Slice 1 | done |
 | 9 | Quiz pass rules & certificate | Slice 1 | done |
-| 10 | Branding & theme | Slice 2 | planned |
+| 10 | Branding & theme | Slice 2 | done |
 | 11 | Guide format & full authoring | Slice 2 | done |
 | 12 | Manager progress view | Slice 3 | in-progress |
 | 13 | Monthly report | Slice 3 | planned |
 | 14 | Backup & restore | Slice 4 | planned |
-| 15 | Outbound email | Slice 4 | planned |
+| 15 | Outbound email | Slice 4 | dropped |
 | 16 | Health checks & error monitoring | Slice 4 | planned |
 | 17 | Course access from course groups | Slice 1 | done |
 
@@ -197,7 +197,7 @@ spec [0009](../specs/0009-course-access-from-groups/index.md) · code in `apps/n
 
 ## Slice 2: look and authoring
 
-### 10. Branding & theme · Beta
+### 10. Branding & theme · Beta · done
 Apply the Nile brand colors and logos from the Nile design system in `brand/` to the LMS and to the certificate.
 **Brand rules to follow:**
 - Primary colors: Nile Blue `#0E4EAF`, Deep Nile Blue `#072F68`, Bright Nile Blue `#2070E1`.
@@ -215,7 +215,16 @@ Apply the Nile brand colors and logos from the Nile design system in `brand/` to
 2. Colors and Inter for the main app come from one small CSS file that overrides the LMS CSS variables, loaded by a few lines of nginx config in the `frontend` container. This step depends on a live check that the LMS page loads it, and on which variables drive the main button color. Colors and font only.
 3. Out of scope: forking LMS or rebuilding its frontend, and the pill button and card shapes. The Authentik login page is branded in Authentik, not here.
 **Done when:** the app and the certificate use the brand colors, Inter font, and unaltered logos, set by script so they survive a rebuild, and text on every brand background is readable. The login page is covered only if Authentik branding is done by the same script.
-- [ ] Design it (spec): `/architect branding & theme`
+spec [0012](../specs/0012-branding-and-theme/index.md) · code in `apps/nile_auth/`, `deploy/`, `tools/src/nile_tools/`
+- [x] Design it (spec): `/architect branding & theme`
+- [x] Build it: `/develop branding & theme`
+  - [x] Probe the renderer, then install Inter and copy the brand files into the image (AC-1, AC-3, AC-4)
+  - [x] The thin certificate: template, setup function, default format, render proof (AC-1, AC-2, AC-6, AC-7, AC-8)
+  - [x] App name, logo and favicon by script, and `verify branding` (AC-5, AC-10)
+  - [x] Contrast test, then the live probe and the app stylesheet, or record the gap (AC-9, AC-11) (sidebar logo built, task 5a in spec 0012)
+  - [x] README and scope row (AC-12)
+- [ ] Verify it: `/check verify branding & theme` (skipped at your request, run it when you want an independent check)
+- [ ] Test it: `/test branding & theme` (skipped at your request)
 
 ### 11. Guide format & full authoring · done
 Settle the guide and quiz file format (markdown for text, structured files for quizzes and ordering) and extend the sync to many courses, images, and checks.
@@ -262,11 +271,6 @@ A scheduled job writes dated backup archives to a local folder on this server (d
 **Done when:** an archive appears on schedule in a folder the remote host can read over scp, old archives are pruned, and a restore onto a clean setup brings the courses and student progress back.
 - [ ] Design it (spec): `/architect backup & restore`
 
-### 15. Outbound email · Beta
-Frappe sends mail through an SMTP server set in the config file, for certificates and notices.
-**Done when:** a test message sends, and a student receives an email when a certificate is issued.
-- [ ] Design it (spec): `/architect outbound email`
-
 ### 16. Health checks & error monitoring · Beta
 Container health checks and a simple way to see failures and restarts.
 **Done when:** each container reports healthy or unhealthy, and a failing service is visible without reading raw logs.
@@ -274,6 +278,7 @@ Container health checks and a simple way to see failures and restarts.
 
 ## Deferred
 Out of scope for the current build pass, kept so the plan stays honest.
+- **Outbound email** (was #15, Beta): Frappe sends mail through an SMTP server set in the config file, for certificates and notices. Done when a test message sends and a student receives an email when a certificate is issued. Uses `brand/nile-logo-email.png` · needs a decision
 - **Emailed monthly report**: send the report to managers on a schedule · needs a decision
 - **Accessibility pass**: WCAG AA check on the branded theme
 - **Privacy notice and data retention**: notice plus a retention rule for student data · needs a decision

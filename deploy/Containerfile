@@ -95,6 +95,34 @@ RUN useradd -u 1000 -g 0 -d /home/frappe -ms /bin/bash frappe \
     && chmod 755 /usr/local/bin/nginx-entrypoint.sh \
     && chmod 644 /templates/nginx/frappe.conf.template
 
+# Spec 0012 AC-3: Inter as static TrueType files, pinned by release tag and checked by sha256. The
+# Debian package is Inter 4, a variable font, and wkhtmltopdf cannot pick weights from one. The
+# certificate needs the font here because it is drawn in this container, with no internet.
+ARG INTER_VERSION=4.1
+ARG INTER_ZIP_SHA256=9883fdd4a49d4fb66bd8177ba6625ef9a64aa45899767dde3d36aa425756b11e
+RUN curl -fsSL -o /tmp/inter.zip \
+      "https://github.com/rsms/inter/releases/download/v${INTER_VERSION}/Inter-${INTER_VERSION}.zip" \
+    && echo "${INTER_ZIP_SHA256}  /tmp/inter.zip" | sha256sum -c - \
+    && python3 -m zipfile -e /tmp/inter.zip /tmp/inter \
+    && cd /tmp/inter/extras/ttf \
+    && printf '%s\n' \
+      "40d692fce188e4471e2b3cba937be967878f631ad3ebbbdcd587687c7ebe0c82  Inter-Regular.ttf" \
+      "78a843fade9d4612a5567302fb595b56976eb5fcebf4fea5a5912d638bafcde3  Inter-SemiBold.ttf" \
+      "288316099b1e0a47a4716d159098005eef7c0066921f34e3200393dbdb01947f  Inter-Bold.ttf" \
+      | sha256sum -c - \
+    && mkdir -p /usr/share/fonts/truetype/inter \
+    && cp Inter-Regular.ttf Inter-SemiBold.ttf Inter-Bold.ttf /usr/share/fonts/truetype/inter/ \
+    && rm -rf /tmp/inter /tmp/inter.zip \
+    && fc-cache -f \
+    && fc-match -f '%{family}\n' Inter | grep -x Inter
+
+# Spec 0012 AC-9: load the Nile stylesheet on every page through one nginx include. The upstream
+# template has no extension point, so the include is added after its first security headers line
+# (the server block). The build fails if the line is missing, which means the template changed.
+COPY deploy/nginx/nile-brand.conf /etc/nginx/snippets/nile-brand.conf
+RUN sed -i '0,/security_headers.conf;/s//&\n\tinclude \/etc\/nginx\/snippets\/nile-brand.conf;/' \
+      /templates/nginx/frappe.conf.template \
+    && grep -c 'snippets/nile-brand.conf' /templates/nginx/frappe.conf.template | grep -x 1
 
 FROM base AS builder
 
@@ -132,6 +160,8 @@ RUN apt-get update \
 USER frappe
 
 COPY --chown=frappe:0 apps/nile_auth /tmp/nile_auth
+# Spec 0012 AC-4: the logo and icon, byte for byte from brand/. Nothing here changes them.
+COPY --chown=frappe:0 brand/nile-logo.png brand/icon.png /tmp/nile_auth/nile_auth/public/images/
 
 ARG FRAPPE_BRANCH
 ARG FRAPPE_PATH=https://github.com/frappe/frappe
@@ -156,6 +186,7 @@ RUN --mount=type=secret,id=apps_json,target=/opt/frappe/apps.json,uid=1000,gid=0
   echo "{}" > sites/common_site_config.json && \
   cp -r /tmp/nile_auth apps/nile_auth && \
   ./env/bin/python -m pip install --quiet -e apps/nile_auth && \
+  ln -s /home/frappe/frappe-bench/apps/nile_auth/nile_auth/public sites/assets/nile_auth && \
   find apps -mindepth 1 -path "*/.git" | xargs rm -fr && \
   chmod -R g=u /home/frappe/frappe-bench
 

@@ -76,7 +76,7 @@ The app stylesheet is last because it is the one uncertain part. The scope propo
 
 ## Probe results
 
-_Task 1 is recorded below. Task 8 adds to this section when it runs._
+_Task 1 is recorded below. Task 8 adds to this section when it runs. Task 5a adds its File record probe._
 
 ### Task 1: renderer probe (2026-11-05, live backend, Frappe v16.54.0, wkhtmltopdf 0.12.6.1 patched qt)
 
@@ -87,3 +87,25 @@ Method: a scratch Print Format for LMS Certificate rendered with `frappe.get_pri
 - **One page held** with a page box of 11 inches by 8.45 inches and the wrapper padding and width reset by the template CSS.
 - **Escaping held.** A name written as `Ada <b>Lovelace</b>` printed as plain text through `| e`.
 - **Inter was not installed yet**, so the PDF used DejaVu Sans. Task 2 installs Inter.
+
+### Task 5a: File record for the shield (2026-11-05, live backend, Frappe v16.54.0, rolled back)
+
+Method: insert a File row with `file_url` `/assets/nile_auth/images/icon.png` inside a transaction, delete it, check the file on disk, roll back.
+
+- **A plain insert is refused.** `validate_file_path` throws `Cannot access file path /assets/...` (first from `before_insert` through `get_content`, then again in `validate`), because the path is outside the site files folder.
+- **Two flags fix it.** `doc.flags.copy_from_existing_file = True` makes `before_insert` skip the blob handling, and `doc.flags.ignore_validate = True` skips `validate`. The insert then succeeds. `ignore_file_validate` is not a Frappe flag and did nothing.
+- **Delete is safe.** Deleting that row left `icon.png` on disk (checked before and after).
+- **Live result.** After `make up` the guest `get_branding` call returns the shield as `banner_image.file_url`, and a second `make up` prints `Site identity unchanged`.
+
+### Task 8: app stylesheet probe (2026-11-05, signed in look with a throwaway student)
+
+Method: a throwaway LMS Student (`zz-brand-probe@example.com`, deleted afterwards), a session minted inside the backend (password login is off by design and was not touched), and Playwright with Chromium on the host.
+
+- **`web_include_css` cannot reach the LMS app.** The LMS pages are the standalone template `lms/www/_lms.html`, which writes its own `<head>`. The hook route is out.
+- **The nginx route works.** The `frontend` container proxies the page to the backend in `location @webserver`. A `sub_filter` that adds a `<link>` before `</head>` is included at server level by a one line `sed` on the upstream template in the image build (`deploy/nginx/nile-brand.conf`). It is added to every HTML page the backend sends, the Desk included, and the stylesheet only names frappe-ui classes.
+- **Inter is already bundled.** The built CSS ships `Inter.var-*.woff2` (`font-family: InterVar`) and the signed in page computes `InterVar`. The stylesheet carries no font.
+- **Which tokens drive the main button.** The main (solid gray) button is `bg-surface-gray-10` with `hover:bg-surface-gray-9` and `active:bg-surface-gray-8`, text `text-ink-base` (white). It is near black. The blue solid button is `bg-surface-blue-6`. A tooltip style shares `bg-surface-gray-10`, so overriding the token would recolor more than buttons. The rules are limited to `button.bg-surface-gray-10` and `button.bg-surface-blue-6`. The link token is `--ink-blue-link` (stock light blue, under 4.5 to 1 on white), overridden for the light theme only.
+- **Live result.** With the stylesheet injected, the main and blue buttons compute to Nile Blue `rgb(14, 78, 175)` with white text (hover `#0A3C87`), the subtle gray button and the tooltip style are unchanged, and links are Nile Blue.
+- **Sidebar logo is a gap.** The LMS sidebar draws `banner_image` only when a File record exists for that URL (`get_branding` uses `get_file_info`, a lookup by `file_url` in the File table), and draws it in a 32 by 32 pixel square. Our `/assets/nile_auth/images/nile-logo.png` has no File record, so the sidebar shows the default green icon, and the wide logo would be squashed in that square anyway. The login page and the page title already show the Nile logo and name.
+- **Sidebar logo decision (2026-11-05).** Options: (1) shield `icon.png` through a File record, (2) wide logo through a File record with a CSS fit, (3) keep the default green icon. Chose (1). The slot is `w-8 h-8` (32 by 32) in `UserDropdown.vue` and the wide logo is 1922 by 952, so (2) would be a tiny unreadable strip and needs a CSS rule on a frappe-ui class. The shield is 512 by 512, square, and fits as is. Cost: a stock template certificate issued before the Nile format, if any, now shows the shield; new ones inline their own logo. Runner up (3): zero work, but the most visible LMS corner keeps the LMS default brand.
+- **Cloudflare note.** The logo URL answered 404 for a moment during the first rebuild, and Cloudflare cached that 404 (max age 4 hours), so a browser showed a broken logo until it was restarted. A fresh browser session fixes it. For the same reason an edit to `nile-brand.css` can take up to 4 hours to reach a browser through the edge cache.

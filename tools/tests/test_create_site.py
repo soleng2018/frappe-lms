@@ -94,6 +94,8 @@ def test_the_site_users_are_set_up_in_order(bench_dir):
         "nile_auth.setup.ensure_service_user",
         "nile_auth.setup.ensure_timezone",
         "nile_auth.setup.ensure_mcp_user",
+        "nile_auth.setup.ensure_certificate_format",
+        "nile_auth.setup.ensure_site_identity",
     ]
 
 

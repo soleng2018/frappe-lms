@@ -89,6 +89,9 @@ bench --site "$SITE" migrate
 bench --site "$SITE" execute nile_auth.setup.ensure_service_user
 bench --site "$SITE" execute nile_auth.setup.ensure_timezone
 bench --site "$SITE" execute nile_auth.setup.ensure_mcp_user
+# Spec 0012: the Nile certificate and the app identity, set on every run (each is rerun safe).
+bench --site "$SITE" execute nile_auth.setup.ensure_certificate_format
+bench --site "$SITE" execute nile_auth.setup.ensure_site_identity
 touch "$MARKER"
 rm -f "$PENDING"
 echo "create-site done"

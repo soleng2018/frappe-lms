@@ -7,7 +7,7 @@ Plain `verify deploy` does not run these checks.
 
 import importlib.util
 import re
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from types import ModuleType
@@ -23,9 +23,12 @@ __all__ = [
     "Wanted",
     "judge_default_format",
     "judge_file",
+    "judge_icon_file_record",
     "judge_print_format",
+    "judge_sidebar_logo",
     "judge_site_identity",
     "judge_stylesheet",
+    "judge_stylesheet_linked",
     "load_wanted",
     "run",
 ]
@@ -123,6 +126,24 @@ def judge_site_identity(lms_page: str, login_page: str, wanted: Wanted) -> list[
     return results
 
 
+def judge_icon_file_record(rows: Sequence[Mapping[str, Any]], url: str) -> Result:
+    """Check that exactly one File record holds the shield URL (the LMS sidebar needs it)."""
+    if len(rows) == 1:
+        return Result("PASS", "icon file record", f"one File record holds {url}")
+    if not rows:
+        return Result("FAIL", "icon file record", f"no File record holds {url} (run make up)")
+    return Result("FAIL", "icon file record", f"{len(rows)} File records hold {url}, wanted 1")
+
+
+def judge_sidebar_logo(payload: Mapping[str, Any], url: str) -> Result:
+    """Check that the guest get_branding call returns the shield as the sidebar logo."""
+    banner = payload.get("message", {}).get("banner_image")
+    got = banner.get("file_url") if isinstance(banner, Mapping) else None
+    if got == url:
+        return Result("PASS", "sidebar logo", f"get_branding banner_image is {url}")
+    return Result("FAIL", "sidebar logo", f"get_branding banner_image is {got!r}, wanted {url!r}")
+
+
 def judge_file(name: str, url: str, r: httpx.Response, expected: bytes | None) -> Result:
     """Check that a brand file answers 200 with the same bytes as the file in brand/."""
     if r.status_code != 200:
@@ -143,6 +164,13 @@ def judge_stylesheet(url: str, r: httpx.Response) -> Result:
     if r.status_code != 200:
         return Result("FAIL", "stylesheet", f"{url} answered {r.status_code}, wanted 200")
     return Result("PASS", "stylesheet", f"{url} answers 200")
+
+
+def judge_stylesheet_linked(lms_page: str, url: str) -> Result:
+    """Check that the LMS app page links the stylesheet (the nginx include is working)."""
+    if url in lms_page:
+        return Result("PASS", "stylesheet link", f"/lms links {url}")
+    return Result("FAIL", "stylesheet link", f"/lms does not link {url} (the nginx include is off)")
 
 
 def _read(path: Path) -> bytes | None:
@@ -169,6 +197,20 @@ def _file_result(
     if isinstance(r, str):
         return Result("FAIL", name, f"{base + url} could not be reached ({r})")
     return judge_file(name, base + url, r, expected)
+
+
+def _sidebar_result(client: httpx.Client, base: str, icon_url: str) -> Result:
+    url = f"{base}/api/method/lms.lms.api.get_branding"
+    r = _fetch(client, url)
+    if isinstance(r, str):
+        return Result("FAIL", "sidebar logo", f"{url} could not be reached ({r})")
+    if r.status_code != 200:
+        return Result("FAIL", "sidebar logo", f"{url} answered {r.status_code}, wanted 200")
+    try:
+        payload = r.json()
+    except ValueError:
+        return Result("FAIL", "sidebar logo", f"{url} did not answer JSON")
+    return judge_sidebar_logo(payload if isinstance(payload, dict) else {}, icon_url)
 
 
 def _record_or_none(fetch: Callable[[], Mapping[str, Any]]) -> Mapping[str, Any] | None:
@@ -208,6 +250,10 @@ def run(
         results.append(
             judge_default_format(setters[0].get("value") if setters else None, wanted.format_name)
         )
+        icon_rows = lms.list_records(
+            conn, "File", filters=[["file_url", "=", wanted.icon_url]], fields=("name",)
+        )
+        results.append(judge_icon_file_record(icon_rows, wanted.icon_url))
     except LmsError as e:
         results.append(Result("FAIL", "site records", str(e)))
     finally:
@@ -220,10 +266,13 @@ def run(
         if all(isinstance(r, httpx.Response) and r.status_code == 200 for r in pages):
             texts = [r.text for r in pages if isinstance(r, httpx.Response)]
             results.extend(judge_site_identity(texts[0], texts[1], wanted))
+            if wanted.stylesheet_built:
+                results.append(judge_stylesheet_linked(texts[0], wanted.stylesheet_url))
         else:
             results.append(
                 Result("FAIL", "site identity", f"{base}/lms or /login did not answer 200")
             )
+        results.append(_sidebar_result(client, base, wanted.icon_url))
         results.append(
             _file_result(
                 client, "logo", base, wanted.logo_url, _read(root / BRAND_DIR / wanted.logo_file)
