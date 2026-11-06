@@ -32,7 +32,12 @@ def _application(ak: Authentik, slug: str) -> Mapping[str, Any] | None:
     return authentik.get_one(ak, "/core/applications/", slug=slug, superuser_full_list="true")
 
 
-def lookup_refs(ak: Authentik) -> Refs:
+def _flow_slug(values: Mapping[str, str]) -> str:
+    """Return the configured authorization flow slug, or the default implicit consent flow."""
+    return values.get("AUTHENTIK_AUTHORIZATION_FLOW") or idp.IMPLICIT_CONSENT_SLUG
+
+
+def lookup_refs(ak: Authentik, flow_slug: str = idp.IMPLICIT_CONSENT_SLUG) -> Refs:
     """Read the shared flows, signing key and scope mappings by slug or name; write nothing."""
     maps = authentik.find(ak, "/propertymappings/provider/scope/")
     by_name = {m["name"]: str(m["pk"]) for m in maps}
@@ -53,7 +58,7 @@ def lookup_refs(ak: Authentik) -> Refs:
     flows = "/flows/instances/"
     return Refs(
         authorization_flow=_need(
-            authentik.get_one(ak, flows, slug=idp.IMPLICIT_CONSENT_SLUG), "implicit consent flow"
+            authentik.get_one(ak, flows, slug=flow_slug), f"authorization flow '{flow_slug}'"
         ),
         invalidation_flow=_need(
             authentik.get_one(ak, flows, slug=idp.INVALIDATION_SLUG), "provider invalidation flow"
@@ -91,7 +96,7 @@ def setup(
     resync_secret: bool = False,
 ) -> int:
     """Create what is missing, fix what drifted, and report each item; a rerun changes nothing."""
-    wanted = idp.wanted_state(values, lookup_refs(ak))
+    wanted = idp.wanted_state(values, lookup_refs(ak, _flow_slug(values)))
     slug = str(wanted.application["slug"])
     provider_name = str(wanted.provider["name"])
     # Read everything first, so a refusal happens before the first write.
@@ -258,7 +263,7 @@ def check(
     verdicts.append(idp.judge_application(app, slug))
     provider = authentik.get_one(ak, "/providers/oauth2/", name=f"{slug} provider")
     try:
-        refs = lookup_refs(ak)
+        refs = lookup_refs(ak, _flow_slug(values))
     except AuthentikError as e:
         verdicts.append(idp.Verdict(idp.FAIL, f"shared Authentik items: {e}"))
         wanted = idp.wanted_state(values, Refs("", "", "", ()))
@@ -269,6 +274,10 @@ def check(
         verdicts.append(idp.judge_provider(provider, wanted.provider))
         claims = _group_claims(ak, refs.property_mappings[-1], user) if user else None
         verdicts.append(idp.judge_groups(user, claims))
+    flow_slug = _flow_slug(values)
+    flow = authentik.get_one(ak, "/flows/instances/", slug=flow_slug)
+    bindings = len(authentik.find(ak, "/policies/bindings/", target=str(flow["pk"]))) if flow else 0
+    verdicts.append(idp.judge_authorization_flow(flow_slug, flow is not None, bindings))
     verdicts.append(idp.judge_email_lock(authentik.get(ak, "/admin/settings/")))
     found = lms.list_records(connection, SOCIAL_KEY, filters=[["name", "=", idp.FRAPPE_KEY_NAME]])
     record = lms.get_record(connection, SOCIAL_KEY, idp.FRAPPE_KEY_NAME) if found else None

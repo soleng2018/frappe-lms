@@ -29,6 +29,7 @@ class FakeAuthentik:
         self.marked = marked
         self.version = idp.TESTED_VERSION
         self.email_edit = False
+        self.flow_bindings = 0
         self.user_groups: list[str] = ["Some Course"]
 
     def client(self) -> authentik.Authentik:
@@ -48,9 +49,10 @@ class FakeAuthentik:
         table: dict[str, Any] = {
             "propertymappings/provider/scope/": self._maps(),
             "flows/instances/": [
-                {"pk": "flow-x", "slug": s}
-                for s in (idp.IMPLICIT_CONSENT_SLUG, idp.INVALIDATION_SLUG)
+                {"pk": f"flow-{s}", "slug": s}
+                for s in (idp.IMPLICIT_CONSENT_SLUG, idp.INVALIDATION_SLUG, "own-flow")
             ],
+            "policies/bindings/": [{"pk": "b1"}] * self.flow_bindings,
             "crypto/certificatekeypairs/": [{"pk": "key-1", "name": idp.SIGNING_KEY_NAME}],
             "core/applications/": (
                 list(self.apps.values())
@@ -120,6 +122,23 @@ def test_lookup_refs_reads_the_shared_items_by_name():
     refs = idp_run.lookup_refs(FakeAuthentik().client())
     assert refs.property_mappings == ("m-openid", "m-email", "m-profile", "m-groups")
     assert refs.signing_key == "key-1"
+
+
+def test_lookup_refs_uses_the_configured_authorization_flow():
+    client = FakeAuthentik().client()
+    assert idp_run.lookup_refs(client, "own-flow").authorization_flow == "flow-own-flow"
+    assert idp_run.lookup_refs(client).authorization_flow == f"flow-{idp.IMPLICIT_CONSENT_SLUG}"
+
+
+def test_lookup_refs_names_a_missing_authorization_flow():
+    with pytest.raises(AuthentikError, match="authorization flow 'nope'"):
+        idp_run.lookup_refs(FakeAuthentik().client(), "nope")
+
+
+def test_judge_authorization_flow_fails_missing_warns_on_bindings_passes_clean():
+    assert idp.judge_authorization_flow("f", False, 0).level == idp.FAIL
+    assert idp.judge_authorization_flow("f", True, 2).level == idp.WARN
+    assert idp.judge_authorization_flow("f", True, 0).level == idp.PASS
 
 
 def test_lookup_refs_stops_when_the_groups_mapping_is_missing():
@@ -454,7 +473,7 @@ def test_check_on_a_good_setup_is_all_pass_and_writes_nothing():
     code, said = run_check(fake, lms, public, user="real-user")
     assert code == 0
     assert all(line.startswith("PASS") for line in said), said
-    assert len(said) == 12
+    assert len(said) == 13
     posts = [path for method, path in fake.calls if method != "GET"]
     assert len(posts) == 1 and posts[0].endswith("/test/")  # the mapping test stores nothing
     assert len(lms.writes) == writes
