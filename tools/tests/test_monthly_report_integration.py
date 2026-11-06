@@ -24,6 +24,10 @@ def result() -> dict[str, Any]:
     return _run_script(SCRIPT.read_text().replace("__P__", prefix))
 
 
+def test_the_course_has_exactly_two_quizzes(result: dict[str, Any]) -> None:
+    assert result["others"] == 0, "these checks need a course with exactly two quizzes"
+
+
 def test_a_failed_locked_quiz_is_done_but_not_passed(result: dict[str, Any]) -> None:
     row = result["oct"]["failed"]
     assert (row["result"], row["outcome"]) == ("Done", "Not passed")
