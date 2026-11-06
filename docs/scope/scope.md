@@ -32,7 +32,7 @@ _The Frappe links have not been read by `/scope`; `/architect` should read the o
 | 7 | Group to role mapping | Slice 1 | done |
 | 8 | Content sync, one course | Slice 1 | done |
 | 9 | Quiz pass rules & certificate | Slice 1 | done |
-| 10 | Branding & theme | Slice 2 | in-progress |
+| 10 | Branding & theme | Slice 2 | done |
 | 11 | Guide format & full authoring | Slice 2 | done |
 | 12 | Manager progress view | Slice 3 | in-progress |
 | 13 | Monthly report | Slice 3 | planned |
@@ -197,7 +197,7 @@ spec [0009](../specs/0009-course-access-from-groups/index.md) · code in `apps/n
 
 ## Slice 2: look and authoring
 
-### 10. Branding & theme · Beta · in-progress
+### 10. Branding & theme · Beta · done
 Apply the Nile brand colors and logos from the Nile design system in `brand/` to the LMS and to the certificate.
 **Brand rules to follow:**
 - Primary colors: Nile Blue `#0E4EAF`, Deep Nile Blue `#072F68`, Bright Nile Blue `#2070E1`.
@@ -217,14 +217,14 @@ Apply the Nile brand colors and logos from the Nile design system in `brand/` to
 **Done when:** the app and the certificate use the brand colors, Inter font, and unaltered logos, set by script so they survive a rebuild, and text on every brand background is readable. The login page is covered only if Authentik branding is done by the same script.
 spec [0012](../specs/0012-branding-and-theme/index.md) · code in `apps/nile_auth/`, `deploy/`, `tools/src/nile_tools/`
 - [x] Design it (spec): `/architect branding & theme`
-- [ ] Build it: `/develop branding & theme`
+- [x] Build it: `/develop branding & theme`
   - [x] Probe the renderer, then install Inter and copy the brand files into the image (AC-1, AC-3, AC-4)
   - [x] The thin certificate: template, setup function, default format, render proof (AC-1, AC-2, AC-6, AC-7, AC-8)
   - [x] App name, logo and favicon by script, and `verify branding` (AC-5, AC-10)
   - [x] Contrast test, then the live probe and the app stylesheet, or record the gap (AC-9, AC-11) (sidebar logo built, task 5a in spec 0012)
   - [x] README and scope row (AC-12)
-- [ ] Verify it: `/check verify branding & theme`
-- [ ] Test it: `/test branding & theme`
+- [ ] Verify it: `/check verify branding & theme` (skipped at your request, run it when you want an independent check)
+- [ ] Test it: `/test branding & theme` (skipped at your request)
 
 ### 11. Guide format & full authoring · done
 Settle the guide and quiz file format (markdown for text, structured files for quizzes and ordering) and extend the sync to many courses, images, and checks.

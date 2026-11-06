@@ -1,7 +1,7 @@
 # 0012. Brand the certificate and the LMS with the Nile look, set by script
 
 **Date**: 2026-11-05
-**Status**: In Progress
+**Status**: Accepted
 
 ## Summary
 
