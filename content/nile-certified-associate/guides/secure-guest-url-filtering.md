@@ -1,8 +1,8 @@
-# Lab Assignment: Setup Nile Guest Service SSID with Passcode & URL Filtering
+# Lab Assignment: Setup Nile Guest Service SSID with URL Filtering
 
 ## 📌 Objective
 
-Enable and test a Nile Guest Service SSID secured with a passcode, configure URL filtering, and validate access restrictions for guest users.
+Enable and test a Nile Guest Service SSID, configure URL filtering, and validate access restrictions for guest users.
 
 ## 📖 About Nile Guest Service
 
@@ -44,7 +44,7 @@ All guest traffic is securely tunneled to a cloud-based Point of Presence (PoP) 
 
 ### Step 5: Connect and Test
 
-- Connect a device to the SSID using the configured passcode.
+- Connect a device to the SSID.
 - Take note of the IP address assigned to the device using `ipconfig` via Command Prompt.
 - Attempt to browse restricted content to verify that filtering is applied.
 
@@ -52,6 +52,6 @@ All guest traffic is securely tunneled to a cloud-based Point of Presence (PoP) 
 
 Ensure the following conditions are met before considering the lab complete:
 
-- Guest device successfully connects to the SSID with the passcode.
+- Guest device successfully connects to the SSID.
 - URL filtering blocks access to restricted categories or domains.
 - Advanced rules take effect (e.g., https://www.youtube.com is blocked).

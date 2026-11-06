@@ -19,6 +19,8 @@ Enable end users to create support tickets directly from the my.nilesecure.com (
   - **Name:** `Any name`
   - **URL** - `https://automation.nilenetworks.com/webhook/mynile`
   - **Token** - `5110d57f-af94-47fb-9914-a2526af116ef`
+- Click **Next**.
+- Toggle `My Nile Incidents` to **ON**.
 
 ### Step 3: Trigger a Ticket from my.nilesecure.com
 

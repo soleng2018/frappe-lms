@@ -23,16 +23,17 @@ Configure a secure wireless SSID with 802.1X authentication using RADIUS, and va
 - Go to **Network Setup → Authentication**.
 - Click on the ➕ icon to add a new RADIUS server:
   - **Name** - `myRADIUS`
-  - **Port** - `1812`
+  - **Geoscope** - `HoL`
   - **Host 1** - `172.16.254.2`
   - **Shared Secret** - `nile123`
-  - **Geoscope** - `HoL`
-- Click **"Verify"** to ensure it's reachable:
+  - **Port** - `1812`
+- Click **"Verify Hosts"** to ensure it's reachable (this can be done before saving):
   - Test credentials:
     - **Username:** `bob`
     - **Password:** `hello`
 - Click on **"DISPLAY NAS IP'S"**.
   - These are the IP addresses that must be allowed on the RADIUS server side. For this lab, the RADIUS server has already been set up for you, but in a production deployment, you would need to add these NAS IPs to your RADIUS server's client list.
+- Click **Save**
 
 ### Step 3: Segment Creation
 
