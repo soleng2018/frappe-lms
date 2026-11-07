@@ -27,10 +27,23 @@ button.bg-surface-blue-6:active {
 :root:not([data-theme="dark"]) .ProseMirror.prose strong {
 	color: #0E4EAF;
 }
-/* Inline code in a lesson body. The LMS typography style adds a backtick before and after every
-   `code` inside `.prose`, and turns that off only for `code.inline-code`, a class that lessons
-   imported by `sync` do not carry. Without this rule the labs show `Guest` with visible backticks. */
+/* Inline code in a lesson body. The LMS styles `code.inline-code` as a grey chip with no backticks,
+   but lessons imported by `sync` do not carry that class, so they got plain text with a backtick on
+   each side. This gives every `code` inside `.prose` the same chip, so a value such as `ACME Guest`
+   stands out. The text is Nile Blue on the light grey chip (about 6 to 1) in the light theme. */
 .prose code::before,
 .prose code::after {
 	content: none;
+}
+.prose code {
+	background: var(--surface-gray-3, #EEEEEE);
+	color: var(--ink-gray-8, #171717);
+	letter-spacing: normal;
+	border-radius: 5px;
+	padding: 2px 5px;
+	font-size: .86em;
+	font-weight: 500;
+}
+:root:not([data-theme="dark"]) .prose code {
+	color: #0E4EAF;
 }
