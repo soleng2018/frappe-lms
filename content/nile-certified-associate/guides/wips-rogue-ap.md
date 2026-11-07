@@ -57,7 +57,7 @@ The Raspberry Pi gets onto the network because of the `Allow All MACs` rule you 
   - `ROGUE AP DETECTED`
   - `ROGUE AP BLOCKED`
   - `ROGUE AP OFFLINE`
-  - `CLIENT <your MAC> ASSOCIATED TO ROGUE AP`
+  - `CLIENT ASSOCIATED TO ROGUE AP`, followed by your device's MAC address
 
 ### Step 6: Inspect Your Own Client
 
