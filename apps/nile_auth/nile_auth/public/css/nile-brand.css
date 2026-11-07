@@ -1,4 +1,5 @@
 /* Spec 0012 AC-9: the Nile colors for the LMS app. Colors only: no shapes, no layout, no fonts.
+   One exception at the end: it hides the backticks the LMS typography adds around inline code.
    Inter needs nothing here, the LMS app already bundles it.
    The LMS (frappe-ui) paints its main button with the class bg-surface-gray-10 (near black) and its
    blue button with bg-surface-blue-6. The rules below are limited to `button` so a tooltip or a badge
@@ -25,4 +26,11 @@ button.bg-surface-blue-6:active {
    paths and button names in the labs stand out. Nile Blue on white is 7.7 to 1. Light theme only. */
 :root:not([data-theme="dark"]) .ProseMirror.prose strong {
 	color: #0E4EAF;
+}
+/* Inline code in a lesson body. The LMS typography style adds a backtick before and after every
+   `code` inside `.prose`, and turns that off only for `code.inline-code`, a class that lessons
+   imported by `sync` do not carry. Without this rule the labs show `Guest` with visible backticks. */
+.prose code::before,
+.prose code::after {
+	content: none;
 }
