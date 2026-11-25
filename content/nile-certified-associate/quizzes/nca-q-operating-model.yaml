@@ -1,0 +1,40 @@
+key: nca-q-operating-model
+title: Nile Operating Model Quiz
+passing_percentage: 80
+max_attempts: 3
+questions:
+  - key: nca-q-operating-model-1
+    text: "Which phase of the Nile lifecycle starts when the service goes live, continues every day, and is the fully autonomous center of the operating model?"
+    options:
+      - {text: "Launch"}
+      - {text: "Adapt"}
+      - {text: "Operate", correct: true}
+      - {text: "Activate"}
+  - key: nca-q-operating-model-2
+    text: "Nile alerts that an access point went offline because a cable in a wiring closet was cut. Who resolves it?"
+    options:
+      - {text: "Your team, by walking the site and fixing the cable. Nile provides the alert, but the physical environment stays yours.", correct: true}
+      - {text: "Nile, by reconfiguring the fabric remotely to restore the access point."}
+      - {text: "Nile, by automatically dispatching an engineer to every affected site."}
+      - {text: "Your internet service provider, since cabling is part of the upstream network."}
+  - key: nca-q-operating-model-3
+    text: "During the Launch phase, which of these is the customer team's responsibility?"
+    options:
+      - {text: "Creating configuration templates for the switches and access points."}
+      - {text: "Planning IP addressing for the Nile fabric."}
+      - {text: "Channel planning and RF tuning."}
+      - {text: "Defining business requirements and approving the design and bill of materials.", correct: true}
+  - key: nca-q-operating-model-4
+    text: "Your company plans to add 200 employees to an office next quarter. What should your team do?"
+    options:
+      - {text: "Wait for Nile to raise a capacity alert once the new users arrive."}
+      - {text: "Flag the change to Nile early, because Nile can't see your business plans.", correct: true}
+      - {text: "Add and configure new access points yourself, then inform Nile."}
+      - {text: "Nothing. Nile adjusts the design automatically for any business change."}
+  - key: nca-q-operating-model-5
+    text: "Your organization uses Nile's RADIUS and Guest services. Who approves device types and grants or revokes access as staff change?"
+    options:
+      - {text: "Nile, because you use Nile's network services."}
+      - {text: "Nile Professional Services, as part of the Launch integration work."}
+      - {text: "Your team. User and device onboarding is always yours, whether you use Nile services or run your own.", correct: true}
+      - {text: "No one. Devices are onboarded automatically without customer input."}
