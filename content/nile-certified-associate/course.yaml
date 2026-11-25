@@ -14,6 +14,11 @@ chapters:
         blocks:
           - video: tPOifgesdlI
           - quiz: nca-q-what-is-nile
+      - key: nca-l-operating-model
+        title: "Nile Operating Model Explained: Launch, Operate, Adapt"
+        blocks:
+          - video: xl2ZvVzkBZA
+          - quiz: nca-q-operating-model
       - key: nca-l-general-guidelines
         title: General Guidelines
         blocks:
