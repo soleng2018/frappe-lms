@@ -141,7 +141,7 @@ make tools CMD="sync my-course"           # only that course
 
 ### Passing and the certificate (spec 0010)
 
-No new keys. The rules come from the LMS itself, and `sync` refuses a quiz whose `passing_percentage` is under 80 or over 100.
+No new keys. The rules come from the LMS itself, and `sync` refuses a quiz whose `passing_percentage` is under 80 or over 100. Every quiz the sync creates has "Shuffle Questions" on, so each attempt shows the questions in a new random order. LMS has no setting to shuffle the answer options, so those keep the order in the file.
 
 - **Pass mark.** A quiz passes at 80% or more. A score is stored as a whole number and cut down, never rounded up, so 79.5% is stored as 79 and fails.
 - **Attempts.** Each quiz allows 3 attempts unless its content file sets `max_attempts`. After the last miss the LMS refuses another attempt.

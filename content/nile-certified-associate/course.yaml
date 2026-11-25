@@ -9,6 +9,11 @@ chapters:
   - key: nca-ch-labs
     title: Hands On Labs
     lessons:
+      - key: nca-l-what-is-nile
+        title: What Is Nile? Network as a Service Explained
+        blocks:
+          - video: tPOifgesdlI
+          - quiz: nca-q-what-is-nile
       - key: nca-l-general-guidelines
         title: General Guidelines
         blocks:
