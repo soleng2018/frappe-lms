@@ -95,6 +95,7 @@ def synced(c: Course) -> Found:
             "course": "N-c",
             "passing_percentage": q.passing_percentage,
             "max_attempts": q.max_attempts,
+            "shuffle_questions": 1,
             "lesson": f"N-{q.lesson_key}",
             "questions": [{"question": f"N-{x.key}", "marks": x.marks} for x in q.questions],
         }

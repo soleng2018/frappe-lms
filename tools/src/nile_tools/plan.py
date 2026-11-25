@@ -217,6 +217,7 @@ def plan_creates(
             "title": quiz.title,
             "passing_percentage": quiz.passing_percentage,
             "max_attempts": quiz.max_attempts,
+            "shuffle_questions": 1,  # a retake shows the questions in a new random order
             "questions": rows,
         }
         wanted.append(Create(QUIZ, quiz.key, quiz_fields))
@@ -389,6 +390,7 @@ def plan_sync(
             "title": quiz.title,
             "passing_percentage": quiz.passing_percentage,
             "max_attempts": quiz.max_attempts,
+            "shuffle_questions": 1,  # a retake shows the questions in a new random order
             "course": cname,
         }
         lesson_key = quiz.lesson_key

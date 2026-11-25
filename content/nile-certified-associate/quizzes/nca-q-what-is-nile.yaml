@@ -1,0 +1,40 @@
+key: nca-q-what-is-nile
+title: What Is Nile? Quiz
+passing_percentage: 80
+max_attempts: 3
+questions:
+  - key: nca-q-what-is-nile-1
+    text: A customer wants to install Nile access points but keep their existing Cisco access switches. Is this supported?
+    options:
+      - {text: "Yes. Nile access points work with any PoE switch."}
+      - {text: "No. Nile access points and Nile switches are deployed together as one fabric.", correct: true}
+      - {text: "Yes, as long as the Cisco switches are added to the Nile Portal."}
+      - {text: "Only when using Nile Wi-Fi 7 access points."}
+  - key: nca-q-what-is-nile-2
+    text: Which statement best describes how user traffic flows in a Nile network?
+    options:
+      - {text: "All user traffic is tunneled to the Nile cloud for inspection before reaching the internet."}
+      - {text: "All traffic is routed through an on-premises Nile controller at each site."}
+      - {text: "Traffic is routed locally over your own internet circuit; only Guest as a Service sends traffic to Nile.", correct: true}
+      - {text: "Traffic is routed through your existing anchor controller and DMZ."}
+  - key: nca-q-what-is-nile-3
+    text: An end user reports a connectivity problem. Who troubleshoots it?
+    options:
+      - {text: "Your IT team, using the Nile Portal's visibility and troubleshooting tools, with Nile support available 24/7.", correct: true}
+      - {text: "Nile only, because customers don't have access to troubleshooting tools."}
+      - {text: "Your IT team, but only after Nile opens a ticket and approves the investigation."}
+      - {text: "The installation partner, using the Nile Nav mobile app."}
+  - key: nca-q-what-is-nile-4
+    text: A customer is migrating a legacy network that uses five VLANs. How is this mapped in Nile?
+    options:
+      - {text: "The five VLANs are recreated on the Nile switches."}
+      - {text: "All devices are placed on a single flat subnet."}
+      - {text: "One segment is created, and each VLAN becomes a policy."}
+      - {text: "Five segments are created, each mapped to its own Layer 3 subnet.", correct: true}
+  - key: nca-q-what-is-nile-5
+    text: Which statement best describes Nile?
+    options:
+      - {text: "A managed service provider that operates your existing Cisco and Aruba equipment."}
+      - {text: "A network-as-a-service provider that builds its own hardware and software and stands behind the network with SLAs.", correct: true}
+      - {text: "A cloud management platform that works with any vendor's switches and access points."}
+      - {text: "A reseller of third-party networking hardware."}
